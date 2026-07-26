@@ -127,7 +127,7 @@
           <label>Color: <input type="color" id="fig-color" value="#c9a84c"></label>
           <label>Transparencia: <input type="range" id="fig-opacity" min="0.1" max="0.9" step="0.1" value="0.4"></label>
           <label>Etiqueta: <input type="text" id="fig-label" placeholder="Ej: Bola de Fuego"></label>
-          <button id="btn-clear-figures" class="btn btn-danger btn-sm dm-only"><i class="fa-solid fa-trash"></i> Limpiar Figuras</button>
+          <button id="btn-clear-figures" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i> Limpiar Figuras</button>
         </div>
       </div>
     </aside>
@@ -166,10 +166,18 @@
         <!-- PESTAÑA 1: FICHAS DE PERSONAJE -->
         <div id="tab-fichas" class="tab-pane active">
           <div class="pane-header">
-            <h3><i class="fa-solid fa-address-card gold-text"></i> Fichas de Personaje</h3>
-            <button id="btn-open-create-ficha" class="btn btn-primary btn-sm">
-              <i class="fa-solid fa-plus"></i> Crear Ficha
-            </button>
+            <h3><i class="fa-solid fa-address-card gold-text"></i> Fichas</h3>
+            <div class="pane-actions" style="display: flex; gap: 5px;">
+              <button id="btn-toggle-hp" class="btn btn-secondary btn-sm" title="Mostrar/Ocultar HP en tablero">
+                <i class="fa-solid fa-heart"></i>
+              </button>
+              <button id="btn-sort-initiative" class="btn btn-secondary btn-sm" title="Ordenar por Iniciativa">
+                <i class="fa-solid fa-arrow-down-9-1"></i>
+              </button>
+              <button id="btn-open-create-ficha" class="btn btn-primary btn-sm">
+                <i class="fa-solid fa-plus"></i> Crear
+              </button>
+            </div>
           </div>
           <div class="search-box">
             <input type="text" id="filter-fichas-input" placeholder="🔍 Buscar personaje o monstruo...">
@@ -462,11 +470,12 @@
     </div>
   </div>
 
-  <!-- MODAL: AMPLIAR GIF DEL CHAT -->
+  <!-- MODAL: AMPLIAR GIF O IMAGEN DE FICHA -->
   <div id="modal-gif-view" class="modal-overlay hidden">
     <div class="modal-content modal-sm text-center">
       <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
       <img id="enlarged-gif-img" src="" class="img-fluid rounded">
+      <h3 id="enlarged-img-title" style="margin-top: 10px; color: var(--gold);"></h3>
     </div>
   </div>
 

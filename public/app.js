@@ -44,6 +44,8 @@
     galeria: [],
     usuario: { id: null, nombre: '', esDM: false, color: '#c9a84c' }
   };
+  
+  let showHpBars = true;
 
   // Estado del Canvas VTT
   let canvas = null;
@@ -63,6 +65,8 @@
   let selectedFichaId = null;
   let isDraggingToken = false;
   let dragOffset = { x: 0, y: 0 };
+  let isDraggingFigure = false;
+  let selectedFigureId = null;
 
   let isPanning = false;
   let panStart = { x: 0, y: 0 };
@@ -151,6 +155,8 @@
       fichasList: document.getElementById('fichas-list'),
       filterFichasInput: document.getElementById('filter-fichas-input'),
       btnOpenCreateFicha: document.getElementById('btn-open-create-ficha'),
+      btnToggleHp: document.getElementById('btn-toggle-hp'),
+      btnSortInitiative: document.getElementById('btn-sort-initiative'),
 
       // Dados
       diceFormulaInput: document.getElementById('dice-formula-input'),
@@ -208,6 +214,7 @@
       gifGrid: document.getElementById('gif-grid'),
       modalGifView: document.getElementById('modal-gif-view'),
       enlargedGifImg: document.getElementById('enlarged-gif-img'),
+      enlargedImgTitle: document.getElementById('enlarged-img-title'),
 
       modalCreateGame: document.getElementById('modal-create-game'),
       formCreateGame: document.getElementById('form-create-game'),
@@ -647,7 +654,7 @@
       ctx.fillText(displayName, cx, py - 6);
 
       // Barra de HP
-      if (!isMonster || !isPlayerView) {
+      if (showHpBars && (!isMonster || !isPlayerView)) {
         const hpPercent = Math.max(0, Math.min(1, ficha.hp_actual / (ficha.hp_maximo || 1)));
         const barW = Math.max(40, tokenWidth);
         const barH = 6;
@@ -758,7 +765,20 @@
         }
       }
 
-      // Si no hizo clic en ficha propia, iniciar Pan de cámara
+      // Buscar si hizo clic en figura
+      const clickedFig = (state.figuras || []).find(fig => {
+        return gridPos.x >= fig.x - (fig.tamanio || 1) && gridPos.x <= fig.x + (fig.tamanio || 1) &&
+               gridPos.y >= fig.y - (fig.tamanio || 1) && gridPos.y <= fig.y + (fig.tamanio || 1);
+      });
+
+      if (clickedFig) {
+        selectedFigureId = clickedFig.id;
+        isDraggingFigure = true;
+        dragOffset = { x: gridPos.x - clickedFig.x, y: gridPos.y - clickedFig.y };
+        return;
+      }
+
+      // Si no hizo clic en ficha ni figura, iniciar Pan de cámara
       isPanning = true;
       panStart = { x: e.clientX - viewport.panX, y: e.clientY - viewport.panY };
     } else if (activeTool === 'measure') {
@@ -812,6 +832,13 @@
           });
         }
       }
+    } else if (isDraggingFigure && selectedFigureId) {
+      const fig = state.figuras.find(f => f.id === selectedFigureId);
+      if (fig) {
+        fig.x = gridPos.x - dragOffset.x;
+        fig.y = gridPos.y - dragOffset.y;
+        renderCanvas();
+      }
     } else if (isPanning) {
       viewport.panX = e.clientX - panStart.x;
       viewport.panY = e.clientY - panStart.y;
@@ -840,6 +867,22 @@
           y: ficha.y
         });
       }
+    }
+
+    if (isDraggingFigure && selectedFigureId) {
+      const fig = state.figuras.find(f => f.id === selectedFigureId);
+      if (fig) {
+        fig.x = Math.round(fig.x);
+        fig.y = Math.round(fig.y);
+        socket?.emit('guardar_figura', {
+          partidaId: state.partida.id,
+          escenaId: state.escenaActiva.id,
+          figuraData: fig
+        });
+      }
+      isDraggingFigure = false;
+      selectedFigureId = null;
+      renderCanvas();
     }
 
     if (isDrawing && currentStroke.length > 1) {
@@ -923,7 +966,19 @@
 
   // --- REGISTRO DE EVENT LISTENERS DOM ---
   function setupEventListeners() {
-    // Nav & Botones Inicio
+    dom.btnToggleHp?.addEventListener('click', () => {
+      showHpBars = !showHpBars;
+      renderCanvas();
+    });
+
+    dom.btnSortInitiative?.addEventListener('click', () => {
+      if (state.fichas) {
+        state.fichas.sort((a, b) => (b.iniciativa || 0) - (a.iniciativa || 0));
+        renderFichasList();
+      }
+    });
+
+    // Menús y Navegación & Botones Inicio
     dom.btnNavInicio.addEventListener('click', () => {
       autoSaveGame();
       loadGamesList();
@@ -1181,7 +1236,24 @@
       if (file) {
         const reader = new FileReader();
         reader.onload = (evt) => {
-          socket?.emit('actualizar_mapa', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, mapaBase64: evt.target.result });
+          const img = new Image();
+          img.onload = () => {
+             const canvas = document.createElement('canvas');
+             let w = img.width;
+             let h = img.height;
+             const MAX_DIM = 2048; 
+             if (w > MAX_DIM || h > MAX_DIM) {
+               if (w > h) { h = Math.round((h * MAX_DIM) / w); w = MAX_DIM; }
+               else { w = Math.round((w * MAX_DIM) / h); h = MAX_DIM; }
+             }
+             canvas.width = w; canvas.height = h;
+             const ctx = canvas.getContext('2d');
+             ctx.drawImage(img, 0, 0, w, h);
+             const resizedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+             
+             socket?.emit('actualizar_mapa', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, mapaBase64: resizedBase64 });
+          };
+          img.src = evt.target.result;
         };
         reader.readAsDataURL(file);
       }
@@ -1225,7 +1297,7 @@
 
   // --- LANZADOR DE DADOS CON PARSER COMPLEX ---
   function rollDice() {
-    const rawFormula = dom.diceFormulaInput.value.trim().toLowerCase();
+    let rawFormula = dom.diceFormulaInput.value.trim().toLowerCase();
     if (!rawFormula) return;
 
     const classif = document.querySelector('.btn-classif.active')?.dataset.classif || 'Normal';
@@ -1240,13 +1312,13 @@
     if (classif === 'Habilidad') icon = '📚';
 
     try {
-      if (rawFormula === '1d20' && mode !== 'normal') {
-        const roll1 = Math.floor(Math.random() * 20) + 1;
-        const roll2 = Math.floor(Math.random() * 20) + 1;
-        finalResult = mode === 'ventaja' ? Math.max(roll1, roll2) : Math.min(roll1, roll2);
-      } else {
-        finalResult = evalDiceFormula(rawFormula);
+      if (mode === 'ventaja') {
+        rawFormula = rawFormula.replace(/1d20/g, '2d20kh1');
+      } else if (mode === 'desventaja') {
+        rawFormula = rawFormula.replace(/1d20/g, '2d20kl1');
       }
+
+      finalResult = evalDiceFormula(rawFormula);
 
       socket?.emit('lanzar_dados', {
         partidaId: state.partida.id,
@@ -1266,20 +1338,31 @@
 
   // Evaluador de Fórmulas D&D (Ej: 2d10+6+1d6-2)
   function evalDiceFormula(formula) {
-    // Reemplazar XdX con valor calculado aleatorio
-    const diceRegex = /(\d+)d(\d+)/g;
-    const evaluated = formula.replace(diceRegex, (match, count, sides) => {
-      let total = 0;
-      const numCount = parseInt(count);
+    // Reemplazar XdX con valor calculado aleatorio (soporte para kh/kl)
+    const diceRegex = /(\d+)d(\d+)(?:k[hl](\d+))?/g;
+    const evaluated = formula.replace(diceRegex, (match, count, sides, keep) => {
+      let numCount = parseInt(count);
       const numSides = parseInt(sides);
+      const isKh = match.includes('kh');
+      const isKl = match.includes('kl');
+      let numKeep = keep ? parseInt(keep) : numCount;
+
+      let rolls = [];
       for (let i = 0; i < numCount; i++) {
-        total += Math.floor(Math.random() * numSides) + 1;
+        rolls.push(Math.floor(Math.random() * numSides) + 1);
       }
-      return total;
+
+      if (isKh || isKl) {
+        rolls.sort((a, b) => b - a); // Mayor a menor
+        if (isKh) rolls = rolls.slice(0, numKeep);
+        if (isKl) rolls = rolls.slice(-numKeep);
+      }
+
+      return rolls.reduce((sum, val) => sum + val, 0);
     });
 
     // Validar seguridad de math expr
-    if (!/^[0-9+\-*/()\s]+$/.test(evaluated)) {
+    if (!/^[0-9+\-*/()\s.]+$/.test(evaluated)) {
       throw new Error('Expresión no permitida');
     }
 
@@ -1441,7 +1524,7 @@
 
       card.innerHTML = `
         <div class="ficha-card-header">
-          <img src="${ficha.imagen || 'https://via.placeholder.com/48?text=Avatar'}" class="ficha-avatar">
+          <img src="${ficha.imagen || 'https://via.placeholder.com/48?text=Avatar'}" class="ficha-avatar" style="cursor: pointer;" title="Haz clic para ampliar">
           <div class="ficha-info">
             <div class="ficha-name">${ficha.nombre}</div>
             <div class="ficha-sub">${ficha.tipo.toUpperCase()} | HP: ${hpText} | AC: ${acText}</div>
@@ -1456,6 +1539,15 @@
           ${state.usuario.esDM ? '<button class="btn btn-sm btn-danger btn-del-ficha"><i class="fa-solid fa-trash"></i></button>' : ''}
         </div>
       `;
+
+      const avatarImg = card.querySelector('.ficha-avatar');
+      if (avatarImg) {
+        avatarImg.addEventListener('click', () => {
+          dom.enlargedGifImg.src = ficha.imagen || 'https://via.placeholder.com/200?text=Avatar';
+          if (dom.enlargedImgTitle) dom.enlargedImgTitle.textContent = ficha.nombre;
+          openModal(dom.modalGifView);
+        });
+      }
 
       if (esPropietario) {
         card.querySelector('.btn-gigante')?.addEventListener('click', () => {
