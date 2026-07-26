@@ -224,6 +224,7 @@
       modalGifView: document.getElementById('modal-gif-view'),
       enlargedGifImg: document.getElementById('enlarged-gif-img'),
       enlargedImgTitle: document.getElementById('enlarged-img-title'),
+      enlargedImgNotas: document.getElementById('enlarged-img-notas'),
 
       modalCreateGame: document.getElementById('modal-create-game'),
       formCreateGame: document.getElementById('form-create-game'),
@@ -1343,14 +1344,10 @@
 
       searchTimeout = setTimeout(async () => {
         try {
-          const res = await fetch(`https://api.tenor.com/v1/search?q=${encodeURIComponent(q)}&key=LIVDSRZULELA&limit=20`);
+          // Usa el endpoint local del servidor que escrapea Tenor
+          const res = await fetch(`/api/gifs?q=${encodeURIComponent(q)}`);
           if (res.ok) {
-            const data = await res.json();
-            const fetchedGifs = data.results.map(r => ({
-              name: q,
-              url: r.media[0].gif.url,
-              tag: q
-            }));
+            const fetchedGifs = await res.json();
             renderGifGrid(fetchedGifs.length > 0 ? fetchedGifs : PRESET_GIFS.filter(g => g.name.toLowerCase().includes(q) || g.tag.toLowerCase().includes(q)));
           } else {
             const filtered = PRESET_GIFS.filter(g => g.name.toLowerCase().includes(q) || g.tag.toLowerCase().includes(q));
@@ -1806,6 +1803,16 @@
           dom.enlargedGifImg.src = avatarSrc; // Uses placeholder if hidden
           if (dom.enlargedImgTitle) {
             dom.enlargedImgTitle.textContent = (isMonster && isPlayerView && !visibility.nombre) ? '???' : ficha.nombre;
+          }
+          if (dom.enlargedImgNotas) {
+            const showNotas = state.usuario.esDM || !isMonster || visibility.notas;
+            if (showNotas && ficha.notas && ficha.notas.trim() !== '') {
+              dom.enlargedImgNotas.textContent = ficha.notas;
+              dom.enlargedImgNotas.style.display = 'block';
+            } else {
+              dom.enlargedImgNotas.style.display = 'none';
+              dom.enlargedImgNotas.textContent = '';
+            }
           }
           openModal(dom.modalGifView);
         });

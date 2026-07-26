@@ -91,6 +91,44 @@ app.delete('/api/partidas/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// Buscar GIFs via scraper de Tenor
+app.get('/api/gifs', async (req, res) => {
+  const query = req.query.q || 'dnd';
+  try {
+    const url = `https://tenor.com/search/${encodeURIComponent(query)}-gifs`;
+    const response = await fetch(url);
+    const html = await response.text();
+    
+    // Scrape window.__PRELOADED_STATE__ from Tenor HTML
+    const regex = /window\.__PRELOADED_STATE__\s*=\s*(\{.*?\});\s*<\/script>/;
+    const match = html.match(regex);
+    if (match && match[1]) {
+      const state = JSON.parse(match[1]);
+      const results = state.gifs?.byId || {};
+      const gifs = Object.values(results).map(gif => {
+        // Find best tiny or regular gif URL
+        let bestUrl = '';
+        if (gif.media_formats?.tinygif?.url) bestUrl = gif.media_formats.tinygif.url;
+        else if (gif.media_formats?.gif?.url) bestUrl = gif.media_formats.gif.url;
+        else if (gif.media_formats?.mediumgif?.url) bestUrl = gif.media_formats.mediumgif.url;
+        else if (gif.media_formats?.gifpreview?.url) bestUrl = gif.media_formats.gifpreview.url;
+        
+        return {
+          url: bestUrl,
+          name: gif.title || query,
+          tag: query
+        };
+      }).filter(g => g.url);
+      
+      res.json(gifs.slice(0, 20));
+    } else {
+      res.json([]);
+    }
+  } catch (err) {
+    console.error('Error fetching gifs from Tenor API proxy:', err);
+    res.json([]);
+  }
+});
 
 // Exportar partida completa (Backup JSON para DM)
 app.get('/api/partidas/:id/export', async (req, res) => {
