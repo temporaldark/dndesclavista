@@ -1196,3 +1196,54 @@ input:focus, select:focus, textarea:focus, button:focus {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+/* Post-Roll Target Selector */
+.post-roll-target-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  text-align: left;
+}
+
+.post-roll-target-btn:hover {
+  border-color: var(--gold-primary);
+  background: rgba(201, 168, 76, 0.1);
+  box-shadow: var(--shadow-gold);
+  transform: translateY(-1px);
+}
+
+.post-roll-target-name {
+  font-weight: 600;
+  font-size: 0.95em;
+}
+
+.post-roll-target-hp {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.post-roll-hp-bar {
+  width: 60px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.post-roll-hp-fill {
+  height: 100%;
+  background: var(--green-heal);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}

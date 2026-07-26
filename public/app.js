@@ -42,8 +42,15 @@
     mensajes: [],
     historial: [],
     galeria: [],
+    jugadoresConectados: [],
     usuario: { id: null, nombre: '', esDM: false, color: '#c9a84c' }
   };
+
+  // Clasificación activa para filtrar targets
+  let currentClassif = 'Normal';
+
+  // Resultado pendiente de dado para modal post-lanzamiento
+  let pendingDiceResult = null;
   
   let showHpBars = false;
 
@@ -165,6 +172,8 @@
       classifButtons: document.querySelectorAll('.btn-classif'),
       modeButtons: document.querySelectorAll('.btn-mode'),
       diceTokenSelect: document.getElementById('dice-token-select'),
+      diceTargetContainer: document.getElementById('dice-target-container'),
+      diceTargetSelect: document.getElementById('dice-target-select'),
       quickDiceHistory: document.getElementById('quick-dice-history'),
 
       // Chat
@@ -286,6 +295,7 @@
       state.mensajes = data.mensajes || [];
       state.historial = data.historial || [];
       state.galeria = data.galeria || [];
+      state.jugadoresConectados = data.jugadoresConectados || [];
       state.usuario = data.usuario;
 
       // Generar usuario id local si no existía
@@ -400,6 +410,11 @@
     socket.on('figuras_actualizadas', (figuras) => {
       state.figuras = figuras || [];
       renderCanvas();
+    });
+
+    // Lista de jugadores conectados (para menú de visibilidad)
+    socket.on('lista_jugadores', (jugadores) => {
+      state.jugadoresConectados = jugadores || [];
     });
 
     socket.on('dibujos_actualizados', (dibujos) => {
@@ -1163,8 +1178,19 @@
     });
 
     dom.btnClearFigures.addEventListener('click', () => {
-      socket?.emit('limpiar_figuras', { partidaId: state.partida.id, escenaId: state.escenaActiva.id });
+      if (state.usuario.esDM) {
+        socket?.emit('limpiar_figuras', { partidaId: state.partida.id, escenaId: state.escenaActiva.id });
+      } else {
+        socket?.emit('limpiar_mis_figuras', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, usuarioId: state.usuario.id });
+      }
     });
+
+    // Actualizar texto del botón de limpiar figuras según rol
+    function updateClearFiguresButton() {
+      if (!state.usuario.esDM && dom.btnClearFigures) {
+        dom.btnClearFigures.innerHTML = '<i class="fa-solid fa-trash"></i> Limpiar Mis Figuras';
+      }
+    }
 
     // Zoom flotante
     dom.btnZoomIn.addEventListener('click', () => zoomAt(canvas.width / 2, canvas.height / 2, 1.2));
@@ -1273,6 +1299,14 @@
       btn.addEventListener('click', () => {
         dom.classifButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        
+        currentClassif = btn.dataset.classif;
+        if (currentClassif === 'Daño' || currentClassif === 'Curación') {
+          dom.diceTargetContainer.classList.remove('hidden');
+          updateDiceTargetOptions(currentClassif);
+        } else {
+          dom.diceTargetContainer.classList.add('hidden');
+        }
       });
     });
 
@@ -1410,6 +1444,35 @@
         if (overlay) closeModal(overlay);
       });
     });
+
+    dom.btnAplicarRevelado?.addEventListener('click', () => {
+      const fichaId = dom.revelarFichaId.value;
+      const targetJugador = dom.revJugadoresSelect.value;
+      
+      if (!currentFichaReveladoConfig.jugadores) currentFichaReveladoConfig.jugadores = {};
+
+      const newConf = {
+        imagen: dom.revImagen.checked,
+        nombre: dom.revNombre.checked,
+        hp: dom.revHp.checked,
+        ac: dom.revAc.checked,
+        notas: dom.revNotas.checked
+      };
+
+      if (targetJugador === 'todos') {
+        currentFichaReveladoConfig.global = newConf;
+      } else {
+        currentFichaReveladoConfig.jugadores[targetJugador] = newConf;
+      }
+
+      socket.emit('actualizar_config_revelado', {
+        partidaId: state.partida.id,
+        fichaId: fichaId,
+        config: currentFichaReveladoConfig
+      });
+
+      closeModal(dom.modalRevelar);
+    });
   }
 
   // --- LANZADOR DE DADOS CON PARSER COMPLEX ---
@@ -1424,10 +1487,9 @@
 
     let finalResult = 0;
     let icon = '🎲';
-    if (classif === 'Ataque') icon = '⚔️';
+    if (classif === 'Daño') icon = '⚔️';
     if (classif === 'Iniciativa') icon = '🎯';
-    if (classif === 'Salvación') icon = '🛡️';
-    if (classif === 'Habilidad') icon = '📚';
+    if (classif === 'Curación') icon = '❤️';
 
     try {
       if (mode === 'ventaja') {
@@ -1458,6 +1520,24 @@
         fichaId,
         icono: icon
       });
+
+      // Apply HP if Daño or Curación is selected
+      const targetId = dom.diceTargetSelect.value;
+      if (classif === 'Daño' || classif === 'Curación') {
+        if (targetId) {
+          // Objetivo ya seleccionado, aplicar directamente
+          socket?.emit('aplicar_dano_curacion', {
+            partidaId: state.partida.id,
+            fichaId: targetId,
+            cantidad: finalResult,
+            esCuracion: classif === 'Curación'
+          });
+        } else {
+          // No hay objetivo seleccionado, abrir modal para elegir
+          pendingDiceResult = { resultado: finalResult, esCuracion: classif === 'Curación', classif };
+          openPostRollTargetModal(classif, finalResult);
+        }
+      }
 
     } catch (err) {
       alert('Fórmula de dados inválida. Usa formato ej: 2d10+6+1d6 o 1d20+5');
@@ -1769,15 +1849,109 @@
       const esPropia = state.usuario.esDM || 
                        f.jugador_id === state.usuario.id ||
                        (!f.jugador_id && f.tipo === 'jugador');
+      
+      const opt = document.createElement('option');
+      opt.value = f.id;
+      opt.textContent = f.nombre;
 
       if (esPropia) {
-        const opt = document.createElement('option');
-        opt.value = f.id;
-        opt.textContent = f.nombre;
         dom.diceTokenSelect.appendChild(opt.cloneNode(true));
         dom.hdTokenSelect.appendChild(opt);
       }
     });
+
+    // Actualizar el selector de objetivo según clasificación activa
+    updateDiceTargetOptions(currentClassif);
+  }
+
+  // Actualizar opciones del selector de objetivo según clasificación
+  function updateDiceTargetOptions(classif) {
+    dom.diceTargetSelect.innerHTML = '<option value="">-- Sin objetivo --</option>';
+
+    (state.fichas || []).forEach(f => {
+      const visibility = getFichaVisibility(f);
+      let include = false;
+
+      if (classif === 'Curación') {
+        // Solo aliados (fichas tipo jugador)
+        include = (f.tipo === 'jugador');
+      } else if (classif === 'Daño') {
+        // Solo enemigos (monstruos y NPCs)
+        include = (f.tipo === 'monstruo' || f.tipo === 'npc');
+        // DM puede dañar a cualquiera
+        if (state.usuario.esDM) include = true;
+      } else {
+        include = true;
+      }
+
+      if (include) {
+        const opt = document.createElement('option');
+        opt.value = f.id;
+        // Mostrar HP si es visible o es DM
+        const showHp = state.usuario.esDM || f.tipo === 'jugador' || visibility.hp;
+        const hpInfo = showHp ? ` [HP: ${f.hp_actual}/${f.hp_maximo}]` : '';
+        opt.textContent = `${f.nombre}${hpInfo}`;
+        dom.diceTargetSelect.appendChild(opt);
+      }
+    });
+  }
+
+  // Modal post-lanzamiento para elegir objetivo
+  function openPostRollTargetModal(classif, resultado) {
+    const modal = document.getElementById('modal-post-roll-target');
+    if (!modal) return;
+
+    const titleEl = modal.querySelector('.post-roll-title');
+    const listEl = modal.querySelector('.post-roll-target-list');
+    const resultEl = modal.querySelector('.post-roll-result');
+    const iconEl = modal.querySelector('.post-roll-icon');
+
+    if (iconEl) iconEl.textContent = classif === 'Curación' ? '❤️' : '⚔️';
+    if (titleEl) titleEl.textContent = classif === 'Curación' ? '¿A quién quieres curar?' : '¿A quién atacas?';
+    if (resultEl) resultEl.textContent = `Resultado del dado: ${resultado}`;
+
+    listEl.innerHTML = '';
+
+    (state.fichas || []).forEach(f => {
+      const visibility = getFichaVisibility(f);
+      let include = false;
+
+      if (classif === 'Curación') {
+        include = (f.tipo === 'jugador');
+      } else if (classif === 'Daño') {
+        include = (f.tipo === 'monstruo' || f.tipo === 'npc');
+        if (state.usuario.esDM) include = true;
+      }
+
+      if (include) {
+        const showHp = state.usuario.esDM || f.tipo === 'jugador' || visibility.hp;
+        const hpPercent = Math.max(0, Math.min(100, (f.hp_actual / (f.hp_maximo || 1)) * 100));
+        const hpInfo = showHp ? `${f.hp_actual}/${f.hp_maximo}` : '???';
+
+        const btn = document.createElement('button');
+        btn.className = 'post-roll-target-btn';
+        btn.innerHTML = `
+          <span class="post-roll-target-name">${f.nombre}</span>
+          <span class="post-roll-target-hp">HP: ${hpInfo}</span>
+          <div class="post-roll-hp-bar"><div class="post-roll-hp-fill" style="width: ${showHp ? hpPercent : 50}%"></div></div>
+        `;
+        btn.addEventListener('click', () => {
+          if (pendingDiceResult) {
+            socket?.emit('aplicar_dano_curacion', {
+              partidaId: state.partida.id,
+              fichaId: f.id,
+              cantidad: pendingDiceResult.resultado,
+              esCuracion: pendingDiceResult.esCuracion
+            });
+            pendingDiceResult = null;
+          }
+          closeModal(modal);
+        });
+        listEl.appendChild(btn);
+      }
+    });
+
+    openModal(modal);
   }
 
   function renderScenesList() {
@@ -1965,18 +2139,16 @@
     
     currentFichaReveladoConfig = config;
 
-    // Llenar select de jugadores
+    // Llenar select de jugadores conectados
     dom.revJugadoresSelect.innerHTML = '<option value="todos">Todos los Jugadores (Global)</option>';
-    if (state.partida?.jugadores) {
-      state.partida.jugadores.forEach(j => {
-        if (!j.esDM) {
-          const opt = document.createElement('option');
-          opt.value = j.id;
-          opt.textContent = j.nombre;
-          dom.revJugadoresSelect.appendChild(opt);
-        }
-      });
-    }
+    (state.jugadoresConectados || []).forEach(j => {
+      if (!j.esDM) {
+        const opt = document.createElement('option');
+        opt.value = j.id;
+        opt.textContent = j.nombre;
+        dom.revJugadoresSelect.appendChild(opt);
+      }
+    });
 
     dom.revJugadoresSelect.value = 'todos';
     cargarCheckboxesRevelado('todos');
@@ -1998,38 +2170,6 @@
     dom.revAc.checked = !!target.ac;
     dom.revNotas.checked = !!target.notas;
   }
-
-  dom.btnAplicarRevelado?.addEventListener('click', () => {
-    const fichaId = dom.revelarFichaId.value;
-    const targetJugador = dom.revJugadoresSelect.value;
-    
-    if (!currentFichaReveladoConfig.jugadores) currentFichaReveladoConfig.jugadores = {};
-
-    const newConf = {
-      imagen: dom.revImagen.checked,
-      nombre: dom.revNombre.checked,
-      hp: dom.revHp.checked,
-      ac: dom.revAc.checked,
-      notas: dom.revNotas.checked
-    };
-
-    if (targetJugador === 'todos') {
-      currentFichaReveladoConfig.global = newConf;
-      // Actualizar a los jugadores que no tienen overrides
-      // O podríamos simplemente limpiar los overrides si se pone global (opcional). 
-      // Por ahora mantenemos los overrides que ya tengan.
-    } else {
-      currentFichaReveladoConfig.jugadores[targetJugador] = newConf;
-    }
-
-    socket.emit('actualizar_config_revelado', {
-      partidaId: state.partida.id,
-      fichaId: fichaId,
-      config: currentFichaReveladoConfig
-    });
-
-    closeModal(dom.modalRevelar);
-  });
 
   function closeModal(modal) {
     if (modal) modal.classList.add('hidden');

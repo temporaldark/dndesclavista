@@ -33,6 +33,9 @@ const COLORES_USUARIOS = [
   '#3498db', '#9b59b6', '#fd79a8', '#00cec9', '#6c5ce7'
 ];
 
+// Mapa de usuarios conectados por partida { partidaId: Map<usuarioId, { id, nombre, esDM, color, socketId }> }
+const connectedUsers = new Map();
+
 // --- REST ENDPOINTS ---
 
 // Listar todas las partidas guardadas
@@ -166,6 +169,21 @@ io.on('connection', (socket) => {
       const galeria = esDM ? await dbAll(`SELECT * FROM galeria WHERE partida_id = ?`, [partida.id]) : [];
 
       // Responder con estado inicial
+      // Registrar usuario conectado
+      if (!connectedUsers.has(partida.id)) {
+        connectedUsers.set(partida.id, new Map());
+      }
+      connectedUsers.get(partida.id).set(usuarioId, {
+        id: usuarioId,
+        nombre: nombreUsuario,
+        esDM,
+        color: colorUsuario,
+        socketId: socket.id
+      });
+
+      // Preparar lista de jugadores conectados
+      const jugadoresConectados = Array.from(connectedUsers.get(partida.id).values());
+
       socket.emit('estado_inicial', {
         partida,
         escenaActiva,
@@ -176,8 +194,12 @@ io.on('connection', (socket) => {
         mensajes,
         historial,
         galeria,
+        jugadoresConectados,
         usuario: { id: usuarioId, nombre: nombreUsuario, esDM, color: colorUsuario }
       });
+
+      // Emitir lista de jugadores actualizada a toda la sala
+      io.to(partida.id).emit('lista_jugadores', jugadoresConectados);
 
       // Notificar a la sala
       io.to(partida.id).emit('usuario_conectado', {
@@ -401,11 +423,29 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Limpiar todas las figuras
+  // Limpiar todas las figuras (solo DM)
   socket.on('limpiar_figuras', async ({ partidaId, escenaId }) => {
     try {
-      await dbRun(`DELETE FROM figuras WHERE escena_id = ?`, [escenaId]);
-      io.to(partidaId).emit('figuras_actualizadas', []);
+      // Validar que solo el DM pueda borrar todas las figuras
+      if (!socket.data?.esDM) {
+        // Si no es DM, solo borrar sus propias figuras (fallback de seguridad)
+        await dbRun(`DELETE FROM figuras WHERE escena_id = ? AND creador_id = ?`, [escenaId, socket.data?.usuarioId]);
+      } else {
+        await dbRun(`DELETE FROM figuras WHERE escena_id = ?`, [escenaId]);
+      }
+      const figuras = await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaId]);
+      io.to(partidaId).emit('figuras_actualizadas', figuras);
+    } catch (err) {
+      console.error(err);
+    }
+  });
+
+  // Limpiar solo mis figuras (Jugadores)
+  socket.on('limpiar_mis_figuras', async ({ partidaId, escenaId, usuarioId }) => {
+    try {
+      await dbRun(`DELETE FROM figuras WHERE escena_id = ? AND creador_id = ?`, [escenaId, usuarioId]);
+      const figuras = await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaId]);
+      io.to(partidaId).emit('figuras_actualizadas', figuras);
     } catch (err) {
       console.error(err);
     }
@@ -546,6 +586,19 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log(`❌ Cliente desconectado: ${socket.id}`);
+    
+    // Remover usuario de la lista de conectados y notificar
+    const { partidaId, usuarioId } = socket.data || {};
+    if (partidaId && usuarioId && connectedUsers.has(partidaId)) {
+      connectedUsers.get(partidaId).delete(usuarioId);
+      const jugadoresConectados = Array.from(connectedUsers.get(partidaId).values());
+      io.to(partidaId).emit('lista_jugadores', jugadoresConectados);
+      
+      // Limpiar el Map si no quedan usuarios
+      if (connectedUsers.get(partidaId).size === 0) {
+        connectedUsers.delete(partidaId);
+      }
+    }
   });
 });
 

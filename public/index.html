@@ -216,10 +216,9 @@
             <label class="input-label">Clasificación de Acción:</label>
             <div class="classification-grid">
               <button class="btn-classif active" data-classif="Normal">🎲 Normal</button>
-              <button class="btn-classif" data-classif="Ataque">⚔️ Ataque</button>
               <button class="btn-classif" data-classif="Iniciativa">🎯 Iniciativa</button>
-              <button class="btn-classif" data-classif="Salvación">🛡️ Salvación</button>
-              <button class="btn-classif" data-classif="Habilidad">📚 Habilidad</button>
+              <button class="btn-classif" data-classif="Daño">⚔️ Daño</button>
+              <button class="btn-classif" data-classif="Curación">❤️ Curación</button>
             </div>
 
             <label class="input-label">Modo d20 Especial:</label>
@@ -233,6 +232,13 @@
             <select id="dice-token-select" class="form-select">
               <option value="">-- Sin ficha (Jugador) --</option>
             </select>
+
+            <div id="dice-target-container" class="hidden" style="margin-top: 15px;">
+              <label class="input-label" style="color: #c9a84c;">Selecciona Objetivo (Aplica HP):</label>
+              <select id="dice-target-select" class="form-select">
+                <option value="">-- Sin objetivo --</option>
+              </select>
+            </div>
 
             <div class="dice-recent-history">
               <h4>Últimas 5 tiradas:</h4>
@@ -515,6 +521,22 @@
         </select>
 
         <button id="btn-aplicar-revelado" class="btn btn-primary btn-block"><i class="fa-solid fa-check"></i> Aplicar Cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ELEGIR OBJETIVO POST-DADO -->
+  <div id="modal-post-roll-target" class="modal-overlay hidden">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3><span class="post-roll-icon">⚔️</span> <span class="post-roll-title">¿A quién atacas?</span></h3>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="post-roll-result" style="text-align: center; font-size: 1.2em; color: #c9a84c; margin-bottom: 15px;"></p>
+        <div class="post-roll-target-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto;">
+          <!-- Se llena dinámicamente -->
+        </div>
       </div>
     </div>
   </div>
