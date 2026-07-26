@@ -479,6 +479,46 @@
     </div>
   </div>
 
+  <!-- MODAL: MENÚ DE REVELADO AVANZADO (DM) -->
+  <div id="modal-revelar-ficha" class="modal-overlay hidden">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-eye"></i> Visibilidad de Ficha</h3>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 10px; font-size: 0.9em; color: #ccc;">Selecciona qué atributos de este monstruo/NPC deseas revelar a los jugadores.</p>
+        <input type="hidden" id="revelar-ficha-id" value="">
+        
+        <div style="margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1); padding: 10px; border-radius: 4px; background: rgba(0,0,0,0.3);">
+          <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+            <input type="checkbox" id="rev-imagen" class="rev-checkbox"> Revelar Imagen (Avatar)
+          </label>
+          <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+            <input type="checkbox" id="rev-nombre" class="rev-checkbox"> Revelar Nombre
+          </label>
+          <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+            <input type="checkbox" id="rev-hp" class="rev-checkbox"> Revelar Vida (HP)
+          </label>
+          <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+            <input type="checkbox" id="rev-ac" class="rev-checkbox"> Revelar CA (AC)
+          </label>
+          <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+            <input type="checkbox" id="rev-notas" class="rev-checkbox"> Revelar Información (Notas)
+          </label>
+        </div>
+
+        <label>Aplicar visibilidad a:</label>
+        <select id="rev-jugadores-select" class="form-select mb-15">
+          <option value="todos">Todos los Jugadores</option>
+          <!-- Se llenará dinámicamente con los jugadores conectados -->
+        </select>
+
+        <button id="btn-aplicar-revelado" class="btn btn-primary btn-block"><i class="fa-solid fa-check"></i> Aplicar Cambios</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: CREAR PARTIDA -->
   <div id="modal-create-game" class="modal-overlay hidden">
     <div class="modal-content modal-sm">

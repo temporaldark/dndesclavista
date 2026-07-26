@@ -227,6 +227,35 @@
     setupEventListeners();
   }
 
+  function getFichaVisibility(ficha) {
+    if (state.usuario.esDM || ficha.tipo === 'jugador') {
+      return { imagen: true, nombre: true, hp: true, ac: true, notas: true };
+    }
+
+    let config;
+    try {
+      config = JSON.parse(ficha.revelado);
+    } catch(e) {
+      const isRevealed = ficha.revelado === 1 || ficha.revelado === '1' || ficha.revelado === true;
+      config = { global: { imagen: isRevealed, nombre: isRevealed, hp: isRevealed, ac: isRevealed, notas: isRevealed }, jugadores: {} };
+    }
+
+    if (!config || !config.global) {
+      config = { global: { imagen: false, nombre: false, hp: false, ac: false, notas: false }, jugadores: {} };
+    }
+
+    const userId = state.usuario.id;
+    const userConfig = config.jugadores?.[userId];
+    
+    return {
+      imagen: userConfig?.imagen ?? config.global.imagen,
+      nombre: userConfig?.nombre ?? config.global.nombre,
+      hp: userConfig?.hp ?? config.global.hp,
+      ac: userConfig?.ac ?? config.global.ac,
+      notas: userConfig?.notas ?? config.global.notas,
+    };
+  }
+
   // --- SOCKET.IO EVENTOS ---
   function initSocket() {
     if (typeof io === 'undefined') {
@@ -335,7 +364,7 @@
     socket.on('revelado_toggled', ({ fichaId, revelado }) => {
       const ficha = state.fichas.find(f => f.id === fichaId);
       if (ficha) {
-        ficha.revelado = !!revelado;
+        ficha.revelado = revelado; // es string JSON
         renderCanvas();
         renderFichasList();
       }
@@ -581,6 +610,7 @@
     (state.fichas || []).forEach(ficha => {
       const isMonster = ficha.tipo === 'monstruo' || ficha.tipo === 'npc';
       const isPlayerView = !state.usuario.esDM;
+      const visibility = getFichaVisibility(ficha);
 
       // Calcular multiplicador de tamaño (Gigante = x2)
       let scaleMult = 1;
@@ -616,7 +646,7 @@
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.clip();
 
-      if (isMonster && isPlayerView && !ficha.revelado) {
+      if (isMonster && isPlayerView && !visibility.imagen) {
         // Silueta misteriosa para jugadores ante monstruos no revelados
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(px, py, tokenWidth, tokenHeight);
@@ -658,9 +688,10 @@
       ctx.textAlign = 'center';
       ctx.shadowColor = '#000000';
       ctx.shadowBlur = 4;
-      const displayName = (isMonster && isPlayerView && !ficha.revelado) ? '???' : ficha.nombre;
+      const displayName = (isMonster && isPlayerView && !visibility.nombre) ? '???' : ficha.nombre;
 
-      const showBar = showHpBars && (!isMonster || !isPlayerView);
+      // Usar hp visibility para la barra de vida
+      const showBar = showHpBars && (!isMonster || !isPlayerView || visibility.hp);
       if (showBar) {
         const hpPercent = Math.max(0, Math.min(1, ficha.hp_actual / (ficha.hp_maximo || 1)));
         const barW = Math.max(40, tokenWidth);
@@ -1582,10 +1613,11 @@
 
       const isMonster = ficha.tipo === 'monstruo' || ficha.tipo === 'npc';
       const isPlayerView = !state.usuario.esDM;
-      const hideData = isMonster && isPlayerView && !ficha.revelado;
+      const visibility = getFichaVisibility(ficha);
 
-      const hpText = hideData ? '???' : `${ficha.hp_actual}/${ficha.hp_maximo}`;
-      const acText = hideData ? '???' : ficha.ac;
+      const hpText = (isMonster && isPlayerView && !visibility.hp) ? '???' : `${ficha.hp_actual}/${ficha.hp_maximo}`;
+      const acText = (isMonster && isPlayerView && !visibility.ac) ? '???' : ficha.ac;
+      const avatarSrc = (isMonster && isPlayerView && !visibility.imagen) ? 'https://via.placeholder.com/48?text=?' : (ficha.imagen || 'https://via.placeholder.com/48?text=Avatar');
 
       const esPropietario = state.usuario.esDM || 
                             ficha.jugador_id === state.usuario.id ||
@@ -1593,9 +1625,9 @@
 
       card.innerHTML = `
         <div class="ficha-card-header">
-          <img src="${ficha.imagen || 'https://via.placeholder.com/48?text=Avatar'}" class="ficha-avatar" style="cursor: pointer;" title="Haz clic para ampliar">
+          <img src="${avatarSrc}" class="ficha-avatar" style="cursor: pointer;" title="Haz clic para ampliar">
           <div class="ficha-info">
-            <div class="ficha-name">${ficha.nombre}</div>
+            <div class="ficha-name">${(isMonster && isPlayerView && !visibility.nombre) ? '???' : ficha.nombre}</div>
             <div class="ficha-sub">${ficha.tipo.toUpperCase()} | HP: ${hpText} | AC: ${acText}</div>
             <div class="hp-bar-outer">
               <div class="hp-bar-inner" style="width: ${Math.max(0, Math.min(100, (ficha.hp_actual / (ficha.hp_maximo || 1)) * 100))}%"></div>
@@ -1604,7 +1636,7 @@
         </div>
         <div class="ficha-actions">
           ${esPropietario ? '<button class="btn btn-sm btn-secondary btn-gigante"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Gigante</button>' : ''}
-          ${state.usuario.esDM && isMonster ? `<button class="btn btn-sm ${ficha.revelado ? 'btn-danger' : 'btn-primary'} btn-revelar"><i class="fa-solid ${ficha.revelado ? 'fa-eye-slash' : 'fa-eye'}"></i> ${ficha.revelado ? 'Ocultar' : 'Revelar'}</button>` : ''}
+          ${state.usuario.esDM && isMonster ? `<button class="btn btn-sm btn-primary btn-revelar-menu"><i class="fa-solid fa-eye"></i> Visibilidad</button>` : ''}
           ${esPropietario ? '<button class="btn btn-sm btn-primary btn-edit-ficha"><i class="fa-solid fa-pen"></i> Editar</button>' : ''}
           ${state.usuario.esDM ? '<button class="btn btn-sm btn-danger btn-del-ficha"><i class="fa-solid fa-trash"></i></button>' : ''}
         </div>
@@ -1661,8 +1693,8 @@
       }
 
       if (state.usuario.esDM && isMonster) {
-        card.querySelector('.btn-revelar')?.addEventListener('click', () => {
-          socket?.emit('toggle_revelado', { partidaId: state.partida.id, fichaId: ficha.id });
+        card.querySelector('.btn-revelar-menu')?.addEventListener('click', () => {
+          abrirMenuRevelado(ficha);
         });
       }
 
@@ -1862,6 +1894,91 @@
   function openModal(modal) {
     if (modal) modal.classList.remove('hidden');
   }
+
+  let currentFichaReveladoConfig = null;
+
+  function abrirMenuRevelado(ficha) {
+    dom.revelarFichaId.value = ficha.id;
+    
+    // Parsear config actual
+    let config;
+    try {
+      config = JSON.parse(ficha.revelado);
+    } catch(e) {
+      const isRevealed = ficha.revelado === 1 || ficha.revelado === '1' || ficha.revelado === true;
+      config = { global: { imagen: isRevealed, nombre: isRevealed, hp: isRevealed, ac: isRevealed, notas: isRevealed }, jugadores: {} };
+    }
+    if (!config || !config.global) {
+      config = { global: { imagen: false, nombre: false, hp: false, ac: false, notas: false }, jugadores: {} };
+    }
+    
+    currentFichaReveladoConfig = config;
+
+    // Llenar select de jugadores
+    dom.revJugadoresSelect.innerHTML = '<option value="todos">Todos los Jugadores (Global)</option>';
+    if (state.partida?.jugadores) {
+      state.partida.jugadores.forEach(j => {
+        if (!j.esDM) {
+          const opt = document.createElement('option');
+          opt.value = j.id;
+          opt.textContent = j.nombre;
+          dom.revJugadoresSelect.appendChild(opt);
+        }
+      });
+    }
+
+    dom.revJugadoresSelect.value = 'todos';
+    cargarCheckboxesRevelado('todos');
+    
+    dom.revJugadoresSelect.onchange = () => {
+      cargarCheckboxesRevelado(dom.revJugadoresSelect.value);
+    };
+
+    openModal(dom.modalRevelar);
+  }
+
+  function cargarCheckboxesRevelado(jugadorId) {
+    const config = currentFichaReveladoConfig;
+    let target = (jugadorId === 'todos') ? config.global : (config.jugadores[jugadorId] || config.global);
+
+    dom.revImagen.checked = !!target.imagen;
+    dom.revNombre.checked = !!target.nombre;
+    dom.revHp.checked = !!target.hp;
+    dom.revAc.checked = !!target.ac;
+    dom.revNotas.checked = !!target.notas;
+  }
+
+  dom.btnAplicarRevelado?.addEventListener('click', () => {
+    const fichaId = dom.revelarFichaId.value;
+    const targetJugador = dom.revJugadoresSelect.value;
+    
+    if (!currentFichaReveladoConfig.jugadores) currentFichaReveladoConfig.jugadores = {};
+
+    const newConf = {
+      imagen: dom.revImagen.checked,
+      nombre: dom.revNombre.checked,
+      hp: dom.revHp.checked,
+      ac: dom.revAc.checked,
+      notas: dom.revNotas.checked
+    };
+
+    if (targetJugador === 'todos') {
+      currentFichaReveladoConfig.global = newConf;
+      // Actualizar a los jugadores que no tienen overrides
+      // O podríamos simplemente limpiar los overrides si se pone global (opcional). 
+      // Por ahora mantenemos los overrides que ya tengan.
+    } else {
+      currentFichaReveladoConfig.jugadores[targetJugador] = newConf;
+    }
+
+    socket.emit('actualizar_config_revelado', {
+      partidaId: state.partida.id,
+      fichaId: fichaId,
+      config: currentFichaReveladoConfig
+    });
+
+    closeModal(dom.modalRevelar);
+  });
 
   function closeModal(modal) {
     if (modal) modal.classList.add('hidden');
