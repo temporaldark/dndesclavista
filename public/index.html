@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>VTT D&D 5e - Homebrew Tabletop Multijugador</title>
+  
+  <!-- Google Fonts: Cinzel para títulos temáticos, Roboto para interfaz -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Estilos Temáticos D&D -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- BARRA SUPERIOR (FIJA, SIEMPRE VISIBLE) -->
+  <header id="top-navbar" class="top-navbar">
+    <div class="nav-left">
+      <button id="btn-nav-inicio" class="btn-nav" title="Volver al Inicio">
+        <i class="fa-solid fa-house"></i> <span>Inicio</span>
+      </button>
+      <div class="brand-title">
+        <i class="fa-solid fa-dice-d20 gold-text"></i> <span id="nav-game-title">VTT D&D 5e</span>
+      </div>
+    </div>
+
+    <div class="nav-center">
+      <div id="code-badge" class="code-badge" title="Haz clic para copiar el código de partida">
+        <i class="fa-solid fa-key"></i> Code: <strong id="current-room-code">------</strong>
+      </div>
+      <div id="user-role-badge" class="role-badge">
+        <i class="fa-solid fa-user-shield"></i> <span id="user-role-text">Jugador</span>
+      </div>
+      <div id="scene-badge" class="scene-badge">
+        <i class="fa-solid fa-map-location-dot"></i> <span id="current-scene-name">Mazmorra Principal</span>
+      </div>
+    </div>
+
+    <div class="nav-right">
+      <span id="save-status-indicator" class="save-status" title="Estado de Guardado">
+        <i class="fa-solid fa-cloud-arrow-up"></i> <span>Listo</span>
+      </span>
+      <button id="btn-mobile-menu" class="btn-nav mobile-only" title="Menú de Herramientas">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- PANTALLA DE INICIO (GESTIÓN DE PARTIDAS) -->
+  <main id="screen-start" class="screen-container">
+    <div class="hero-header">
+      <h1><i class="fa-solid fa-dragon gold-text"></i> VTT D&D 5e</h1>
+      <p class="subtitle">Mesa Virtual de Rol Multijugador en Tiempo Real con Soporte Homebrew</p>
+    </div>
+
+    <div class="start-actions">
+      <button id="btn-create-game-modal" class="btn btn-primary btn-large">
+        <i class="fa-solid fa-plus-circle"></i> Crear Nueva Partida
+      </button>
+      <button id="btn-join-game-modal" class="btn btn-secondary btn-large">
+        <i class="fa-solid fa-right-to-bracket"></i> Unirse con Código
+      </button>
+    </div>
+
+    <div class="saved-games-section">
+      <h2><i class="fa-solid fa-scroll gold-text"></i> Partidas Guardadas</h2>
+      <div id="games-list" class="games-grid">
+        <!-- Se llena dinámicamente con las partidas de SQLite -->
+        <div class="empty-state">Cargando partidas...</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- PANTALLA PRINCIPAL VTT (TABLERO Y PANELES) -->
+  <main id="screen-vtt" class="screen-container hidden">
+
+    <!-- PANEL IZQUIERDO (HERRAMIENTAS DE MAPA: MOVER, MEDIR, FIGURAS PARA TODOS / DIBUJAR Y HP SOLO DM) -->
+    <aside id="dm-tools-panel" class="dm-tools-panel">
+      <div class="panel-header">
+        <i class="fa-solid fa-toolbox gold-text"></i> <span>Herramientas</span>
+      </div>
+      <div class="tools-buttons">
+        <button id="tool-move" class="tool-btn active" data-tool="move" title="Mover tu Ficha">
+          <i class="fa-solid fa-hand-pointer"></i> <span>Mover</span>
+        </button>
+        <button id="tool-measure" class="tool-btn" data-tool="measure" title="Medir Distancia (pies)">
+          <i class="fa-solid fa-ruler-combined"></i> <span>Medir</span>
+        </button>
+        <button id="tool-figures" class="tool-btn" data-tool="figures" title="Áreas de Hechizos y Figuras">
+          <i class="fa-solid fa-shapes"></i> <span>Figuras</span>
+        </button>
+        <button id="tool-draw" class="tool-btn dm-only" data-tool="draw" title="Dibujar Pincel (Solo DM)">
+          <i class="fa-solid fa-paintbrush"></i> <span>Dibujar</span>
+        </button>
+        <button id="tool-erase" class="tool-btn dm-only" data-tool="erase" title="Borrar Dibujo/Figura (Solo DM)">
+          <i class="fa-solid fa-eraser"></i> <span>Borrar</span>
+        </button>
+        <button id="tool-heal-damage" class="tool-btn dm-only" data-tool="healdamage" title="Daño y Curación (Solo DM)">
+          <i class="fa-solid fa-heart-pulse"></i> <span>HP +-</span>
+        </button>
+      </div>
+
+      <!-- Opciones dinámicas de herramienta activa -->
+      <div id="tool-options-container" class="tool-options hidden">
+        <!-- Opciones de Dibujo (DM) -->
+        <div id="opt-draw" class="tool-sub-options hidden">
+          <label>Color: <input type="color" id="draw-color" value="#e74c3c"></label>
+          <label>Grosor: <input type="range" id="draw-size" min="2" max="20" value="4"></label>
+          <button id="btn-clear-drawings" class="btn btn-danger btn-sm dm-only"><i class="fa-solid fa-trash"></i> Limpiar Dibujos</button>
+        </div>
+
+        <!-- Opciones de Figuras (Hechizos y Áreas para Jugadores y DM) -->
+        <div id="opt-figures" class="tool-sub-options hidden">
+          <label>Forma:
+            <select id="fig-type">
+              <option value="circulo">🔴 Círculo (Hechizo)</option>
+              <option value="cuadrado">🟦 Cuadrado (Área)</option>
+              <option value="cono">📐 Cono (Ataque)</option>
+            </select>
+          </label>
+          <label>Radio (casillas): <input type="number" id="fig-size" value="3" min="1" max="20"></label>
+          <label>Color: <input type="color" id="fig-color" value="#c9a84c"></label>
+          <label>Transparencia: <input type="range" id="fig-opacity" min="0.1" max="0.9" step="0.1" value="0.4"></label>
+          <label>Etiqueta: <input type="text" id="fig-label" placeholder="Ej: Bola de Fuego"></label>
+          <button id="btn-clear-figures" class="btn btn-danger btn-sm dm-only"><i class="fa-solid fa-trash"></i> Limpiar Figuras</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ÁREA CENTRAL: CANVAS TABLERO -->
+    <section id="canvas-wrapper" class="canvas-wrapper">
+      <div id="vtt-canvas-container" class="vtt-canvas-container">
+        <canvas id="vtt-canvas"></canvas>
+      </div>
+
+      <!-- Controles flotantes de Zoom y Posición -->
+      <div class="canvas-controls">
+        <button id="btn-zoom-in" class="btn-circle" title="Acercar (Zoom In)"><i class="fa-solid fa-plus"></i></button>
+        <button id="btn-zoom-reset" class="btn-circle" title="Recentrar Vista"><i class="fa-solid fa-crosshairs"></i></button>
+        <button id="btn-zoom-out" class="btn-circle" title="Alejar (Zoom Out)"><i class="fa-solid fa-minus"></i></button>
+        <span id="zoom-level-text" class="zoom-level">100%</span>
+      </div>
+
+      <!-- Tooltip de Medición de Distancia -->
+      <div id="measure-tooltip" class="measure-tooltip hidden">0 pies</div>
+    </section>
+
+    <!-- PANEL DERECHO (PESTAÑAS MULTIFUNCIÓN) -->
+    <aside id="right-panel" class="right-panel">
+      <!-- Navegación de Pestañas -->
+      <nav class="tabs-nav">
+        <button class="tab-btn active" data-tab="tab-fichas"><i class="fa-solid fa-users"></i> <span>Fichas</span></button>
+        <button class="tab-btn" data-tab="tab-dados"><i class="fa-solid fa-dice-d20"></i> <span>Dados</span></button>
+        <button class="tab-btn" data-tab="tab-chat"><i class="fa-solid fa-comments"></i> <span>Chat</span></button>
+        <button class="tab-btn" data-tab="tab-historial"><i class="fa-solid fa-clock-rotate-left"></i> <span>Historial</span></button>
+        <button class="tab-btn dm-only" data-tab="tab-dm"><i class="fa-solid fa-key"></i> <span>DM</span></button>
+      </nav>
+
+      <div class="tab-content-container">
+
+        <!-- PESTAÑA 1: FICHAS DE PERSONAJE -->
+        <div id="tab-fichas" class="tab-pane active">
+          <div class="pane-header">
+            <h3><i class="fa-solid fa-address-card gold-text"></i> Fichas de Personaje</h3>
+            <button id="btn-open-create-ficha" class="btn btn-primary btn-sm">
+              <i class="fa-solid fa-plus"></i> Crear Ficha
+            </button>
+          </div>
+          <div class="search-box">
+            <input type="text" id="filter-fichas-input" placeholder="🔍 Buscar personaje o monstruo...">
+          </div>
+          <div id="fichas-list" class="fichas-list">
+            <!-- Se puebla dinámicamente -->
+          </div>
+        </div>
+
+        <!-- PESTAÑA 2: LANZADOR DE DADOS -->
+        <div id="tab-dados" class="tab-pane">
+          <div class="pane-header">
+            <h3><i class="fa-solid fa-dice-d20 gold-text"></i> Lanzador de Dados</h3>
+          </div>
+
+          <div class="dice-section">
+            <label class="input-label">Fórmula Personalizada:</label>
+            <div class="formula-input-group">
+              <input type="text" id="dice-formula-input" placeholder="Ej: 2d10+6+1d6 o 1d20+5" value="1d20+3">
+              <button id="btn-roll-dice" class="btn btn-gold btn-large">
+                <i class="fa-solid fa-dice"></i> LANZAR
+              </button>
+            </div>
+
+            <label class="input-label">Insertar Dado Rápidamente:</label>
+            <div class="quick-dice-grid">
+              <button class="btn-quick-die" data-die="1d4">d4</button>
+              <button class="btn-quick-die" data-die="1d6">d6</button>
+              <button class="btn-quick-die" data-die="1d8">d8</button>
+              <button class="btn-quick-die" data-die="1d10">d10</button>
+              <button class="btn-quick-die" data-die="1d12">d12</button>
+              <button class="btn-quick-die" data-die="1d20">d20</button>
+              <button class="btn-quick-die" data-die="1d100">d100</button>
+            </div>
+
+            <label class="input-label">Clasificación de Acción:</label>
+            <div class="classification-grid">
+              <button class="btn-classif active" data-classif="Normal">🎲 Normal</button>
+              <button class="btn-classif" data-classif="Ataque">⚔️ Ataque</button>
+              <button class="btn-classif" data-classif="Iniciativa">🎯 Iniciativa</button>
+              <button class="btn-classif" data-classif="Salvación">🛡️ Salvación</button>
+              <button class="btn-classif" data-classif="Habilidad">📚 Habilidad</button>
+            </div>
+
+            <label class="input-label">Modo d20 Especial:</label>
+            <div class="d20-mode-grid">
+              <button class="btn-mode active" data-mode="normal">✨ Normal</button>
+              <button class="btn-mode" data-mode="ventaja">⭐ Ventaja</button>
+              <button class="btn-mode" data-mode="desventaja">🌑 Desventaja</button>
+            </div>
+
+            <label class="input-label">Asociar Tirada a Ficha (para animación):</label>
+            <select id="dice-token-select" class="form-select">
+              <option value="">-- Sin ficha (Jugador) --</option>
+            </select>
+
+            <div class="dice-recent-history">
+              <h4>Últimas 5 tiradas:</h4>
+              <div id="quick-dice-history" class="quick-history-list">
+                <!-- Se puebla con las últimas 5 -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PESTAÑA 3: CHAT EN TIEMPO REAL CON GIFS -->
+        <div id="tab-chat" class="tab-pane">
+          <div class="pane-header">
+            <h3><i class="fa-solid fa-comments gold-text"></i> Chat en Tiempo Real</h3>
+          </div>
+          <div id="chat-messages-container" class="chat-messages-container">
+            <!-- Mensajes de chat -->
+          </div>
+          <div class="chat-input-bar">
+            <button id="btn-open-gif-modal" class="btn btn-secondary btn-icon" title="Insertar GIF">
+              🎬 GIF
+            </button>
+            <input type="text" id="chat-text-input" placeholder="Escribe tu mensaje..." autocomplete="off">
+            <button id="btn-send-chat" class="btn btn-primary">
+              <i class="fa-solid fa-paper-plane"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- PESTAÑA 4: HISTORIAL DE TIRADAS -->
+        <div id="tab-historial" class="tab-pane">
+          <div class="pane-header">
+            <h3><i class="fa-solid fa-clock-rotate-left gold-text"></i> Historial Completo</h3>
+            <div class="pane-actions dm-only">
+              <button id="btn-export-history" class="btn btn-secondary btn-sm"><i class="fa-solid fa-download"></i> Exportar</button>
+              <button id="btn-clear-history" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i> Limpiar</button>
+            </div>
+          </div>
+          <div class="search-box">
+            <input type="text" id="search-history-input" placeholder="🔍 Buscar por nombre de jugador...">
+          </div>
+          <div class="table-responsive">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>Jugador</th>
+                  <th>Fórmula</th>
+                  <th>Tipo</th>
+                  <th>Resultado</th>
+                  <th>Hora</th>
+                </tr>
+              </thead>
+              <tbody id="history-table-body">
+                <!-- Filas de tiradas -->
+              </tbody>
+            </table>
+          </div>
+          <div class="pagination-controls">
+            <button id="btn-hist-prev" class="btn btn-sm"><i class="fa-solid fa-chevron-left"></i> Anterior</button>
+            <span id="hist-page-info">Página 1</span>
+            <button id="btn-hist-next" class="btn btn-sm">Siguiente <i class="fa-solid fa-chevron-right"></i></button>
+          </div>
+        </div>
+
+        <!-- PESTAÑA 5: PANEL DEL DUNGEON MASTER (SOLO DM) -->
+        <div id="tab-dm" class="tab-pane dm-only">
+          <div class="pane-header">
+            <h3><i class="fa-solid fa-crown gold-text"></i> Panel del Dungeon Master</h3>
+          </div>
+
+          <!-- Sección Escenas -->
+          <div class="dm-section">
+            <h4>🎬 Escenas y Mapas</h4>
+            <div class="form-group inline-form">
+              <input type="text" id="new-scene-name" placeholder="Nombre nueva escena...">
+              <button id="btn-create-scene" class="btn btn-primary btn-sm"><i class="fa-solid fa-plus"></i> Crear Escena</button>
+            </div>
+            <div id="scenes-list" class="scenes-list">
+              <!-- Lista de escenas creadas -->
+            </div>
+            <div class="map-upload-box">
+              <button id="btn-trigger-map-upload" type="button" class="btn btn-secondary btn-block">
+                <i class="fa-solid fa-image"></i> Subir Imagen de Mapa (Fondo)
+              </button>
+              <input type="file" id="map-file-input" accept="image/png, image/jpeg, image/webp" class="hidden">
+              <button id="btn-clear-map-bg" class="btn btn-danger btn-sm btn-block mt-5"><i class="fa-solid fa-trash"></i> Eliminar Imagen de Fondo</button>
+            </div>
+          </div>
+
+          <!-- Configuración del Grid -->
+          <div class="dm-section">
+            <h4>📐 Configuración del Grid</h4>
+            <div class="grid-config-form">
+              <label>Columnas (X): <input type="number" id="grid-cols-input" min="10" max="500" value="40"></label>
+              <label>Filas (Y): <input type="number" id="grid-rows-input" min="10" max="500" value="40"></label>
+              <label>Tamaño Casilla (pies): <input type="number" id="grid-feet-input" min="1" max="100" value="5"></label>
+              <button id="btn-apply-grid" class="btn btn-gold btn-block"><i class="fa-solid fa-check"></i> Aplicar Cambios de Grid</button>
+            </div>
+          </div>
+
+          <!-- Galería de Fichas Plantilla -->
+          <div class="dm-section">
+            <h4>📚 Galería de Plantillas (Monstruos/NPCs)</h4>
+            <button id="btn-save-current-template" class="btn btn-secondary btn-block"><i class="fa-solid fa-bookmark"></i> Guardar Ficha Actual en Galería</button>
+            <div id="dm-gallery-list" class="gallery-chips">
+              <!-- Plantillas guardadas como chips -->
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+  </main>
+
+  <!-- MODALES DE LA APLICACIÓN -->
+
+  <!-- MODAL: CREAR / EDITAR FICHA DE PERSONAJE -->
+  <div id="modal-ficha" class="modal-overlay hidden">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h3 id="modal-ficha-title"><i class="fa-solid fa-user-pen gold-text"></i> Crear / Editar Ficha</h3>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="form-ficha" class="modal-body">
+        <input type="hidden" id="ficha-id">
+
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <label>Nombre del Personaje / Monstruo *</label>
+            <input type="text" id="ficha-nombre" required placeholder="Ej: Gandalf el Gris o Orco Guerrero">
+          </div>
+          <div class="form-group flex-1">
+            <label>Tipo *</label>
+            <select id="ficha-tipo" class="form-select">
+              <option value="jugador">🧙‍♂️ Jugador</option>
+              <option value="npc">👤 NPC</option>
+              <option value="monstruo">🐉 Monstruo</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <label>Imagen de Perfil (Subir o URL)</label>
+            <input type="file" id="ficha-img-file" accept="image/*" class="form-control mb-5">
+            <input type="text" id="ficha-imagen-url" placeholder="O pega URL de la imagen aquí..." class="form-control">
+          </div>
+          <div class="form-group flex-1 text-center">
+            <label>Vista Previa</label>
+            <img id="ficha-img-preview" src="https://via.placeholder.com/100?text=Avatar" class="avatar-preview">
+          </div>
+        </div>
+
+        <div class="form-row stats-grid">
+          <div class="stat-box"><label>FUE</label><input type="number" id="ficha-fue" value="10"></div>
+          <div class="stat-box"><label>DES</label><input type="number" id="ficha-des" value="10"></div>
+          <div class="stat-box"><label>CON</label><input type="number" id="ficha-con" value="10"></div>
+          <div class="stat-box"><label>INT</label><input type="number" id="ficha-int" value="10"></div>
+          <div class="stat-box"><label>SAB</label><input type="number" id="ficha-sab" value="10"></div>
+          <div class="stat-box"><label>CAR</label><input type="number" id="ficha-car" value="10"></div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group"><label>HP Actual</label><input type="number" id="ficha-hp-act" value="20" required></div>
+          <div class="form-group"><label>HP Máximo</label><input type="number" id="ficha-hp-max" value="20" required></div>
+          <div class="form-group"><label>AC (CA)</label><input type="number" id="ficha-ac" value="15" required></div>
+          <div class="form-group"><label>Velocidad (pies)</label><input type="number" id="ficha-vel" value="30"></div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group"><label>Iniciativa (+)</label><input type="number" id="ficha-ini" value="2"></div>
+          <div class="form-group"><label>Nivel</label><input type="number" id="ficha-nivel" value="1"></div>
+          <div class="form-group"><label>Altura (m/ft)</label><input type="number" id="ficha-altura" value="2"></div>
+          <div class="form-group">
+            <label>Tamaño Base</label>
+            <select id="ficha-tamanio" class="form-select">
+              <option value="pequeno">Pequeño (1x1)</option>
+              <option value="mediano" selected>Mediano (1x1)</option>
+              <option value="grande">Grande (2x2)</option>
+              <option value="enorme">Enorme (3x3)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Notas / Rasgos / Hechizos Homebrew</label>
+          <textarea id="ficha-notas" rows="3" placeholder="Añade descripciones, notas de combate o efectos especiales..."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-close-modal">Cancelar</button>
+          <button type="submit" class="btn btn-gold"><i class="fa-solid fa-floppy-disk"></i> Guardar Ficha</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: DAÑO Y CURACIÓN RÁPIDO (DM) -->
+  <div id="modal-dano-curacion" class="modal-overlay hidden">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-heart-circle-bolt red-text"></i> Aplicar Daño / Curación</h3>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <label>Seleccionar Ficha:</label>
+        <select id="hd-token-select" class="form-select mb-10"></select>
+
+        <label>Cantidad de HP:</label>
+        <input type="number" id="hd-amount-input" class="form-control mb-15" value="5" min="1">
+
+        <div class="modal-actions-row">
+          <button id="btn-apply-damage" class="btn btn-danger flex-1"><i class="fa-solid fa-skull"></i> Aplicar Daño</button>
+          <button id="btn-apply-heal" class="btn btn-success flex-1"><i class="fa-solid fa-notes-medical"></i> Aplicar Curación</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: SELECTOR DE GIFS PARA CHAT -->
+  <div id="modal-gif-picker" class="modal-overlay hidden">
+    <div class="modal-content modal-md">
+      <div class="modal-header">
+        <h3>🎬 Galería de GIFs D&D</h3>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="search-box mb-10">
+          <input type="text" id="gif-search-input" placeholder="🔍 Filtrar GIFs por categoría (dragón, dado, ataque...)...">
+        </div>
+        <div id="gif-grid" class="gif-grid">
+          <!-- Colección de 20 GIFs de D&D y Fantasía -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: AMPLIAR GIF DEL CHAT -->
+  <div id="modal-gif-view" class="modal-overlay hidden">
+    <div class="modal-content modal-sm text-center">
+      <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      <img id="enlarged-gif-img" src="" class="img-fluid rounded">
+    </div>
+  </div>
+
+  <!-- MODAL: CREAR PARTIDA -->
+  <div id="modal-create-game" class="modal-overlay hidden">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-plus-circle gold-text"></i> Crear Nueva Partida</h3>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="form-create-game" class="modal-body">
+        <div class="form-group">
+          <label>Nombre de la Partida *</label>
+          <input type="text" id="new-game-name" required placeholder="Ej: La Mina Perdida de Phandelver">
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Grid Ancho (Cols)</label><input type="number" id="new-game-cols" value="40" min="10" max="500"></div>
+          <div class="form-group"><label>Grid Alto (Filas)</label><input type="number" id="new-game-rows" value="40" min="10" max="500"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-close-modal">Cancelar</button>
+          <button type="submit" class="btn btn-gold">Crear y Entrar como DM</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: UNIRSE A PARTIDA CON CÓDIGO -->
+  <div id="modal-join-game" class="modal-overlay hidden">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-key gold-text"></i> Unirse a una Partida</h3>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="form-join-game" class="modal-body">
+        <div class="form-group">
+          <label>Código de 6 Caracteres *</label>
+          <input type="text" id="join-code-input" required maxlength="6" placeholder="Ej: 3E93X" style="text-transform: uppercase; letter-spacing: 2px; font-weight: bold; font-size: 1.2rem;">
+        </div>
+        <div class="form-group">
+          <label>Tu Nombre de Jugador *</label>
+          <input type="text" id="join-username-input" required placeholder="Ej: Legolas">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-close-modal">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Unirse a la Partida</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Cargar Socket.io -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script>if (typeof io === 'undefined') document.write('<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"><\/script>');</script>
+  <!-- Lógica de la Aplicación -->
+  <script src="app.js"></script>
+</body>
+</html>
