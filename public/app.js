@@ -45,7 +45,7 @@
     usuario: { id: null, nombre: '', esDM: false, color: '#c9a84c' }
   };
   
-  let showHpBars = true;
+  let showHpBars = false;
 
   // Estado del Canvas VTT
   let canvas = null;
@@ -644,17 +644,15 @@
 
       // Floating HP Bar & Floating Name
       ctx.save();
-      // Nombre
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 12px Roboto';
       ctx.textAlign = 'center';
       ctx.shadowColor = '#000000';
       ctx.shadowBlur = 4;
       const displayName = (isMonster && isPlayerView) ? '???' : ficha.nombre;
-      ctx.fillText(displayName, cx, py - 6);
 
-      // Barra de HP
-      if (showHpBars && (!isMonster || !isPlayerView)) {
+      const showBar = showHpBars && (!isMonster || !isPlayerView);
+      if (showBar) {
         const hpPercent = Math.max(0, Math.min(1, ficha.hp_actual / (ficha.hp_maximo || 1)));
         const barW = Math.max(40, tokenWidth);
         const barH = 6;
@@ -663,11 +661,17 @@
 
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
         ctx.fillRect(barX, barY, barW, barH);
-
         ctx.fillStyle = hpPercent > 0.5 ? '#2ecc71' : hpPercent > 0.25 ? '#f1c40f' : '#e74c3c';
         ctx.fillRect(barX, barY, barW * hpPercent, barH);
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';
         ctx.strokeRect(barX, barY, barW, barH);
+
+        // Nombre encima de la barra
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(displayName, cx, py - 22);
+      } else {
+        // Solo nombre, sin barra
+        ctx.fillText(displayName, cx, py - 6);
       }
       ctx.restore();
 
@@ -968,6 +972,8 @@
   function setupEventListeners() {
     dom.btnToggleHp?.addEventListener('click', () => {
       showHpBars = !showHpBars;
+      dom.btnToggleHp.classList.toggle('active', showHpBars);
+      dom.btnToggleHp.title = showHpBars ? 'Ocultar Barras de HP' : 'Mostrar Barras de HP';
       renderCanvas();
     });
 
@@ -1231,6 +1237,14 @@
       }
     });
 
+    // Botón visible que dispara el input oculto de subida de mapa
+    const btnTriggerMap = document.getElementById('btn-trigger-map-upload');
+    if (btnTriggerMap) {
+      btnTriggerMap.addEventListener('click', () => {
+        dom.mapFileInput.click();
+      });
+    }
+
     dom.mapFileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (file) {
@@ -1303,6 +1317,7 @@
     const classif = document.querySelector('.btn-classif.active')?.dataset.classif || 'Normal';
     const mode = document.querySelector('.btn-mode.active')?.dataset.mode || 'normal';
     const fichaId = dom.diceTokenSelect.value;
+    const originalFormula = rawFormula;
 
     let finalResult = 0;
     let icon = '🎲';
@@ -1318,13 +1333,23 @@
         rawFormula = rawFormula.replace(/1d20/g, '2d20kl1');
       }
 
-      finalResult = evalDiceFormula(rawFormula);
+      const diceResult = evalDiceFormula(rawFormula);
+      finalResult = diceResult.total;
+
+      // Construir texto de fórmula con detalle de dados
+      let formulaDisplay = originalFormula;
+      if (mode !== 'normal' && diceResult.rollDetails.length > 0) {
+        const modeLabel = mode === 'ventaja' ? '⭐Ventaja' : '🌑Desventaja';
+        formulaDisplay = `${originalFormula} [${modeLabel}: ${diceResult.rollDetails.join(', ')}]`;
+      } else if (diceResult.rollDetails.length > 0) {
+        formulaDisplay = `${originalFormula} [${diceResult.rollDetails.join(', ')}]`;
+      }
 
       socket?.emit('lanzar_dados', {
         partidaId: state.partida.id,
         usuarioId: state.usuario.id,
         nombreUsuario: state.usuario.nombre,
-        formula: rawFormula + (mode !== 'normal' ? ` (${mode})` : ''),
+        formula: formulaDisplay,
         tipo: classif,
         resultado: finalResult,
         fichaId,
@@ -1338,6 +1363,9 @@
 
   // Evaluador de Fórmulas D&D (Ej: 2d10+6+1d6-2)
   function evalDiceFormula(formula) {
+    // Almacenar detalles de cada grupo de dados
+    const rollDetails = [];
+
     // Reemplazar XdX con valor calculado aleatorio (soporte para kh/kl)
     const diceRegex = /(\d+)d(\d+)(?:k[hl](\d+))?/g;
     const evaluated = formula.replace(diceRegex, (match, count, sides, keep) => {
@@ -1347,18 +1375,36 @@
       const isKl = match.includes('kl');
       let numKeep = keep ? parseInt(keep) : numCount;
 
-      let rolls = [];
+      let allRolls = [];
       for (let i = 0; i < numCount; i++) {
-        rolls.push(Math.floor(Math.random() * numSides) + 1);
+        allRolls.push(Math.floor(Math.random() * numSides) + 1);
       }
 
+      let keptRolls = [...allRolls];
       if (isKh || isKl) {
-        rolls.sort((a, b) => b - a); // Mayor a menor
-        if (isKh) rolls = rolls.slice(0, numKeep);
-        if (isKl) rolls = rolls.slice(-numKeep);
+        keptRolls.sort((a, b) => b - a); // Mayor a menor
+        if (isKh) keptRolls = keptRolls.slice(0, numKeep);
+        if (isKl) keptRolls = keptRolls.slice(-numKeep);
       }
 
-      return rolls.reduce((sum, val) => sum + val, 0);
+      // Generar detalle visual: dados descartados tachados
+      if (isKh || isKl) {
+        const keptSet = new Set();
+        const tempKept = [...keptRolls];
+        const detail = allRolls.map(r => {
+          const idx = tempKept.indexOf(r);
+          if (idx !== -1) {
+            tempKept.splice(idx, 1);
+            return String(r);
+          }
+          return `~~${r}~~`; // tachado = descartado
+        });
+        rollDetails.push(`d${numSides}(${detail.join(', ')})`);
+      } else {
+        rollDetails.push(`d${numSides}(${allRolls.join(', ')})`);
+      }
+
+      return keptRolls.reduce((sum, val) => sum + val, 0);
     });
 
     // Validar seguridad de math expr
@@ -1366,7 +1412,8 @@
       throw new Error('Expresión no permitida');
     }
 
-    return Function(`"use strict"; return (${evaluated})`)();
+    const total = Function(`"use strict"; return (${evaluated})`)();
+    return { total, rollDetails };
   }
 
   // --- APLICAR DAÑO / CURACIÓN ---
