@@ -53,6 +53,7 @@
   let pendingDiceResult = null;
   
   let showHpBars = false;
+  let sortInitiative = false;
 
   // Estado del Canvas VTT
   let canvas = null;
@@ -123,7 +124,8 @@
       currentSceneName: document.getElementById('current-scene-name'),
       saveStatusIndicator: document.getElementById('save-status-indicator'),
       btnNavInicio: document.getElementById('btn-nav-inicio'),
-      btnMobileMenu: document.getElementById('btn-mobile-menu'),
+      btnMobileMenuBtn: document.getElementById('mobile-menu-btn'),
+      rightPanel: document.getElementById('right-panel'),
       dmToolsPanel: document.getElementById('dm-tools-panel'),
 
       // Lista Partidas
@@ -151,6 +153,7 @@
       btnClearDrawings: document.getElementById('btn-clear-drawings'),
       figType: document.getElementById('fig-type'),
       figSize: document.getElementById('fig-size'),
+      figRotation: document.getElementById('fig-rotation'),
       figColor: document.getElementById('fig-color'),
       figOpacity: document.getElementById('fig-opacity'),
       figLabel: document.getElementById('fig-label'),
@@ -604,22 +607,36 @@
         ctx.strokeStyle = fig.color || '#c9a84c';
         ctx.lineWidth = 2;
 
+        ctx.translate(centerX, centerY);
+        if (fig.rotacion) {
+          ctx.rotate(fig.rotacion * Math.PI / 180);
+        }
+
         if (fig.tipo === 'circulo') {
           ctx.beginPath();
-          ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          ctx.arc(0, 0, radius, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
         } else if (fig.tipo === 'cuadrado') {
-          ctx.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
-          ctx.strokeRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
+          ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
+          ctx.strokeRect(-radius, -radius, radius * 2, radius * 2);
+        } else if (fig.tipo === 'rectangulo') {
+          ctx.fillRect(-radius, -radius * 2, radius * 2, radius * 4);
+          ctx.strokeRect(-radius, -radius * 2, radius * 2, radius * 4);
         } else if (fig.tipo === 'cono') {
           ctx.beginPath();
-          ctx.moveTo(centerX, centerY);
-          ctx.arc(centerX, centerY, radius, -Math.PI / 4, Math.PI / 4);
+          ctx.moveTo(0, 0);
+          ctx.arc(0, 0, radius, -Math.PI / 4, Math.PI / 4);
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
         }
+        
+        // Deshacer rotación para la etiqueta, si no quieres que el texto rote.
+        // Pero si la rotación se deshace, hay que recordar que ya estamos en centerX, centerY.
+        ctx.restore();
+        ctx.save();
+
 
         // Etiqueta de la figura
         if (fig.etiqueta) {
@@ -651,6 +668,10 @@
       const py = ficha.y * tileSize;
 
       ctx.save();
+
+      if (ficha.hp_actual <= 0) {
+        ctx.globalAlpha = 0.4;
+      }
 
       // Borde exterior / resplandor si está seleccionada
       if (ficha.id === selectedFichaId) {
@@ -701,6 +722,10 @@
 
       ctx.restore();
 
+      if (ficha.hp_actual <= 0) {
+        ctx.globalAlpha = 0.4;
+      }
+
       // Dibujar Borde Dorado del Token
       ctx.strokeStyle = '#c9a84c';
       ctx.lineWidth = 2;
@@ -741,6 +766,9 @@
         ctx.fillText(displayName, cx, py - 6);
       }
       ctx.restore();
+      
+      // Reset alpha for following drawings (like dice animations)
+      ctx.globalAlpha = 1.0;
 
       // Animaciones de Dados Flotantes sobre la ficha
       const anim = activeDiceAnimations.find(a => a.fichaId === ficha.id);
@@ -866,6 +894,7 @@
         x: Math.round(gridPos.x),
         y: Math.round(gridPos.y),
         tamanio: parseFloat(dom.figSize.value),
+        rotacion: parseFloat(dom.figRotation?.value || 0),
         color: dom.figColor.value,
         transparencia: parseFloat(dom.figOpacity.value),
         etiqueta: dom.figLabel.value,
@@ -1086,7 +1115,8 @@
 
     dom.btnSortInitiative?.addEventListener('click', () => {
       if (state.fichas) {
-        state.fichas.sort((a, b) => (b.iniciativa || 0) - (a.iniciativa || 0));
+        sortInitiative = !sortInitiative;
+        dom.btnSortInitiative.classList.toggle('active', sortInitiative);
         renderFichasList();
       }
     });
@@ -1097,6 +1127,13 @@
       loadGamesList();
       showScreen('start');
     });
+
+    if (dom.btnMobileMenuBtn) {
+      dom.btnMobileMenuBtn.addEventListener('click', () => {
+        const panel = document.querySelector('.right-panel');
+        if (panel) panel.classList.toggle('open');
+      });
+    }
 
     if (dom.codeBadge) {
       dom.codeBadge.addEventListener('click', () => {
@@ -1133,7 +1170,11 @@
         closeModal(dom.modalCreateGame);
 
         // Unirse automáticamente como DM
-        const usrId = 'dm_' + Math.random().toString(36).substr(2, 9);
+        let usrId = localStorage.getItem('vtt_usrId_Dungeon Master');
+        if (!usrId) {
+          usrId = 'dm_' + Math.random().toString(36).substr(2, 9);
+          localStorage.setItem('vtt_usrId_Dungeon Master', usrId);
+        }
         socket?.emit('unirse_partida', { codigo: data.codigo, nombreUsuario: 'Dungeon Master', usuarioId: usrId, esDMRequested: true });
       } catch (err) {
         alert('Error al crear la partida.');
@@ -1145,7 +1186,11 @@
       const codigo = document.getElementById('join-code-input').value;
       const nombreUsuario = document.getElementById('join-username-input').value;
       const esDM = document.getElementById('join-as-dm-input').checked;
-      const usrId = 'usr_' + Math.random().toString(36).substr(2, 9);
+      let usrId = localStorage.getItem('vtt_usrId_' + nombreUsuario);
+      if (!usrId) {
+        usrId = 'usr_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('vtt_usrId_' + nombreUsuario, usrId);
+      }
 
       closeModal(dom.modalJoinGame);
       socket?.emit('unirse_partida', { codigo, nombreUsuario, usuarioId: usrId, esDMRequested: esDM });
@@ -1760,7 +1805,12 @@
     dom.fichasList.innerHTML = '';
     const filter = dom.filterFichasInput.value.toLowerCase();
 
-    (state.fichas || []).forEach(ficha => {
+    let listToRender = [...(state.fichas || [])];
+    if (sortInitiative) {
+      listToRender.sort((a, b) => (b.iniciativa || 0) - (a.iniciativa || 0));
+    }
+
+    listToRender.forEach(ficha => {
       if (filter && !ficha.nombre.toLowerCase().includes(filter)) return;
 
       const card = document.createElement('div');

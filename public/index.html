@@ -79,6 +79,10 @@
   <!-- PANTALLA PRINCIPAL VTT (TABLERO Y PANELES) -->
   <main id="screen-vtt" class="screen-container hidden">
 
+    <button id="mobile-menu-btn" class="mobile-only btn-circle" title="Menú">
+      <i class="fa-solid fa-bars"></i>
+    </button>
+
     <!-- PANEL IZQUIERDO (HERRAMIENTAS DE MAPA: MOVER, MEDIR, FIGURAS PARA TODOS / DIBUJAR Y HP SOLO DM) -->
     <aside id="dm-tools-panel" class="dm-tools-panel">
       <div class="panel-header">
@@ -118,12 +122,14 @@
         <div id="opt-figures" class="tool-sub-options hidden">
           <label>Forma:
             <select id="fig-type">
-              <option value="circulo">🔴 Círculo (Hechizo)</option>
-              <option value="cuadrado">🟦 Cuadrado (Área)</option>
-              <option value="cono">📐 Cono (Ataque)</option>
+              <option value="circulo">⭕ Círculo (Hechizo)</option>
+              <option value="cuadrado">🟥 Cuadrado (Área)</option>
+              <option value="cono">🔺 Cono (Ataque)</option>
+              <option value="rectangulo">📏 Rectángulo</option>
             </select>
           </label>
           <label>Radio (casillas): <input type="number" id="fig-size" value="3" min="1" max="20"></label>
+          <label>Rotación (°): <input type="range" id="fig-rotation" min="0" max="360" value="0"></label>
           <label>Color: <input type="color" id="fig-color" value="#c9a84c"></label>
           <label>Transparencia: <input type="range" id="fig-opacity" min="0.1" max="0.9" step="0.1" value="0.4"></label>
           <label>Etiqueta: <input type="text" id="fig-label" placeholder="Ej: Bola de Fuego"></label>
