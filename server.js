@@ -272,15 +272,15 @@ io.on('connection', (socket) => {
       const {
         nombre, tipo, jugadorId, jugador_id, imagen, fuerza, destreza, constitucion,
         inteligencia, sabiduria, carisma, hpActual, hpMaximo, ac, velocidad,
-        iniciativa, nivel, altura, tamanioBase, notas, x = 5, y = 5
+        iniciativa, nivel, altura, tamanioBase, notas, x = 5, y = 5, revelado = 0
       } = fichaData;
 
       const ownerId = jugador_id || jugadorId || socket.data?.usuarioId;
 
       await dbRun(
-        `INSERT INTO fichas (id, partida_id, escena_id, nombre, tipo, jugador_id, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, notas, x, y)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, partidaId, escenaId, nombre, tipo || 'jugador', ownerId, imagen, fuerza || 10, destreza || 10, constitucion || 10, inteligencia || 10, sabiduria || 10, carisma || 10, hpActual || 10, hpMaximo || 10, ac || 10, velocidad || 30, iniciativa || 0, nivel || 1, altura || 2, tamanioBase || 'mediano', notas || '', x, y]
+        `INSERT INTO fichas (id, partida_id, escena_id, nombre, tipo, jugador_id, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, notas, x, y, revelado)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, partidaId, escenaId, nombre, tipo || 'jugador', ownerId, imagen, fuerza || 10, destreza || 10, constitucion || 10, inteligencia || 10, sabiduria || 10, carisma || 10, hpActual || 10, hpMaximo || 10, ac || 10, velocidad || 30, iniciativa || 0, nivel || 1, altura || 2, tamanioBase || 'mediano', notas || '', x, y, revelado ? 1 : 0]
       );
 
       const nuevaFicha = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [id]);
@@ -296,12 +296,12 @@ io.on('connection', (socket) => {
       const {
         id, nombre, tipo, imagen, fuerza, destreza, constitucion,
         inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad,
-        iniciativa, nivel, altura, tamanio_base, gigante, notas
+        iniciativa, nivel, altura, tamanio_base, gigante, notas, revelado
       } = fichaData;
 
       await dbRun(
-        `UPDATE fichas SET nombre = ?, tipo = ?, imagen = ?, fuerza = ?, destreza = ?, constitucion = ?, inteligencia = ?, sabiduria = ?, carisma = ?, hp_actual = ?, hp_maximo = ?, ac = ?, velocidad = ?, iniciativa = ?, nivel = ?, altura = ?, tamanio_base = ?, gigante = ?, notas = ? WHERE id = ?`,
-        [nombre, tipo, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, gigante ? 1 : 0, notas, id]
+        `UPDATE fichas SET nombre = ?, tipo = ?, imagen = ?, fuerza = ?, destreza = ?, constitucion = ?, inteligencia = ?, sabiduria = ?, carisma = ?, hp_actual = ?, hp_maximo = ?, ac = ?, velocidad = ?, iniciativa = ?, nivel = ?, altura = ?, tamanio_base = ?, gigante = ?, notas = ?, revelado = ? WHERE id = ?`,
+        [nombre, tipo, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, gigante ? 1 : 0, notas, revelado ? 1 : 0, id]
       );
 
       const fichaActualizada = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [id]);
@@ -319,6 +319,20 @@ io.on('connection', (socket) => {
         const nuevoEstado = ficha.gigante ? 0 : 1;
         await dbRun(`UPDATE fichas SET gigante = ? WHERE id = ?`, [nuevoEstado, fichaId]);
         io.to(partidaId).emit('gigante_toggled', { fichaId, gigante: nuevoEstado });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  });
+
+  // Toggle Revelado
+  socket.on('toggle_revelado', async ({ partidaId, fichaId }) => {
+    try {
+      const ficha = await dbGet(`SELECT revelado FROM fichas WHERE id = ?`, [fichaId]);
+      if (ficha) {
+        const nuevoEstado = ficha.revelado ? 0 : 1;
+        await dbRun(`UPDATE fichas SET revelado = ? WHERE id = ?`, [nuevoEstado, fichaId]);
+        io.to(partidaId).emit('revelado_toggled', { fichaId, revelado: nuevoEstado });
       }
     } catch (err) {
       console.error(err);

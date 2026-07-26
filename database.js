@@ -90,6 +90,7 @@ async function initDb() {
       altura INTEGER DEFAULT 2,
       tamanio_base TEXT DEFAULT 'mediano', -- 'pequeno', 'mediano', 'grande', 'enorme'
       gigante BOOLEAN DEFAULT 0,
+      revelado BOOLEAN DEFAULT 0,
       notas TEXT,
       x REAL DEFAULT 0,
       y REAL DEFAULT 0,

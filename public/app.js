@@ -326,9 +326,18 @@
     socket.on('gigante_toggled', ({ fichaId, gigante }) => {
       const ficha = state.fichas.find(f => f.id === fichaId);
       if (ficha) {
-        ficha.gigante = gigante;
-        renderFichasList();
+        ficha.gigante = !!gigante;
         renderCanvas();
+        renderFichasList();
+      }
+    });
+
+    socket.on('revelado_toggled', ({ fichaId, revelado }) => {
+      const ficha = state.fichas.find(f => f.id === fichaId);
+      if (ficha) {
+        ficha.revelado = !!revelado;
+        renderCanvas();
+        renderFichasList();
       }
     });
 
@@ -607,8 +616,8 @@
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.clip();
 
-      if (isMonster && isPlayerView) {
-        // Silueta misteriosa para jugadores ante monstruos
+      if (isMonster && isPlayerView && !ficha.revelado) {
+        // Silueta misteriosa para jugadores ante monstruos no revelados
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(px, py, tokenWidth, tokenHeight);
         ctx.fillStyle = '#c9a84c';
@@ -649,7 +658,7 @@
       ctx.textAlign = 'center';
       ctx.shadowColor = '#000000';
       ctx.shadowBlur = 4;
-      const displayName = (isMonster && isPlayerView) ? '???' : ficha.nombre;
+      const displayName = (isMonster && isPlayerView && !ficha.revelado) ? '???' : ficha.nombre;
 
       const showBar = showHpBars && (!isMonster || !isPlayerView);
       if (showBar) {
@@ -1103,6 +1112,18 @@
       document.getElementById('ficha-id').value = '';
       dom.fichaImgPreview.src = 'https://via.placeholder.com/100?text=Avatar';
       dom.modalFichaTitle.textContent = 'Crear Nueva Ficha de Personaje';
+
+      // Ocultar opciones de NPC/Monstruo si no es DM
+      const fichaTipo = document.getElementById('ficha-tipo');
+      Array.from(fichaTipo.options).forEach(opt => {
+        if (!state.usuario.esDM && opt.value !== 'jugador') {
+          opt.style.display = 'none';
+        } else {
+          opt.style.display = '';
+        }
+      });
+      if (!state.usuario.esDM) fichaTipo.value = 'jugador';
+
       openModal(dom.modalFicha);
     });
 
@@ -1561,9 +1582,10 @@
 
       const isMonster = ficha.tipo === 'monstruo' || ficha.tipo === 'npc';
       const isPlayerView = !state.usuario.esDM;
+      const hideData = isMonster && isPlayerView && !ficha.revelado;
 
-      const hpText = (isMonster && isPlayerView) ? '???' : `${ficha.hp_actual}/${ficha.hp_maximo}`;
-      const acText = (isMonster && isPlayerView) ? '???' : ficha.ac;
+      const hpText = hideData ? '???' : `${ficha.hp_actual}/${ficha.hp_maximo}`;
+      const acText = hideData ? '???' : ficha.ac;
 
       const esPropietario = state.usuario.esDM || 
                             ficha.jugador_id === state.usuario.id ||
@@ -1582,6 +1604,7 @@
         </div>
         <div class="ficha-actions">
           ${esPropietario ? '<button class="btn btn-sm btn-secondary btn-gigante"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Gigante</button>' : ''}
+          ${state.usuario.esDM && isMonster ? `<button class="btn btn-sm ${ficha.revelado ? 'btn-danger' : 'btn-primary'} btn-revelar"><i class="fa-solid ${ficha.revelado ? 'fa-eye-slash' : 'fa-eye'}"></i> ${ficha.revelado ? 'Ocultar' : 'Revelar'}</button>` : ''}
           ${esPropietario ? '<button class="btn btn-sm btn-primary btn-edit-ficha"><i class="fa-solid fa-pen"></i> Editar</button>' : ''}
           ${state.usuario.esDM ? '<button class="btn btn-sm btn-danger btn-del-ficha"><i class="fa-solid fa-trash"></i></button>' : ''}
         </div>
@@ -1623,7 +1646,23 @@
           document.getElementById('ficha-notas').value = ficha.notas || '';
 
           dom.modalFichaTitle.textContent = 'Editar Ficha: ' + ficha.nombre;
+
+          const fichaTipo = document.getElementById('ficha-tipo');
+          Array.from(fichaTipo.options).forEach(opt => {
+            if (!state.usuario.esDM && opt.value !== 'jugador') {
+              opt.style.display = 'none';
+            } else {
+              opt.style.display = '';
+            }
+          });
+
           openModal(dom.modalFicha);
+        });
+      }
+
+      if (state.usuario.esDM && isMonster) {
+        card.querySelector('.btn-revelar')?.addEventListener('click', () => {
+          socket?.emit('toggle_revelado', { partidaId: state.partida.id, fichaId: ficha.id });
         });
       }
 
