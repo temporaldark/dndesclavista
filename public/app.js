@@ -221,7 +221,18 @@
       modalJoinGame: document.getElementById('modal-join-game'),
       formJoinGame: document.getElementById('form-join-game'),
 
-      codeBadge: document.getElementById('code-badge')
+      codeBadge: document.getElementById('code-badge'),
+
+      // Modales Revelado Avanzado
+      modalRevelar: document.getElementById('modal-revelar-ficha'),
+      revelarFichaId: document.getElementById('revelar-ficha-id'),
+      revImagen: document.getElementById('rev-imagen'),
+      revNombre: document.getElementById('rev-nombre'),
+      revHp: document.getElementById('rev-hp'),
+      revAc: document.getElementById('rev-ac'),
+      revNotas: document.getElementById('rev-notas'),
+      revJugadoresSelect: document.getElementById('rev-jugadores-select'),
+      btnAplicarRevelado: document.getElementById('btn-aplicar-revelado')
     };
 
     setupEventListeners();
@@ -841,12 +852,16 @@
         tamanio: parseFloat(dom.figSize.value),
         color: dom.figColor.value,
         transparencia: parseFloat(dom.figOpacity.value),
-        etiqueta: dom.figLabel.value
+        etiqueta: dom.figLabel.value,
+        creador_id: state.usuario.id
       };
       socket?.emit('guardar_figura', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, figuraData: nuevaFig });
-    } else if (activeTool === 'erase' && state.usuario.esDM) {
-      // Borrar figura o trazo en ese punto (Solo DM)
-      const figToDel = (state.figuras || []).find(fig => Math.hypot(fig.x - gridPos.x, fig.y - gridPos.y) <= fig.tamanio);
+    } else if (activeTool === 'erase') {
+      // Borrar figura o trazo en ese punto (Dueño o DM)
+      const figToDel = (state.figuras || []).find(fig => 
+        (fig.creador_id === state.usuario.id || state.usuario.esDM) &&
+        Math.hypot(fig.x - gridPos.x, fig.y - gridPos.y) <= fig.tamanio
+      );
       if (figToDel) {
         socket?.emit('eliminar_figura', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, figuraId: figToDel.id });
       }
@@ -953,6 +968,24 @@
 
   function handleWheel(e) {
     e.preventDefault();
+    const gridPos = screenToGrid(e.clientX, e.clientY);
+    const myFig = (state.figuras || []).find(fig => 
+      (fig.creador_id === state.usuario.id || state.usuario.esDM) && 
+      Math.hypot(fig.x - gridPos.x, fig.y - gridPos.y) <= fig.tamanio
+    );
+
+    if (myFig) {
+      const scale = e.deltaY < 0 ? 1.1 : 0.9;
+      myFig.tamanio = Math.max(0.5, myFig.tamanio * scale);
+      socket?.emit('guardar_figura', { 
+        partidaId: state.partida.id, 
+        escenaId: state.escenaActiva.id, 
+        figuraData: myFig 
+      });
+      renderCanvas();
+      return;
+    }
+
     const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
     zoomAt(e.clientX, e.clientY, zoomFactor);
   }
@@ -992,15 +1025,33 @@
       const touch = e.touches[0];
       handleMouseMove({ clientX: touch.clientX, clientY: touch.clientY });
     } else if (e.touches.length === 2) {
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const gridPos = screenToGrid(midX, midY);
+      
+      const myFig = (state.figuras || []).find(fig => 
+        (fig.creador_id === state.usuario.id || state.usuario.esDM) && 
+        Math.hypot(fig.x - gridPos.x, fig.y - gridPos.y) <= fig.tamanio
+      );
+
       const dist = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
         e.touches[0].clientY - e.touches[1].clientY
       );
       const factor = dist / touchStartDist;
       touchStartDist = dist;
-      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      zoomAt(midX, midY, factor);
+
+      if (myFig) {
+        myFig.tamanio = Math.max(0.5, myFig.tamanio * factor);
+        socket?.emit('guardar_figura', { 
+          partidaId: state.partida.id, 
+          escenaId: state.escenaActiva.id, 
+          figuraData: myFig 
+        });
+        renderCanvas();
+      } else {
+        zoomAt(midX, midY, factor);
+      }
     }
   }
 

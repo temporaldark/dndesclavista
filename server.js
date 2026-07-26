@@ -374,13 +374,13 @@ io.on('connection', (socket) => {
   socket.on('guardar_figura', async ({ partidaId, escenaId, figuraData }) => {
     try {
       const id = figuraData.id || uuidv4();
-      const { tipo, x, y, tamanio, color, transparencia, etiqueta } = figuraData;
+      const { tipo, x, y, tamanio, color, transparencia, etiqueta, creador_id } = figuraData;
 
       await dbRun(
-        `INSERT INTO figuras (id, escena_id, tipo, x, y, tamanio, color, transparencia, etiqueta)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET tipo=excluded.tipo, x=excluded.x, y=excluded.y, tamanio=excluded.tamanio, color=excluded.color, transparencia=excluded.transparencia, etiqueta=excluded.etiqueta`,
-        [id, escenaId, tipo, x, y, tamanio, color, transparencia, etiqueta]
+        `INSERT INTO figuras (id, escena_id, tipo, x, y, tamanio, color, transparencia, etiqueta, creador_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET tipo=excluded.tipo, x=excluded.x, y=excluded.y, tamanio=excluded.tamanio, color=excluded.color, transparencia=excluded.transparencia, etiqueta=excluded.etiqueta, creador_id=excluded.creador_id`,
+        [id, escenaId, tipo, x, y, tamanio, color, transparencia, etiqueta, creador_id]
       );
 
       const figuras = await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaId]);

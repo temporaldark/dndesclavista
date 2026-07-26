@@ -110,6 +110,7 @@ async function initDb() {
       color TEXT DEFAULT '#c9a84c',
       transparencia REAL DEFAULT 0.4,
       etiqueta TEXT,
+      creador_id TEXT DEFAULT NULL,
       FOREIGN KEY (escena_id) REFERENCES escenas(id) ON DELETE CASCADE
     )
   `);
