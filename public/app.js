@@ -1143,10 +1143,11 @@
       e.preventDefault();
       const codigo = document.getElementById('join-code-input').value;
       const nombreUsuario = document.getElementById('join-username-input').value;
+      const esDM = document.getElementById('join-as-dm-input').checked;
       const usrId = 'usr_' + Math.random().toString(36).substr(2, 9);
 
       closeModal(dom.modalJoinGame);
-      socket?.emit('unirse_partida', { codigo, nombreUsuario, usuarioId: usrId, esDMRequested: false });
+      socket?.emit('unirse_partida', { codigo, nombreUsuario, usuarioId: usrId, esDMRequested: esDM });
     });
 
     // Herramientas DM (Panel Izquierdo)
@@ -1330,10 +1331,36 @@
       openModal(dom.modalGifPicker);
     });
 
+    let searchTimeout;
     dom.gifSearchInput.addEventListener('input', (e) => {
-      const q = e.target.value.toLowerCase();
-      const filtered = PRESET_GIFS.filter(g => g.name.toLowerCase().includes(q) || g.tag.toLowerCase().includes(q));
-      renderGifGrid(filtered);
+      const q = e.target.value.trim().toLowerCase();
+      clearTimeout(searchTimeout);
+      
+      if (!q) {
+        renderGifGrid(PRESET_GIFS);
+        return;
+      }
+
+      searchTimeout = setTimeout(async () => {
+        try {
+          const res = await fetch(`https://api.tenor.com/v1/search?q=${encodeURIComponent(q)}&key=LIVDSRZULELA&limit=20`);
+          if (res.ok) {
+            const data = await res.json();
+            const fetchedGifs = data.results.map(r => ({
+              name: q,
+              url: r.media[0].gif.url,
+              tag: q
+            }));
+            renderGifGrid(fetchedGifs.length > 0 ? fetchedGifs : PRESET_GIFS.filter(g => g.name.toLowerCase().includes(q) || g.tag.toLowerCase().includes(q)));
+          } else {
+            const filtered = PRESET_GIFS.filter(g => g.name.toLowerCase().includes(q) || g.tag.toLowerCase().includes(q));
+            renderGifGrid(filtered);
+          }
+        } catch (err) {
+          const filtered = PRESET_GIFS.filter(g => g.name.toLowerCase().includes(q) || g.tag.toLowerCase().includes(q));
+          renderGifGrid(filtered);
+        }
+      }, 500);
     });
 
     // Historial
@@ -1776,8 +1803,10 @@
       const avatarImg = card.querySelector('.ficha-avatar');
       if (avatarImg) {
         avatarImg.addEventListener('click', () => {
-          dom.enlargedGifImg.src = ficha.imagen || 'https://via.placeholder.com/200?text=Avatar';
-          if (dom.enlargedImgTitle) dom.enlargedImgTitle.textContent = ficha.nombre;
+          dom.enlargedGifImg.src = avatarSrc; // Uses placeholder if hidden
+          if (dom.enlargedImgTitle) {
+            dom.enlargedImgTitle.textContent = (isMonster && isPlayerView && !visibility.nombre) ? '???' : ficha.nombre;
+          }
           openModal(dom.modalGifView);
         });
       }
@@ -2077,8 +2106,10 @@
         `;
 
         card.querySelector('.btn-load-game').addEventListener('click', () => {
-          const usrId = 'usr_' + Math.random().toString(36).substr(2, 9);
-          socket?.emit('unirse_partida', { codigo: p.codigo, nombreUsuario: 'Jugador', usuarioId: usrId, esDMRequested: false });
+          document.getElementById('join-code-input').value = p.codigo;
+          document.getElementById('join-username-input').value = '';
+          document.getElementById('join-as-dm-input').checked = false;
+          openModal(dom.modalJoinGame);
         });
 
         card.querySelector('.btn-del-game').addEventListener('click', async () => {
