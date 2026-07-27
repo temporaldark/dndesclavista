@@ -1256,6 +1256,39 @@ input:focus, select:focus, textarea:focus, button:focus {
     grid-template-columns: repeat(3, 1fr);
   }
 
+  /* Horizontal scroll for dice options on mobile */
+  .quick-dice-grid,
+  .classification-grid,
+  .d20-mode-grid {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    padding-bottom: 8px; /* space for scrollbar */
+    gap: 8px;
+  }
+  
+  .quick-dice-grid::-webkit-scrollbar,
+  .classification-grid::-webkit-scrollbar,
+  .d20-mode-grid::-webkit-scrollbar {
+    height: 4px;
+  }
+  
+  .quick-dice-grid::-webkit-scrollbar-thumb,
+  .classification-grid::-webkit-scrollbar-thumb,
+  .d20-mode-grid::-webkit-scrollbar-thumb {
+    background: var(--border-gold);
+    border-radius: 4px;
+  }
+
+  .btn-quick-die,
+  .btn-classif,
+  .btn-mode {
+    flex: 0 0 auto !important; /* don't shrink, stay their natural width */
+    min-width: 70px;
+  }
+
   /* Allow text selection & scrolling inside panels on mobile */
   .right-panel *,
   .dm-tools-panel * {
