@@ -56,7 +56,7 @@ app.get('/api/partidas', async (req, res) => {
 // Crear una nueva partida
 app.post('/api/partidas', async (req, res) => {
   try {
-    const { nombre, configGridX = 40, configGridY = 40, configCasilla = 5 } = req.body;
+    const { nombre, creatorId, configGridX = 40, configGridY = 40, configCasilla = 5 } = req.body;
     const partidaId = uuidv4();
     const escenaId = uuidv4();
     const codigo = generarCodigoPartida();
@@ -64,9 +64,9 @@ app.post('/api/partidas', async (req, res) => {
 
     // Insertar partida
     await dbRun(
-      `INSERT INTO partidas (id, nombre, codigo, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [partidaId, nombre || 'Nueva Partida', codigo, escenaId, ahora, ahora, configGridX, configGridY, configCasilla]
+      `INSERT INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [partidaId, nombre || 'Nueva Partida', codigo, creatorId || null, escenaId, ahora, ahora, configGridX, configGridY, configCasilla]
     );
 
     // Crear escena por defecto
@@ -177,10 +177,10 @@ io.on('connection', (socket) => {
       // Determinar si es DM
       let esDM = false;
       if (!partida.dm_id) {
-        // El primero que entra/crea la partida se asigna como DM
+        // Fallback por si hay partidas antiguas sin dm_id
         await dbRun(`UPDATE partidas SET dm_id = ? WHERE id = ?`, [usuarioId, partida.id]);
         esDM = true;
-      } else if (partida.dm_id === usuarioId || esDMRequested) {
+      } else if (partida.dm_id === usuarioId) {
         esDM = true;
       }
 
@@ -434,13 +434,13 @@ io.on('connection', (socket) => {
   socket.on('guardar_figura', async ({ partidaId, escenaId, figuraData }) => {
     try {
       const id = figuraData.id || uuidv4();
-      const { tipo, x, y, tamanio, color, transparencia, etiqueta, creador_id } = figuraData;
+      const { tipo, x, y, tamanio, rotacion, color, transparencia, etiqueta, creador_id } = figuraData;
 
       await dbRun(
-        `INSERT INTO figuras (id, escena_id, tipo, x, y, tamanio, color, transparencia, etiqueta, creador_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET tipo=excluded.tipo, x=excluded.x, y=excluded.y, tamanio=excluded.tamanio, color=excluded.color, transparencia=excluded.transparencia, etiqueta=excluded.etiqueta, creador_id=excluded.creador_id`,
-        [id, escenaId, tipo, x, y, tamanio, color, transparencia, etiqueta, creador_id]
+        `INSERT INTO figuras (id, escena_id, tipo, x, y, tamanio, rotacion, color, transparencia, etiqueta, creador_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET tipo=excluded.tipo, x=excluded.x, y=excluded.y, tamanio=excluded.tamanio, rotacion=excluded.rotacion, color=excluded.color, transparencia=excluded.transparencia, etiqueta=excluded.etiqueta, creador_id=excluded.creador_id`,
+        [id, escenaId, tipo, x, y, tamanio, rotacion || 0, color, transparencia, etiqueta, creador_id]
       );
 
       const figuras = await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaId]);

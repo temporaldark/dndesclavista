@@ -109,6 +109,7 @@ async function initDb() {
       tamanio REAL DEFAULT 1,
       color TEXT DEFAULT '#c9a84c',
       transparencia REAL DEFAULT 0.4,
+      rotacion REAL DEFAULT 0,
       etiqueta TEXT,
       creador_id TEXT DEFAULT NULL,
       FOREIGN KEY (escena_id) REFERENCES escenas(id) ON DELETE CASCADE
@@ -161,6 +162,13 @@ async function initDb() {
       FOREIGN KEY (partida_id) REFERENCES partidas(id) ON DELETE CASCADE
     )
   `);
+
+  // Add rotacion to figuras if it doesn't exist
+  try {
+    await dbRun(`ALTER TABLE figuras ADD COLUMN rotacion REAL DEFAULT 0`);
+  } catch (err) {
+    // Ignore error if column already exists
+  }
 
   console.log('✅ Base de datos SQLite inicializada correctamente en data/vtt.db');
 }

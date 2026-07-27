@@ -99,6 +99,14 @@
 
   // --- INICIALIZACIÓN ---
   window.addEventListener('DOMContentLoaded', () => {
+    // Generar o cargar usuario id local
+    let savedUserId = localStorage.getItem('vtt_user_id');
+    if (!savedUserId) {
+      savedUserId = 'usr_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('vtt_user_id', savedUserId);
+    }
+    state.usuario.id = savedUserId;
+
     initDOM();
     initCanvas();
     initSocket();
@@ -339,10 +347,7 @@
       state.jugadoresConectados = data.jugadoresConectados || [];
       state.usuario = data.usuario;
 
-      // Generar usuario id local si no existía
-      if (!state.usuario.id) {
-        state.usuario.id = 'usr_' + Math.random().toString(36).substr(2, 9);
-      }
+      // ID del usuario ya se generó en DOMContentLoaded
 
       updateUIForCurrentGame();
       showScreen('vtt');
@@ -911,6 +916,15 @@
         selectedFigureId = clickedFig.id;
         isDraggingFigure = true;
         dragOffset = { x: gridPos.x - clickedFig.x, y: gridPos.y - clickedFig.y };
+        
+        // Poblar la UI con los datos de la figura seleccionada
+        if (dom.figType) dom.figType.value = clickedFig.tipo;
+        if (dom.figSize) dom.figSize.value = clickedFig.tamanio || 1;
+        if (dom.figRotation) dom.figRotation.value = clickedFig.rotacion || 0;
+        if (dom.figColor) dom.figColor.value = clickedFig.color || '#c9a84c';
+        if (dom.figOpacity) dom.figOpacity.value = clickedFig.transparencia || 0.4;
+        if (dom.figLabel) dom.figLabel.value = clickedFig.etiqueta || '';
+
         return;
       }
 
@@ -1197,22 +1211,16 @@
       const cols = parseInt(document.getElementById('new-game-cols').value) || 40;
       const rows = parseInt(document.getElementById('new-game-rows').value) || 40;
 
-      try {
         const res = await fetch('/api/partidas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre, configGridX: cols, configGridY: rows })
+          body: JSON.stringify({ nombre, creatorId: state.usuario.id, configGridX: cols, configGridY: rows })
         });
         const data = await res.json();
         closeModal(dom.modalCreateGame);
 
-        // Unirse automáticamente como DM
-        let usrId = localStorage.getItem('vtt_usrId_Dungeon Master');
-        if (!usrId) {
-          usrId = 'dm_' + Math.random().toString(36).substr(2, 9);
-          localStorage.setItem('vtt_usrId_Dungeon Master', usrId);
-        }
-        socket?.emit('unirse_partida', { codigo: data.codigo, nombreUsuario: 'Dungeon Master', usuarioId: usrId, esDMRequested: true });
+        // Unirse automáticamente (el servidor asignará DM al creador)
+        socket?.emit('unirse_partida', { codigo: data.codigo, nombreUsuario: 'Dungeon Master', usuarioId: state.usuario.id });
       } catch (err) {
         alert('Error al crear la partida.');
       }
@@ -1222,15 +1230,12 @@
       e.preventDefault();
       const codigo = document.getElementById('join-code-input').value;
       const nombreUsuario = document.getElementById('join-username-input').value;
-      const esDM = document.getElementById('join-as-dm-input').checked;
-      let usrId = localStorage.getItem('vtt_usrId_' + nombreUsuario);
-      if (!usrId) {
-        usrId = 'usr_' + Math.random().toString(36).substr(2, 9);
-        localStorage.setItem('vtt_usrId_' + nombreUsuario, usrId);
-      }
+      
+      // Guardamos el nombre de usuario localmente para que se auto-rellene en el futuro
+      localStorage.setItem('vtt_username', nombreUsuario);
 
       closeModal(dom.modalJoinGame);
-      socket?.emit('unirse_partida', { codigo, nombreUsuario, usuarioId: usrId, esDMRequested: esDM });
+      socket?.emit('unirse_partida', { codigo, nombreUsuario, usuarioId: state.usuario.id });
     });
 
     // Herramientas DM (Panel Izquierdo)
@@ -1266,6 +1271,34 @@
         socket?.emit('limpiar_figuras', { partidaId: state.partida.id, escenaId: state.escenaActiva.id });
       } else {
         socket?.emit('limpiar_mis_figuras', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, usuarioId: state.usuario.id });
+      }
+    });
+
+    // Actualizar propiedades de figura en tiempo real
+    ['figType', 'figSize', 'figRotation', 'figColor', 'figOpacity', 'figLabel'].forEach(key => {
+      if (dom[key]) {
+        dom[key].addEventListener('input', () => {
+          if (selectedFigureId && activeTool === 'figures') {
+            const fig = state.figuras.find(f => f.id === selectedFigureId);
+            if (fig && (fig.creador_id === state.usuario.id || state.usuario.esDM)) {
+              fig.tipo = dom.figType.value;
+              fig.tamanio = parseFloat(dom.figSize.value) || 1;
+              fig.rotacion = parseFloat(dom.figRotation.value) || 0;
+              fig.color = dom.figColor.value;
+              fig.transparencia = parseFloat(dom.figOpacity.value) || 0.4;
+              fig.etiqueta = dom.figLabel.value;
+              
+              renderCanvas();
+              
+              // Emitir actualización al servidor
+              socket?.emit('guardar_figura', { 
+                partidaId: state.partida.id, 
+                escenaId: state.escenaActiva.id, 
+                figuraData: fig 
+              });
+            }
+          }
+        });
       }
     });
 
@@ -2201,8 +2234,7 @@
 
         card.querySelector('.btn-load-game').addEventListener('click', () => {
           document.getElementById('join-code-input').value = p.codigo;
-          document.getElementById('join-username-input').value = '';
-          document.getElementById('join-as-dm-input').checked = false;
+          document.getElementById('join-username-input').value = localStorage.getItem('vtt_username') || '';
           openModal(dom.modalJoinGame);
         });
 
