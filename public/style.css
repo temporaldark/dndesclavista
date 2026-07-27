@@ -1168,17 +1168,23 @@ input:focus, select:focus, textarea:focus, button:focus {
     flex-direction: column;
   }
 
+  /* --- PANEL IZQUIERDO DM (MÓVIL) --- */
   .dm-tools-panel {
     position: absolute;
     top: 0;
     left: 0;
     bottom: 0;
-    width: 220px;
+    width: 260px;
+    max-width: 80vw;
     transform: translateX(-100%);
     transition: transform 0.3s ease;
     box-shadow: 4px 0 15px rgba(0,0,0,0.8);
     background: var(--bg-panel);
     z-index: 500;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    padding-bottom: 24px;
   }
 
   .dm-tools-panel.open {
@@ -1201,21 +1207,47 @@ input:focus, select:focus, textarea:focus, button:focus {
     margin-top: 12px;
   }
 
+  /* --- PANEL DERECHO PESTAÑAS (MÓVIL) --- */
   .right-panel {
     position: absolute;
     top: 0;
     right: 0;
     width: 320px;
     max-width: 90vw;
-    height: 100vh;
+    height: 100%;
     border-left: 2px solid var(--gold-primary);
     transform: translateX(100%);
     transition: transform 0.3s ease;
     z-index: 900;
+    display: flex;
+    flex-direction: column;
   }
 
   .right-panel.open {
     transform: translateX(0);
+  }
+
+  /* Tab bar: fixed height, no shrink */
+  .right-panel .tabs-nav {
+    flex-shrink: 0;
+  }
+
+  /* Content area fills remaining space */
+  .right-panel .tab-content-container {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    min-height: 0; /* key for flex children with overflow */
+  }
+
+  /* Each pane fills the container and scrolls vertically */
+  .right-panel .tab-pane {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
   }
 
   .canvas-wrapper {
@@ -1225,6 +1257,17 @@ input:focus, select:focus, textarea:focus, button:focus {
 
   .stats-grid {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* Allow text selection & scrolling inside panels on mobile */
+  .right-panel *,
+  .dm-tools-panel * {
+    touch-action: auto;
+  }
+
+  /* Keep canvas touch-action blocked (for panning/drawing) */
+  .vtt-canvas-container {
+    touch-action: none;
   }
 }
 
