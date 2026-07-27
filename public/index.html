@@ -45,6 +45,9 @@
       <span id="save-status-indicator" class="save-status" title="Estado de Guardado">
         <i class="fa-solid fa-cloud-arrow-up"></i> <span>Listo</span>
       </span>
+      <button id="btn-mobile-dm-tools" class="btn-nav mobile-only hidden dm-only" title="Herramientas DM">
+        <i class="fa-solid fa-toolbox"></i>
+      </button>
       <button id="btn-mobile-menu" class="btn-nav mobile-only" title="Menú de Herramientas">
         <i class="fa-solid fa-bars"></i>
       </button>
@@ -78,10 +81,7 @@
 
   <!-- PANTALLA PRINCIPAL VTT (TABLERO Y PANELES) -->
   <main id="screen-vtt" class="screen-container hidden">
-
-    <button id="mobile-menu-btn" class="mobile-only btn-circle" title="Menú">
-      <i class="fa-solid fa-bars"></i>
-    </button>
+    <div id="mobile-overlay" class="mobile-overlay hidden"></div>
 
     <!-- PANEL IZQUIERDO (HERRAMIENTAS DE MAPA: MOVER, MEDIR, FIGURAS PARA TODOS / DIBUJAR Y HP SOLO DM) -->
     <aside id="dm-tools-panel" class="dm-tools-panel">

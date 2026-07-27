@@ -124,7 +124,9 @@
       currentSceneName: document.getElementById('current-scene-name'),
       saveStatusIndicator: document.getElementById('save-status-indicator'),
       btnNavInicio: document.getElementById('btn-nav-inicio'),
-      btnMobileMenuBtn: document.getElementById('mobile-menu-btn'),
+      btnMobileMenu: document.getElementById('btn-mobile-menu'),
+      btnMobileDmTools: document.getElementById('btn-mobile-dm-tools'),
+      mobileOverlay: document.getElementById('mobile-overlay'),
       rightPanel: document.getElementById('right-panel'),
       dmToolsPanel: document.getElementById('dm-tools-panel'),
 
@@ -249,6 +251,41 @@
     };
 
     setupEventListeners();
+    setupMobileMenuListeners();
+  }
+
+  function setupMobileMenuListeners() {
+    function closeAllPanels() {
+      dom.rightPanel.classList.remove('open');
+      dom.dmToolsPanel.classList.remove('open');
+      dom.mobileOverlay.classList.remove('active');
+    }
+
+    if (dom.btnMobileMenu) {
+      dom.btnMobileMenu.addEventListener('click', () => {
+        const isOpen = dom.rightPanel.classList.contains('open');
+        closeAllPanels();
+        if (!isOpen) {
+          dom.rightPanel.classList.add('open');
+          dom.mobileOverlay.classList.add('active');
+        }
+      });
+    }
+
+    if (dom.btnMobileDmTools) {
+      dom.btnMobileDmTools.addEventListener('click', () => {
+        const isOpen = dom.dmToolsPanel.classList.contains('open');
+        closeAllPanels();
+        if (!isOpen) {
+          dom.dmToolsPanel.classList.add('open');
+          dom.mobileOverlay.classList.add('active');
+        }
+      });
+    }
+
+    if (dom.mobileOverlay) {
+      dom.mobileOverlay.addEventListener('click', closeAllPanels);
+    }
   }
 
   function getFichaVisibility(ficha) {

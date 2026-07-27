@@ -1124,8 +1124,21 @@ input:focus, select:focus, textarea:focus, button:focus {
   transform: scale(1.04);
 }
 
-#mobile-menu-btn {
-  display: none;
+/* CAPA OSCURA PARA MÓVILES (OVERLAY) */
+.mobile-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  z-index: 400; /* Por debajo de los paneles (500 y 900) pero encima del canvas */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.mobile-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ADAPTACIÓN MÓVIL (MOBILE-FIRST RESPONSIVE) */
@@ -1145,6 +1158,10 @@ input:focus, select:focus, textarea:focus, button:focus {
 
   .mobile-only {
     display: inline-flex !important;
+  }
+  
+  .mobile-only.hidden {
+    display: none !important;
   }
 
   #screen-vtt {
@@ -1182,14 +1199,6 @@ input:focus, select:focus, textarea:focus, button:focus {
     position: static;
     width: 100%;
     margin-top: 12px;
-  }
-
-  #mobile-menu-btn {
-    display: flex !important;
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    z-index: 1000;
   }
 
   .right-panel {
