@@ -905,17 +905,29 @@
           return;
         }
       }
+      // Buscar si hizo clic en figura se hace fuera de este if para que funcione en "figures" también
+    } else if (activeTool === 'measure') {
+      measureStart = gridPos;
+      measureCurrent = gridPos;
+    } else if (activeTool === 'draw' && state.usuario.esDM) {
+      isDrawing = true;
+      currentStroke = [{ x: gridPos.x, y: gridPos.y }];
+    }
 
-      // Buscar si hizo clic en figura
+    // Lógica para seleccionar figuras compartida entre 'move' y 'figures'
+    if (activeTool === 'move' || activeTool === 'figures') {
       const clickedFig = (state.figuras || []).find(fig => {
         return gridPos.x >= fig.x - (fig.tamanio || 1) && gridPos.x <= fig.x + (fig.tamanio || 1) &&
                gridPos.y >= fig.y - (fig.tamanio || 1) && gridPos.y <= fig.y + (fig.tamanio || 1);
       });
 
-      if (clickedFig) {
+      if (clickedFig && !isDraggingToken) {
         selectedFigureId = clickedFig.id;
-        isDraggingFigure = true;
-        dragOffset = { x: gridPos.x - clickedFig.x, y: gridPos.y - clickedFig.y };
+        
+        if (activeTool === 'move') {
+          isDraggingFigure = true;
+          dragOffset = { x: gridPos.x - clickedFig.x, y: gridPos.y - clickedFig.y };
+        }
         
         // Poblar la UI con los datos de la figura seleccionada
         if (dom.figType) dom.figType.value = clickedFig.tipo;
@@ -925,22 +937,24 @@
         if (dom.figOpacity) dom.figOpacity.value = clickedFig.transparencia || 0.4;
         if (dom.figLabel) dom.figLabel.value = clickedFig.etiqueta || '';
 
-        return;
+        renderCanvas();
+        return; // Detenemos aquí para no crear figuras nuevas ni hacer pan
       }
+    }
 
-      // Si no hizo clic en ficha ni figura, iniciar Pan de cámara
+    // Si llegamos aquí y es move, hacemos pan
+    if (activeTool === 'move' && !isDraggingToken && !isDraggingFigure) {
+      selectedFigureId = null;
       isPanning = true;
       panStart = { x: e.clientX - viewport.panX, y: e.clientY - viewport.panY };
-    } else if (activeTool === 'measure') {
-      measureStart = gridPos;
-      measureCurrent = gridPos;
-    } else if (activeTool === 'draw' && state.usuario.esDM) {
-      isDrawing = true;
-      currentStroke = [{ x: gridPos.x, y: gridPos.y }];
-    } else if (activeTool === 'figures') {
+    }
+
+    // Si llegamos aquí y es figures, creamos una nueva
+    if (activeTool === 'figures') {
       figureStart = gridPos;
+      const newFigId = 'fig_' + Math.random().toString(36).substr(2, 9);
       const nuevaFig = {
-        id: 'fig_' + Math.random().toString(36).substr(2, 9),
+        id: newFigId,
         tipo: dom.figType.value,
         x: Math.round(gridPos.x),
         y: Math.round(gridPos.y),
@@ -951,6 +965,10 @@
         etiqueta: dom.figLabel.value,
         creador_id: state.usuario.id
       };
+      
+      // La nueva figura queda seleccionada
+      selectedFigureId = newFigId;
+      
       socket?.emit('guardar_figura', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, figuraData: nuevaFig });
     } else if (activeTool === 'erase') {
       // Borrar figura o trazo en ese punto (Dueño o DM)
@@ -1036,7 +1054,6 @@
         });
       }
       isDraggingFigure = false;
-      selectedFigureId = null;
       renderCanvas();
     }
 
@@ -1210,7 +1227,7 @@
       const nombre = document.getElementById('new-game-name').value;
       const cols = parseInt(document.getElementById('new-game-cols').value) || 40;
       const rows = parseInt(document.getElementById('new-game-rows').value) || 40;
-
+      try {
         const res = await fetch('/api/partidas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
