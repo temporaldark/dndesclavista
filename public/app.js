@@ -147,6 +147,11 @@
       gamesList: document.getElementById('games-list'),
       btnCreateGameModal: document.getElementById('btn-create-game-modal'),
       btnJoinGameModal: document.getElementById('btn-join-game-modal'),
+      btnImportGame: document.getElementById('btn-import-game'),
+      inputImportGameFile: document.getElementById('input-import-game-file'),
+      btnDmExportSession: document.getElementById('btn-dm-export-session'),
+      btnDmImportSession: document.getElementById('btn-dm-import-session'),
+      inputDmImportFile: document.getElementById('input-dm-import-file'),
 
       // Canvas
       canvasWrapper: document.getElementById('canvas-wrapper'),
@@ -1263,9 +1268,27 @@
       });
     }
 
-    // Modal Crear / Unirse a Partida
+    // Modal Crear / Unirse / Importar Partida
     dom.btnCreateGameModal.addEventListener('click', () => openModal(dom.modalCreateGame));
     dom.btnJoinGameModal.addEventListener('click', () => openModal(dom.modalJoinGame));
+
+    if (dom.btnImportGame && dom.inputImportGameFile) {
+      dom.btnImportGame.addEventListener('click', () => dom.inputImportGameFile.click());
+      dom.inputImportGameFile.addEventListener('change', handleImportSessionFile);
+    }
+
+    if (dom.btnDmExportSession) {
+      dom.btnDmExportSession.addEventListener('click', () => {
+        if (state.partida?.id) {
+          window.location.href = `/api/partidas/${state.partida.id}/export`;
+        }
+      });
+    }
+
+    if (dom.btnDmImportSession && dom.inputDmImportFile) {
+      dom.btnDmImportSession.addEventListener('click', () => dom.inputDmImportFile.click());
+      dom.inputDmImportFile.addEventListener('change', handleImportSessionFile);
+    }
 
     dom.formCreateGame.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -2365,6 +2388,7 @@
           </div>
           <div class="card-actions">
             <button class="btn btn-primary btn-sm btn-load-game flex-1">Cargar Partida</button>
+            <button class="btn btn-secondary btn-sm btn-export-game" title="Guardar Sesión en Escritorio"><i class="fa-solid fa-download"></i></button>
             <button class="btn btn-danger btn-sm btn-del-game"><i class="fa-solid fa-trash"></i></button>
           </div>
         `;
@@ -2373,6 +2397,10 @@
           document.getElementById('join-code-input').value = p.codigo;
           document.getElementById('join-username-input').value = localStorage.getItem('vtt_username') || '';
           openModal(dom.modalJoinGame);
+        });
+
+        card.querySelector('.btn-export-game')?.addEventListener('click', () => {
+          window.location.href = `/api/partidas/${p.id}/export`;
         });
 
         card.querySelector('.btn-del-game').addEventListener('click', async () => {
@@ -2388,6 +2416,41 @@
     } catch (err) {
       console.warn('Servidor no disponible o modo offline');
       dom.gamesList.innerHTML = '<div class="empty-state">Conéctate al servidor ejecutando `npm start` para cargar partidas.</div>';
+    }
+  }
+
+  async function handleImportSessionFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const backupData = JSON.parse(text);
+
+      const res = await fetch('/api/partidas/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(backupData)
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Error al importar');
+      }
+
+      const data = await res.json();
+      alert(`✅ Sesión restaurada con éxito! Código de partida: ${data.codigo}`);
+      
+      // Si estamos en la pantalla de inicio, recargar la lista de partidas
+      loadGamesList();
+      
+      // Auto unirse a la partida restaurada
+      const username = localStorage.getItem('vtt_username') || 'Dungeon Master';
+      socket?.emit('unirse_partida', { codigo: data.codigo, nombreUsuario: username, usuarioId: state.usuario.id });
+    } catch (err) {
+      alert(`❌ Error al importar la sesión: ${err.message}`);
+    } finally {
+      e.target.value = '';
     }
   }
 

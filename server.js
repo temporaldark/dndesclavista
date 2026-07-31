@@ -130,7 +130,7 @@ app.get('/api/gifs', async (req, res) => {
   }
 });
 
-// Exportar partida completa (Backup JSON para DM)
+// Exportar partida completa (Backup JSON para guardar en Escritorio)
 app.get('/api/partidas/:id/export', async (req, res) => {
   try {
     const { id } = req.params;
@@ -139,6 +139,8 @@ app.get('/api/partidas/:id/export', async (req, res) => {
 
     const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [id]);
     const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ?`, [id]);
+    const figuras = await dbAll(`SELECT f.* FROM figuras f JOIN escenas e ON f.escena_id = e.id WHERE e.partida_id = ?`, [id]);
+    const dibujos = await dbAll(`SELECT d.* FROM dibujos d JOIN escenas e ON d.escena_id = e.id WHERE e.partida_id = ?`, [id]);
     const mensajes = await dbAll(`SELECT * FROM mensajes WHERE partida_id = ?`, [id]);
     const historial = await dbAll(`SELECT * FROM historial_dados WHERE partida_id = ?`, [id]);
     const galeria = await dbAll(`SELECT * FROM galeria WHERE partida_id = ?`, [id]);
@@ -147,16 +149,130 @@ app.get('/api/partidas/:id/export', async (req, res) => {
       partida,
       escenas,
       fichas,
+      figuras,
+      dibujos,
       mensajes,
       historial,
       galeria,
       fechaExport: new Date().toISOString()
     };
 
+    const fileName = `sesion_dnd_${(partida.nombre || 'partida').replace(/[^a-zA-Z0-9]/g, '_')}_${partida.codigo}.json`;
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename=partida_${partida.codigo}.json`);
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.send(JSON.stringify(backup, null, 2));
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Importar / Restaurar partida desde archivo JSON guardado en Escritorio
+app.post('/api/partidas/import', async (req, res) => {
+  try {
+    const backupData = req.body;
+    if (!backupData || !backupData.partida) {
+      return res.status(400).json({ error: 'Formato de archivo de respaldo inválido.' });
+    }
+
+    const { partida, escenas = [], fichas = [], figuras = [], dibujos = [], mensajes = [], historial = [], galeria = [] } = backupData;
+    
+    const newPartidaId = uuidv4();
+    const newCodigo = generarCodigoPartida();
+    const ahora = new Date().toISOString();
+
+    const escenaIdMap = new Map();
+
+    // Insertar partida
+    await dbRun(
+      `INSERT INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [newPartidaId, (partida.nombre || 'Partida Restaurada') + ' (Restaurada)', newCodigo, partida.dm_id || null, null, ahora, ahora, partida.config_grid_x || 40, partida.config_grid_y || 40, partida.config_casilla || 5]
+    );
+
+    let firstNewEscenaId = null;
+
+    // Insertar escenas
+    for (const esc of escenas) {
+      const newEscenaId = uuidv4();
+      escenaIdMap.set(esc.id, newEscenaId);
+      if (!firstNewEscenaId || esc.id === partida.escena_activa_id) {
+        firstNewEscenaId = newEscenaId;
+      }
+      await dbRun(
+        `INSERT INTO escenas (id, partida_id, nombre, mapa) VALUES (?, ?, ?, ?)`,
+        [newEscenaId, newPartidaId, esc.nombre, esc.mapa || null]
+      );
+    }
+
+    // Actualizar escena activa id
+    if (firstNewEscenaId) {
+      await dbRun(`UPDATE partidas SET escena_activa_id = ? WHERE id = ?`, [firstNewEscenaId, newPartidaId]);
+    }
+
+    // Insertar fichas
+    for (const f of fichas) {
+      const newFichaId = uuidv4();
+      const newEscenaId = escenaIdMap.get(f.escena_id) || firstNewEscenaId;
+      await dbRun(
+        `INSERT INTO fichas (id, partida_id, escena_id, nombre, tipo, jugador_id, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, gigante, notas, x, y, revelado)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [newFichaId, newPartidaId, newEscenaId, f.nombre, f.tipo || 'jugador', f.jugador_id || null, f.imagen, f.fuerza || 10, f.destreza || 10, f.constitucion || 10, f.inteligencia || 10, f.sabiduria || 10, f.carisma || 10, f.hp_actual || 10, f.hp_maximo || 10, f.ac || 10, f.velocidad || 30, f.iniciativa || 0, f.nivel || 1, f.altura || 2, f.tamanio_base || 'mediano', f.gigante || 0, f.notas || '', f.x || 5, f.y || 5, typeof f.revelado === 'object' ? JSON.stringify(f.revelado) : (f.revelado || 0)]
+      );
+    }
+
+    // Insertar figuras
+    for (const fig of figuras) {
+      const newFigId = uuidv4();
+      const newEscenaId = escenaIdMap.get(fig.escena_id) || firstNewEscenaId;
+      await dbRun(
+        `INSERT INTO figuras (id, escena_id, tipo, x, y, tamanio, rotacion, color, transparencia, etiqueta, creador_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [newFigId, newEscenaId, fig.tipo, fig.x, fig.y, fig.tamanio, fig.rotacion || 0, fig.color, fig.transparencia, fig.etiqueta, fig.creador_id]
+      );
+    }
+
+    // Insertar dibujos
+    for (const d of dibujos) {
+      const newDibId = uuidv4();
+      const newEscenaId = escenaIdMap.get(d.escena_id) || firstNewEscenaId;
+      await dbRun(
+        `INSERT INTO dibujos (id, escena_id, datos) VALUES (?, ?, ?)`,
+        [newDibId, newEscenaId, typeof d.datos === 'object' ? JSON.stringify(d.datos) : (d.datos || '[]')]
+      );
+    }
+
+    // Insertar mensajes
+    for (const m of mensajes) {
+      const newMsgId = uuidv4();
+      await dbRun(
+        `INSERT INTO mensajes (id, partida_id, usuario_id, nombre_usuario, color_usuario, mensaje, es_gif, fecha)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [newMsgId, newPartidaId, m.usuario_id, m.nombre_usuario, m.color_usuario, m.mensaje, m.es_gif || 0, m.fecha || ahora]
+      );
+    }
+
+    // Insertar historial dados
+    for (const h of historial) {
+      const newHistId = uuidv4();
+      await dbRun(
+        `INSERT INTO historial_dados (id, partida_id, usuario_id, nombre_usuario, formula, tipo, resultado, fecha)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [newHistId, newPartidaId, h.usuario_id, h.nombre_usuario, h.formula, h.tipo, h.resultado, h.fecha || ahora]
+      );
+    }
+
+    // Insertar galeria
+    for (const g of galeria) {
+      const newGalId = uuidv4();
+      await dbRun(
+        `INSERT INTO galeria (id, partida_id, nombre, datos) VALUES (?, ?, ?, ?)`,
+        [newGalId, newPartidaId, g.nombre, typeof g.datos === 'object' ? JSON.stringify(g.datos) : g.datos]
+      );
+    }
+
+    res.json({ success: true, id: newPartidaId, codigo: newCodigo });
+  } catch (err) {
+    console.error('Error al importar sesión:', err);
     res.status(500).json({ error: err.message });
   }
 });

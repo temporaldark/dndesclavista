@@ -68,6 +68,10 @@
       <button id="btn-join-game-modal" class="btn btn-secondary btn-large">
         <i class="fa-solid fa-right-to-bracket"></i> Unirse con Código
       </button>
+      <button id="btn-import-game" class="btn btn-secondary btn-large">
+        <i class="fa-solid fa-file-import"></i> Cargar Sesión (.json)
+      </button>
+      <input type="file" id="input-import-game-file" accept=".json" class="hidden">
     </div>
 
     <div class="saved-games-section">
@@ -362,6 +366,17 @@
             <div id="dm-gallery-list" class="gallery-chips">
               <!-- Plantillas guardadas como chips -->
             </div>
+          </div>
+
+          <!-- Respaldar / Restaurar Sesión en Escritorio -->
+          <div class="dm-section">
+            <h4>💾 Respaldar / Restaurar Sesión</h4>
+            <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px;">Guarda una copia de respaldo de la partida en tu disco duro/Escritorio o restaura una sesión anterior.</p>
+            <div class="modal-actions-row">
+              <button id="btn-dm-export-session" class="btn btn-primary btn-sm flex-1"><i class="fa-solid fa-download"></i> Guardar Sesión</button>
+              <button id="btn-dm-import-session" class="btn btn-secondary btn-sm flex-1"><i class="fa-solid fa-upload"></i> Cargar Archivo (.json)</button>
+            </div>
+            <input type="file" id="input-dm-import-file" accept=".json" class="hidden">
           </div>
         </div>
 
