@@ -315,6 +315,16 @@
             <h3><i class="fa-solid fa-crown gold-text"></i> Panel del Dungeon Master</h3>
           </div>
 
+          <!-- Sección Música -->
+          <div class="dm-section">
+            <h4>🎵 Música de Ambiente (YouTube)</h4>
+            <div class="form-group inline-form">
+              <input type="text" id="yt-music-url" placeholder="Ej: https://youtube.com/watch?v=...">
+              <button id="btn-play-music" class="btn btn-primary btn-sm"><i class="fa-solid fa-play"></i> Reproducir</button>
+            </div>
+            <button id="btn-stop-music" class="btn btn-danger btn-sm btn-block" style="margin-top: 5px;"><i class="fa-solid fa-stop"></i> Detener Música</button>
+          </div>
+
           <!-- Sección Escenas -->
           <div class="dm-section">
             <h4>🎬 Escenas y Mapas</h4>
@@ -422,6 +432,7 @@
             <label>Tamaño Base</label>
             <select id="ficha-tamanio" class="form-select">
               <option value="pequeno">Pequeño (1x1)</option>
+              <option value="enano">Enano (1x1)</option>
               <option value="mediano" selected>Mediano (1x1)</option>
               <option value="grande">Grande (2x2)</option>
               <option value="enorme">Enorme (3x3)</option>
@@ -597,6 +608,14 @@
         </div>
       </form>
     </div>
+  </div>
+
+  <!-- Contenedor de música de YouTube (oculto) -->
+  <div id="youtube-music-container" style="display: none; position: fixed; bottom: 0; width: 200px; height: 150px; z-index: 1000; background: #000; border: 1px solid #333;">
+    <div style="padding: 5px; background: #222; text-align: right; color: #fff;">
+      <button onclick="document.getElementById('youtube-music-container').style.display='none'" style="background: none; border: none; color: white; cursor: pointer;">✕</button>
+    </div>
+    <iframe id="youtube-iframe" width="200" height="113" src="" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
   </div>
 
   <!-- Cargar Socket.io -->

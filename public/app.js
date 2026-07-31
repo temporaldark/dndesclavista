@@ -53,7 +53,7 @@
   let pendingDiceResult = null;
   
   let showHpBars = false;
-  let sortInitiative = false;
+  let sortInitiative = true;
 
   // Estado del Canvas VTT
   let canvas = null;
@@ -99,13 +99,18 @@
 
   // --- INICIALIZACIÓN ---
   window.addEventListener('DOMContentLoaded', () => {
-    // Generar o cargar usuario id local
+    // Generar o cargar usuario id local basado en nombre de usuario si existe
+    let savedUsername = localStorage.getItem('vtt_username');
     let savedUserId = localStorage.getItem('vtt_user_id');
-    if (!savedUserId) {
+    if (savedUsername) {
+      savedUserId = 'usr_' + savedUsername.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+      localStorage.setItem('vtt_user_id', savedUserId);
+    } else if (!savedUserId) {
       savedUserId = 'usr_' + Math.random().toString(36).substr(2, 9);
       localStorage.setItem('vtt_user_id', savedUserId);
     }
     state.usuario.id = savedUserId;
+    if (savedUsername) state.usuario.nombre = savedUsername;
 
     initDOM();
     initCanvas();
@@ -294,6 +299,20 @@
     if (dom.mobileOverlay) {
       dom.mobileOverlay.addEventListener('click', closeAllPanels);
     }
+  }
+
+  function esDuenioDeFicha(ficha) {
+    if (!ficha) return false;
+    if (state.usuario.esDM) return true;
+    
+    const uId = (state.usuario.id || '').toLowerCase().trim();
+    const uName = (state.usuario.nombre || '').toLowerCase().trim();
+    const fJugadorId = (ficha.jugador_id || '').toLowerCase().trim();
+    
+    if (fJugadorId && (fJugadorId === uId || fJugadorId === uName || fJugadorId === 'usr_' + uName.replace(/[^a-z0-9]/g, '_'))) return true;
+    if (ficha.tipo === 'jugador' && (!ficha.jugador_id || ficha.jugador_id === '')) return true;
+    
+    return false;
   }
 
   function getFichaVisibility(ficha) {
@@ -504,6 +523,30 @@
     socket.on('guardado_confirmado', () => {
       showSaveIndicator('✅ Guardado');
     });
+
+    socket.on('evento_musica', ({ accion, url }) => {
+      const container = document.getElementById('youtube-music-container');
+      const iframe = document.getElementById('youtube-iframe');
+      if (accion === 'play') {
+        if (url) {
+          // Extraer ID de YouTube
+          let videoId = '';
+          const m1 = url.match(/v=([^&]+)/);
+          const m2 = url.match(/youtu\.be\/([^?]+)/);
+          if (m1) videoId = m1[1];
+          else if (m2) videoId = m2[1];
+          else videoId = url; // asume que es el id directo si no coincide
+          
+          if (videoId) {
+            iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+            container.style.display = 'block';
+          }
+        }
+      } else if (accion === 'stop') {
+        iframe.src = '';
+        container.style.display = 'none';
+      }
+    });
   }
 
   // --- CANVAS & VTT ENGINE ---
@@ -702,6 +745,7 @@
       let scaleMult = 1;
       if (ficha.tamanio_base === 'grande') scaleMult = 2;
       if (ficha.tamanio_base === 'enorme') scaleMult = 3;
+      if (ficha.tamanio_base === 'enano') scaleMult = 0.75;
       if (ficha.gigante) scaleMult *= 2;
 
       const tokenWidth = tileSize * scaleMult;
@@ -886,18 +930,17 @@
     if (activeTool === 'move') {
       // Buscar si hizo clic sobre alguna ficha
       const clickedFicha = [...(state.fichas || [])].reverse().find(f => {
-        let mult = f.tamanio_base === 'grande' ? 2 : f.tamanio_base === 'enorme' ? 3 : 1;
+        let mult = f.tamanio_base === 'grande' ? 2 : f.tamanio_base === 'enorme' ? 3 : f.tamanio_base === 'enano' ? 0.75 : 1;
         if (f.gigante) mult *= 2;
         return gridPos.x >= f.x && gridPos.x <= f.x + mult && gridPos.y >= f.y && gridPos.y <= f.y + mult;
       });
 
       if (clickedFicha) {
         // Verificar permisos: DM o dueño directo de la ficha
-        const esDuenio = state.usuario.esDM || 
-                         clickedFicha.jugador_id === state.usuario.id ||
-                         (!clickedFicha.jugador_id && clickedFicha.tipo === 'jugador');
+        const esDuenio = esDuenioDeFicha(clickedFicha);
         if (esDuenio) {
           selectedFichaId = clickedFicha.id;
+          if (dom.diceTokenSelect) dom.diceTokenSelect.value = clickedFicha.id;
           isDraggingToken = true;
           dragOffset = { x: gridPos.x - clickedFicha.x, y: gridPos.y - clickedFicha.y };
           renderFichasList();
@@ -1045,13 +1088,14 @@
     if (isDraggingFigure && selectedFigureId) {
       const fig = state.figuras.find(f => f.id === selectedFigureId);
       if (fig) {
-        fig.x = Math.round(fig.x);
-        fig.y = Math.round(fig.y);
-        socket?.emit('guardar_figura', {
-          partidaId: state.partida.id,
-          escenaId: state.escenaActiva.id,
-          figuraData: fig
-        });
+               // Snap al grid solo para fichas, no para figuras
+          // fig.x = Math.round(fig.x);
+          // fig.y = Math.round(fig.y);
+          socket?.emit('guardar_figura', {
+            partidaId: state.partida.id,
+            escenaId: state.escenaActiva.id,
+            figuraData: fig
+          });
       }
       isDraggingFigure = false;
       renderCanvas();
@@ -1104,7 +1148,8 @@
   }
 
   function zoomAt(screenX, screenY, factor) {
-    const newZoom = Math.max(0.3, Math.min(4.0, viewport.zoom * factor));
+    const newZoom = Math.max(0.05, Math.min(4.0, viewport.zoom * factor));
+    if (newZoom === viewport.zoom) return;
     const rect = canvas.getBoundingClientRect();
     const mouseX = screenX - rect.left;
     const mouseY = screenY - rect.top;
@@ -1227,6 +1272,13 @@
       const nombre = document.getElementById('new-game-name').value;
       const cols = parseInt(document.getElementById('new-game-cols').value) || 40;
       const rows = parseInt(document.getElementById('new-game-rows').value) || 40;
+      
+      const savedName = localStorage.getItem('vtt_username') || 'Dungeon Master';
+      const deterministicId = 'usr_' + savedName.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+      state.usuario.id = deterministicId;
+      state.usuario.nombre = savedName;
+      localStorage.setItem('vtt_user_id', deterministicId);
+
       try {
         const res = await fetch('/api/partidas', {
           method: 'POST',
@@ -1237,7 +1289,7 @@
         closeModal(dom.modalCreateGame);
 
         // Unirse automáticamente (el servidor asignará DM al creador)
-        socket?.emit('unirse_partida', { codigo: data.codigo, nombreUsuario: 'Dungeon Master', usuarioId: state.usuario.id });
+        socket?.emit('unirse_partida', { codigo: data.codigo, nombreUsuario: savedName, usuarioId: state.usuario.id });
       } catch (err) {
         alert('Error al crear la partida.');
       }
@@ -1246,10 +1298,17 @@
     dom.formJoinGame.addEventListener('submit', (e) => {
       e.preventDefault();
       const codigo = document.getElementById('join-code-input').value;
-      const nombreUsuario = document.getElementById('join-username-input').value;
+      const nombreUsuario = document.getElementById('join-username-input').value.trim();
       
       // Guardamos el nombre de usuario localmente para que se auto-rellene en el futuro
       localStorage.setItem('vtt_username', nombreUsuario);
+
+      if (nombreUsuario) {
+        const deterministicId = 'usr_' + nombreUsuario.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+        state.usuario.id = deterministicId;
+        state.usuario.nombre = nombreUsuario;
+        localStorage.setItem('vtt_user_id', deterministicId);
+      }
 
       closeModal(dom.modalJoinGame);
       socket?.emit('unirse_partida', { codigo, nombreUsuario, usuarioId: state.usuario.id });
@@ -1336,6 +1395,24 @@
       if (dom.zoomLevelText) dom.zoomLevelText.textContent = '100%';
       renderCanvas();
     });
+
+    // Eventos Música YouTube
+    const btnPlayMusic = document.getElementById('btn-play-music');
+    const btnStopMusic = document.getElementById('btn-stop-music');
+    const inputYtUrl = document.getElementById('yt-music-url');
+    if (btnPlayMusic && btnStopMusic && inputYtUrl) {
+      btnPlayMusic.addEventListener('click', () => {
+        const url = inputYtUrl.value.trim();
+        if (url && state.partida) {
+          socket?.emit('evento_musica', { partidaId: state.partida.id, accion: 'play', url });
+        }
+      });
+      btnStopMusic.addEventListener('click', () => {
+        if (state.partida) {
+          socket?.emit('evento_musica', { partidaId: state.partida.id, accion: 'stop' });
+        }
+      });
+    }
 
     // Pestañas Derechas
     dom.tabButtons.forEach(btn => {
@@ -1666,6 +1743,9 @@
         formulaDisplay = `${originalFormula} [${diceResult.rollDetails.join(', ')}]`;
       }
 
+      // Determinar la ficha objetivo para animación y asignaciones (Iniciativa / Daño / Curación)
+      const targetTokenId = fichaId || selectedFichaId || dom.diceTargetSelect?.value;
+
       socket?.emit('lanzar_dados', {
         partidaId: state.partida.id,
         usuarioId: state.usuario.id,
@@ -1673,9 +1753,24 @@
         formula: formulaDisplay,
         tipo: classif,
         resultado: finalResult,
-        fichaId,
+        fichaId: targetTokenId || fichaId,
         icono: icon
       });
+
+      // Si la clasificación es Iniciativa, asignar automáticamente la tirada a la ficha seleccionada
+      if (classif === 'Iniciativa') {
+        if (targetTokenId) {
+          const targetFicha = state.fichas.find(f => f.id === targetTokenId);
+          if (targetFicha) {
+            targetFicha.iniciativa = finalResult;
+            socket?.emit('actualizar_ficha', { partidaId: state.partida.id, fichaData: targetFicha });
+          }
+        } else {
+          // Si no hay ficha seleccionada, abrir modal para elegir a quién asignar la iniciativa
+          pendingDiceResult = { resultado: finalResult, esCuracion: false, classif: 'Iniciativa' };
+          openPostRollTargetModal('Iniciativa', finalResult);
+        }
+      }
 
       // Apply HP if Daño or Curación is selected
       const targetId = dom.diceTargetSelect.value;
@@ -1896,6 +1991,11 @@
     if (sortInitiative) {
       listToRender.sort((a, b) => (b.iniciativa || 0) - (a.iniciativa || 0));
     }
+    
+    // Si sortInitiative está activo, asegurar que el botón se vea activo
+    if (dom.btnSortInitiative) {
+      dom.btnSortInitiative.classList.toggle('active', sortInitiative);
+    }
 
     listToRender.forEach(ficha => {
       if (filter && !ficha.nombre.toLowerCase().includes(filter)) return;
@@ -1909,18 +2009,17 @@
 
       const hpText = (isMonster && isPlayerView && !visibility.hp) ? '???' : `${ficha.hp_actual}/${ficha.hp_maximo}`;
       const acText = (isMonster && isPlayerView && !visibility.ac) ? '???' : ficha.ac;
+      const iniText = ficha.iniciativa || 0;
       const avatarSrc = (isMonster && isPlayerView && !visibility.imagen) ? 'https://via.placeholder.com/48?text=?' : (ficha.imagen || 'https://via.placeholder.com/48?text=Avatar');
 
-      const esPropietario = state.usuario.esDM || 
-                            ficha.jugador_id === state.usuario.id ||
-                            (!ficha.jugador_id && ficha.tipo === 'jugador');
+      const esPropietario = esDuenioDeFicha(ficha);
 
       card.innerHTML = `
         <div class="ficha-card-header">
           <img src="${avatarSrc}" class="ficha-avatar" style="cursor: pointer;" title="Haz clic para ampliar">
           <div class="ficha-info">
             <div class="ficha-name">${(isMonster && isPlayerView && !visibility.nombre) ? '???' : ficha.nombre}</div>
-            <div class="ficha-sub">${ficha.tipo.toUpperCase()} | HP: ${hpText} | AC: ${acText}</div>
+            <div class="ficha-sub">${ficha.tipo.toUpperCase()} | HP: ${hpText} | AC: ${acText} | INI: <strong class="gold-text">${iniText}</strong></div>
             <div class="hp-bar-outer">
               <div class="hp-bar-inner" style="width: ${Math.max(0, Math.min(100, (ficha.hp_actual / (ficha.hp_maximo || 1)) * 100))}%"></div>
             </div>
@@ -2010,6 +2109,14 @@
         });
       }
 
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('button') || e.target.closest('img')) return;
+        selectedFichaId = ficha.id;
+        if (dom.diceTokenSelect) dom.diceTokenSelect.value = ficha.id;
+        renderFichasList();
+        renderCanvas();
+      });
+
       dom.fichasList.appendChild(card);
     });
   }
@@ -2019,9 +2126,7 @@
     dom.hdTokenSelect.innerHTML = '';
 
     (state.fichas || []).forEach(f => {
-      const esPropia = state.usuario.esDM || 
-                       f.jugador_id === state.usuario.id ||
-                       (!f.jugador_id && f.tipo === 'jugador');
+      const esPropia = esDuenioDeFicha(f);
       
       const opt = document.createElement('option');
       opt.value = f.id;
@@ -2079,8 +2184,16 @@
     const resultEl = modal.querySelector('.post-roll-result');
     const iconEl = modal.querySelector('.post-roll-icon');
 
-    if (iconEl) iconEl.textContent = classif === 'Curación' ? '❤️' : '⚔️';
-    if (titleEl) titleEl.textContent = classif === 'Curación' ? '¿A quién quieres curar?' : '¿A quién atacas?';
+    if (iconEl) {
+      if (classif === 'Curación') iconEl.textContent = '❤️';
+      else if (classif === 'Iniciativa') iconEl.textContent = '🎯';
+      else iconEl.textContent = '⚔️';
+    }
+    if (titleEl) {
+      if (classif === 'Curación') titleEl.textContent = '¿A quién quieres curar?';
+      else if (classif === 'Iniciativa') titleEl.textContent = '¿A quién asignar iniciativa?';
+      else titleEl.textContent = '¿A quién atacas?';
+    }
     if (resultEl) resultEl.textContent = `Resultado del dado: ${resultado}`;
 
     listEl.innerHTML = '';
@@ -2094,6 +2207,8 @@
       } else if (classif === 'Daño') {
         include = (f.tipo === 'monstruo' || f.tipo === 'npc');
         if (state.usuario.esDM) include = true;
+      } else if (classif === 'Iniciativa') {
+        include = true; // Todo el mundo puede recibir iniciativa
       }
 
       if (include) {
@@ -2110,12 +2225,17 @@
         `;
         btn.addEventListener('click', () => {
           if (pendingDiceResult) {
-            socket?.emit('aplicar_dano_curacion', {
-              partidaId: state.partida.id,
-              fichaId: f.id,
-              cantidad: pendingDiceResult.resultado,
-              esCuracion: pendingDiceResult.esCuracion
-            });
+            if (classif === 'Iniciativa') {
+              f.iniciativa = pendingDiceResult.resultado;
+              socket?.emit('actualizar_ficha', { partidaId: state.partida.id, fichaData: f });
+            } else {
+              socket?.emit('aplicar_dano_curacion', {
+                partidaId: state.partida.id,
+                fichaId: f.id,
+                cantidad: pendingDiceResult.resultado,
+                esCuracion: pendingDiceResult.esCuracion
+              });
+            }
             pendingDiceResult = null;
           }
           closeModal(modal);

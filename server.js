@@ -622,6 +622,10 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('evento_musica', ({ partidaId, accion, url }) => {
+    io.to(partidaId).emit('evento_musica', { accion, url });
+  });
+
   socket.on('disconnect', () => {
     console.log(`❌ Cliente desconectado: ${socket.id}`);
     
