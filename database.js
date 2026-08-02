@@ -118,6 +118,18 @@ async function initDb() {
   `);
 
   await dbRun(`
+    CREATE TABLE IF NOT EXISTS posiciones_fichas (
+      ficha_id TEXT NOT NULL,
+      escena_id TEXT NOT NULL,
+      x REAL DEFAULT 0,
+      y REAL DEFAULT 0,
+      PRIMARY KEY (ficha_id, escena_id),
+      FOREIGN KEY (ficha_id) REFERENCES fichas(id) ON DELETE CASCADE,
+      FOREIGN KEY (escena_id) REFERENCES escenas(id) ON DELETE CASCADE
+    )
+  `);
+
+  await dbRun(`
     CREATE TABLE IF NOT EXISTS dibujos (
       id TEXT PRIMARY KEY,
       escena_id TEXT UNIQUE NOT NULL,

@@ -1,21 +1,25 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>VTT D&D 5e - Homebrew Tabletop Multijugador</title>
-  
+
   <!-- Google Fonts: Cinzel para títulos temáticos, Roboto para interfaz -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
-  
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap"
+    rel="stylesheet">
+
   <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  
+
   <!-- Estilos Temáticos D&D -->
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
   <!-- BARRA SUPERIOR (FIJA, SIEMPRE VISIBLE) -->
@@ -119,7 +123,8 @@
         <div id="opt-draw" class="tool-sub-options hidden">
           <label>Color: <input type="color" id="draw-color" value="#e74c3c"></label>
           <label>Grosor: <input type="range" id="draw-size" min="2" max="20" value="4"></label>
-          <button id="btn-clear-drawings" class="btn btn-danger btn-sm dm-only"><i class="fa-solid fa-trash"></i> Limpiar Dibujos</button>
+          <button id="btn-clear-drawings" class="btn btn-danger btn-sm dm-only"><i class="fa-solid fa-trash"></i>
+            Limpiar Dibujos</button>
         </div>
 
         <!-- Opciones de Figuras (Hechizos y Áreas para Jugadores y DM) -->
@@ -137,7 +142,8 @@
           <label>Color: <input type="color" id="fig-color" value="#c9a84c"></label>
           <label>Transparencia: <input type="range" id="fig-opacity" min="0.1" max="0.9" step="0.1" value="0.4"></label>
           <label>Etiqueta: <input type="text" id="fig-label" placeholder="Ej: Bola de Fuego"></label>
-          <button id="btn-clear-figures" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i> Limpiar Figuras</button>
+          <button id="btn-clear-figures" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i> Limpiar
+            Figuras</button>
         </div>
       </div>
     </aside>
@@ -151,8 +157,10 @@
       <!-- Controles flotantes de Zoom y Posición -->
       <div class="canvas-controls">
         <button id="btn-zoom-in" class="btn-circle" title="Acercar (Zoom In)"><i class="fa-solid fa-plus"></i></button>
-        <button id="btn-zoom-reset" class="btn-circle" title="Recentrar Vista"><i class="fa-solid fa-crosshairs"></i></button>
-        <button id="btn-zoom-out" class="btn-circle" title="Alejar (Zoom Out)"><i class="fa-solid fa-minus"></i></button>
+        <button id="btn-zoom-reset" class="btn-circle" title="Recentrar Vista"><i
+            class="fa-solid fa-crosshairs"></i></button>
+        <button id="btn-zoom-out" class="btn-circle" title="Alejar (Zoom Out)"><i
+            class="fa-solid fa-minus"></i></button>
         <span id="zoom-level-text" class="zoom-level">100%</span>
       </div>
 
@@ -164,10 +172,12 @@
     <aside id="right-panel" class="right-panel">
       <!-- Navegación de Pestañas -->
       <nav class="tabs-nav">
-        <button class="tab-btn active" data-tab="tab-fichas"><i class="fa-solid fa-users"></i> <span>Fichas</span></button>
+        <button class="tab-btn active" data-tab="tab-fichas"><i class="fa-solid fa-users"></i>
+          <span>Fichas</span></button>
         <button class="tab-btn" data-tab="tab-dados"><i class="fa-solid fa-dice-d20"></i> <span>Dados</span></button>
         <button class="tab-btn" data-tab="tab-chat"><i class="fa-solid fa-comments"></i> <span>Chat</span></button>
-        <button class="tab-btn" data-tab="tab-historial"><i class="fa-solid fa-clock-rotate-left"></i> <span>Historial</span></button>
+        <button class="tab-btn" data-tab="tab-historial"><i class="fa-solid fa-clock-rotate-left"></i>
+          <span>Historial</span></button>
         <button class="tab-btn dm-only" data-tab="tab-dm"><i class="fa-solid fa-key"></i> <span>DM</span></button>
       </nav>
 
@@ -283,8 +293,10 @@
           <div class="pane-header">
             <h3><i class="fa-solid fa-clock-rotate-left gold-text"></i> Historial Completo</h3>
             <div class="pane-actions dm-only">
-              <button id="btn-export-history" class="btn btn-secondary btn-sm"><i class="fa-solid fa-download"></i> Exportar</button>
-              <button id="btn-clear-history" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i> Limpiar</button>
+              <button id="btn-export-history" class="btn btn-secondary btn-sm"><i class="fa-solid fa-download"></i>
+                Exportar</button>
+              <button id="btn-clear-history" class="btn btn-danger btn-sm"><i class="fa-solid fa-trash"></i>
+                Limpiar</button>
             </div>
           </div>
           <div class="search-box">
@@ -324,13 +336,16 @@
             <h4>🎵 Música de Ambiente (YouTube)</h4>
             <div class="form-group inline-form">
               <input type="text" id="yt-music-url" placeholder="Ej: https://youtube.com/watch?v=...">
-              <button id="btn-play-music" class="btn btn-primary btn-sm"><i class="fa-solid fa-play"></i> Reproducir</button>
+              <button id="btn-play-music" class="btn btn-primary btn-sm"><i class="fa-solid fa-play"></i>
+                Reproducir</button>
             </div>
             <div class="form-group" style="margin-top: 5px; display: flex; align-items: center; gap: 10px;">
-              <label for="music-volume" style="font-size: 0.8rem; margin: 0; white-space: nowrap;"><i class="fa-solid fa-volume-high"></i> Volumen:</label>
+              <label for="music-volume" style="font-size: 0.8rem; margin: 0; white-space: nowrap;"><i
+                  class="fa-solid fa-volume-high"></i> Volumen:</label>
               <input type="range" id="music-volume" min="0" max="100" value="50" style="flex-grow: 1;">
             </div>
-            <button id="btn-stop-music" class="btn btn-danger btn-sm btn-block" style="margin-top: 5px;"><i class="fa-solid fa-stop"></i> Detener Música</button>
+            <button id="btn-stop-music" class="btn btn-danger btn-sm btn-block" style="margin-top: 5px;"><i
+                class="fa-solid fa-stop"></i> Detener Música</button>
           </div>
 
           <!-- Sección Escenas -->
@@ -338,7 +353,8 @@
             <h4>🎬 Escenas y Mapas</h4>
             <div class="form-group inline-form">
               <input type="text" id="new-scene-name" placeholder="Nombre nueva escena...">
-              <button id="btn-create-scene" class="btn btn-primary btn-sm"><i class="fa-solid fa-plus"></i> Crear Escena</button>
+              <button id="btn-create-scene" class="btn btn-primary btn-sm"><i class="fa-solid fa-plus"></i> Crear
+                Escena</button>
             </div>
             <div id="scenes-list" class="scenes-list">
               <!-- Lista de escenas creadas -->
@@ -348,7 +364,8 @@
                 <i class="fa-solid fa-image"></i> Subir Imagen de Mapa (Fondo)
               </button>
               <input type="file" id="map-file-input" accept="image/png, image/jpeg, image/webp" class="hidden">
-              <button id="btn-clear-map-bg" class="btn btn-danger btn-sm btn-block mt-5"><i class="fa-solid fa-trash"></i> Eliminar Imagen de Fondo</button>
+              <button id="btn-clear-map-bg" class="btn btn-danger btn-sm btn-block mt-5"><i
+                  class="fa-solid fa-trash"></i> Eliminar Imagen de Fondo</button>
             </div>
           </div>
 
@@ -358,15 +375,18 @@
             <div class="grid-config-form">
               <label>Columnas (X): <input type="number" id="grid-cols-input" min="10" max="500" value="40"></label>
               <label>Filas (Y): <input type="number" id="grid-rows-input" min="10" max="500" value="40"></label>
-              <label>Tamaño Casilla (pies): <input type="number" id="grid-feet-input" min="1" max="100" value="5"></label>
-              <button id="btn-apply-grid" class="btn btn-gold btn-block"><i class="fa-solid fa-check"></i> Aplicar Cambios de Grid</button>
+              <label>Tamaño Casilla (pies): <input type="number" id="grid-feet-input" min="1" max="100"
+                  value="5"></label>
+              <button id="btn-apply-grid" class="btn btn-gold btn-block"><i class="fa-solid fa-check"></i> Aplicar
+                Cambios de Grid</button>
             </div>
           </div>
 
           <!-- Galería de Fichas Plantilla -->
           <div class="dm-section">
             <h4>📚 Galería de Plantillas (Monstruos/NPCs)</h4>
-            <button id="btn-save-current-template" class="btn btn-secondary btn-block"><i class="fa-solid fa-bookmark"></i> Guardar Ficha Actual en Galería</button>
+            <button id="btn-save-current-template" class="btn btn-secondary btn-block"><i
+                class="fa-solid fa-bookmark"></i> Guardar Ficha Actual en Galería</button>
             <div id="dm-gallery-list" class="gallery-chips">
               <!-- Plantillas guardadas como chips -->
             </div>
@@ -375,10 +395,13 @@
           <!-- Respaldar / Restaurar Sesión en Escritorio -->
           <div class="dm-section">
             <h4>💾 Respaldar / Restaurar Sesión</h4>
-            <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px;">Guarda una copia de respaldo de la partida en tu disco duro/Escritorio o restaura una sesión anterior.</p>
+            <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px;">Guarda una copia de respaldo de la
+              partida en tu disco duro/Escritorio o restaura una sesión anterior.</p>
             <div class="modal-actions-row">
-              <button id="btn-dm-export-session" class="btn btn-primary btn-sm flex-1"><i class="fa-solid fa-download"></i> Guardar Sesión</button>
-              <button id="btn-dm-import-session" class="btn btn-secondary btn-sm flex-1"><i class="fa-solid fa-upload"></i> Cargar Archivo (.json)</button>
+              <button id="btn-dm-export-session" class="btn btn-primary btn-sm flex-1"><i
+                  class="fa-solid fa-download"></i> Guardar Sesión</button>
+              <button id="btn-dm-import-session" class="btn btn-secondary btn-sm flex-1"><i
+                  class="fa-solid fa-upload"></i> Cargar Archivo (.json)</button>
             </div>
             <input type="file" id="input-dm-import-file" accept=".json" class="hidden">
           </div>
@@ -437,8 +460,10 @@
         </div>
 
         <div class="form-row">
-          <div class="form-group"><label>HP Actual</label><input type="number" id="ficha-hp-act" value="20" required></div>
-          <div class="form-group"><label>HP Máximo</label><input type="number" id="ficha-hp-max" value="20" required></div>
+          <div class="form-group"><label>HP Actual</label><input type="number" id="ficha-hp-act" value="20" required>
+          </div>
+          <div class="form-group"><label>HP Máximo</label><input type="number" id="ficha-hp-max" value="20" required>
+          </div>
           <div class="form-group"><label>AC (CA)</label><input type="number" id="ficha-ac" value="15" required></div>
           <div class="form-group"><label>Velocidad (pies)</label><input type="number" id="ficha-vel" value="30"></div>
         </div>
@@ -461,7 +486,8 @@
 
         <div class="form-group">
           <label>Notas / Rasgos / Hechizos Homebrew</label>
-          <textarea id="ficha-notas" rows="3" placeholder="Añade descripciones, notas de combate o efectos especiales..."></textarea>
+          <textarea id="ficha-notas" rows="3"
+            placeholder="Añade descripciones, notas de combate o efectos especiales..."></textarea>
         </div>
 
         <div class="modal-footer">
@@ -487,8 +513,10 @@
         <input type="number" id="hd-amount-input" class="form-control mb-15" value="5" min="1">
 
         <div class="modal-actions-row">
-          <button id="btn-apply-damage" class="btn btn-danger flex-1"><i class="fa-solid fa-skull"></i> Aplicar Daño</button>
-          <button id="btn-apply-heal" class="btn btn-success flex-1"><i class="fa-solid fa-notes-medical"></i> Aplicar Curación</button>
+          <button id="btn-apply-damage" class="btn btn-danger flex-1"><i class="fa-solid fa-skull"></i> Aplicar
+            Daño</button>
+          <button id="btn-apply-heal" class="btn btn-success flex-1"><i class="fa-solid fa-notes-medical"></i> Aplicar
+            Curación</button>
         </div>
       </div>
     </div>
@@ -503,7 +531,8 @@
       </div>
       <div class="modal-body">
         <div class="search-box mb-10">
-          <input type="text" id="gif-search-input" placeholder="🔍 Filtrar GIFs por categoría (dragón, dado, ataque...)...">
+          <input type="text" id="gif-search-input"
+            placeholder="🔍 Filtrar GIFs por categoría (dragón, dado, ataque...)...">
         </div>
         <div id="gif-grid" class="gif-grid">
           <!-- Colección de 20 GIFs de D&D y Fantasía -->
@@ -518,7 +547,9 @@
       <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
       <img id="enlarged-gif-img" src="" class="img-fluid rounded">
       <h3 id="enlarged-img-title" style="margin-top: 10px; color: var(--gold);"></h3>
-      <p id="enlarged-img-notas" style="margin-top: 10px; font-size: 0.9em; color: var(--text-muted); text-align: left; white-space: pre-wrap; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 4px; display: none;"></p>
+      <p id="enlarged-img-notas"
+        style="margin-top: 10px; font-size: 0.9em; color: var(--text-muted); text-align: left; white-space: pre-wrap; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 4px; display: none;">
+      </p>
     </div>
   </div>
 
@@ -530,10 +561,12 @@
         <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body">
-        <p style="margin-bottom: 10px; font-size: 0.9em; color: #ccc;">Selecciona qué atributos de este monstruo/NPC deseas revelar a los jugadores.</p>
+        <p style="margin-bottom: 10px; font-size: 0.9em; color: #ccc;">Selecciona qué atributos de este monstruo/NPC
+          deseas revelar a los jugadores.</p>
         <input type="hidden" id="revelar-ficha-id" value="">
-        
-        <div style="margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1); padding: 10px; border-radius: 4px; background: rgba(0,0,0,0.3);">
+
+        <div
+          style="margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1); padding: 10px; border-radius: 4px; background: rgba(0,0,0,0.3);">
           <label style="display: block; margin-bottom: 8px; cursor: pointer;">
             <input type="checkbox" id="rev-imagen" class="rev-checkbox"> Revelar Imagen (Avatar)
           </label>
@@ -557,7 +590,8 @@
           <!-- Se llenará dinámicamente con los jugadores conectados -->
         </select>
 
-        <button id="btn-aplicar-revelado" class="btn btn-primary btn-block"><i class="fa-solid fa-check"></i> Aplicar Cambios</button>
+        <button id="btn-aplicar-revelado" class="btn btn-primary btn-block"><i class="fa-solid fa-check"></i> Aplicar
+          Cambios</button>
       </div>
     </div>
   </div>
@@ -570,8 +604,10 @@
         <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body">
-        <p class="post-roll-result" style="text-align: center; font-size: 1.2em; color: #c9a84c; margin-bottom: 15px;"></p>
-        <div class="post-roll-target-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto;">
+        <p class="post-roll-result" style="text-align: center; font-size: 1.2em; color: #c9a84c; margin-bottom: 15px;">
+        </p>
+        <div class="post-roll-target-list"
+          style="display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto;">
           <!-- Se llena dinámicamente -->
         </div>
       </div>
@@ -595,8 +631,10 @@
           <input type="text" id="new-game-image" placeholder="https://ejemplo.com/imagen.jpg">
         </div>
         <div class="form-row">
-          <div class="form-group"><label>Grid Ancho (Cols)</label><input type="number" id="new-game-cols" value="40" min="10" max="500"></div>
-          <div class="form-group"><label>Grid Alto (Filas)</label><input type="number" id="new-game-rows" value="40" min="10" max="500"></div>
+          <div class="form-group"><label>Grid Ancho (Cols)</label><input type="number" id="new-game-cols" value="40"
+              min="10" max="500"></div>
+          <div class="form-group"><label>Grid Alto (Filas)</label><input type="number" id="new-game-rows" value="40"
+              min="10" max="500"></div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary btn-close-modal">Cancelar</button>
@@ -616,7 +654,8 @@
       <form id="form-join-game" class="modal-body">
         <div class="form-group">
           <label>Código de 6 Caracteres *</label>
-          <input type="text" id="join-code-input" required maxlength="6" placeholder="Ej: 3E93X" style="text-transform: uppercase; letter-spacing: 2px; font-weight: bold; font-size: 1.2rem;">
+          <input type="text" id="join-code-input" required maxlength="6" placeholder="Ej: 3E93X"
+            style="text-transform: uppercase; letter-spacing: 2px; font-weight: bold; font-size: 1.2rem;">
         </div>
         <div class="form-group">
           <label>Tu Nombre de Jugador *</label>
@@ -634,13 +673,15 @@
   </div>
 
   <!-- Contenedor de música de YouTube (oculto) -->
-  <div id="youtube-music-container" style="display: none; position: fixed; bottom: 0; width: 200px; height: 150px; z-index: 1000; background: #000; border: 1px solid #333;">
+  <div id="youtube-music-container"
+    style="display: none; position: fixed; bottom: 0; width: 200px; height: 150px; z-index: 1000; background: #000; border: 1px solid #333;">
     <div style="padding: 5px; background: #222; text-align: right; color: #fff;">
-      <button onclick="document.getElementById('youtube-music-container').style.display='none'" style="background: none; border: none; color: white; cursor: pointer;">✕</button>
+      <button onclick="document.getElementById('youtube-music-container').style.display='none'"
+        style="background: none; border: none; color: white; cursor: pointer;">✕</button>
     </div>
     <div id="youtube-player" style="width: 100%; height: 113px;"></div>
   </div>
-  
+
   <!-- YouTube IFrame API -->
   <script src="https://www.youtube.com/iframe_api"></script>
 
@@ -650,4 +691,5 @@
   <!-- Lógica de la Aplicación -->
   <script src="app.js"></script>
 </body>
+
 </html>

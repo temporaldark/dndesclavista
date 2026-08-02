@@ -33,13 +33,13 @@
   // --- ESTADO GLOBAL CLIENTE ---
   let socket = null;
   let ytPlayer = null;
-  window.onYouTubeIframeAPIReady = function() {
+  window.onYouTubeIframeAPIReady = function () {
     ytPlayer = new YT.Player('youtube-player', {
       height: '113',
       width: '200',
       playerVars: { 'autoplay': 1, 'controls': 1 },
       events: {
-        'onReady': function(event) {
+        'onReady': function (event) {
           console.log('YouTube Player Ready');
         }
       }
@@ -65,7 +65,7 @@
 
   // Resultado pendiente de dado para modal post-lanzamiento
   let pendingDiceResult = null;
-  
+
   let showHpBars = false;
   let sortInitiative = true;
 
@@ -323,14 +323,14 @@
   function esDuenioDeFicha(ficha) {
     if (!ficha) return false;
     if (state.usuario.esDM) return true;
-    
+
     const uId = (state.usuario.id || '').toLowerCase().trim();
     const uName = (state.usuario.nombre || '').toLowerCase().trim();
     const fJugadorId = (ficha.jugador_id || '').toLowerCase().trim();
-    
+
     if (fJugadorId && (fJugadorId === uId || fJugadorId === uName || fJugadorId === 'usr_' + uName.replace(/[^a-z0-9]/g, '_'))) return true;
     if (ficha.tipo === 'jugador' && (!ficha.jugador_id || ficha.jugador_id === '')) return true;
-    
+
     return false;
   }
 
@@ -342,7 +342,7 @@
     let config;
     try {
       config = JSON.parse(ficha.revelado);
-    } catch(e) {
+    } catch (e) {
       const isRevealed = ficha.revelado === 1 || ficha.revelado === '1' || ficha.revelado === true;
       config = { global: { imagen: isRevealed, nombre: isRevealed, hp: isRevealed, ac: isRevealed, notas: isRevealed }, jugadores: {} };
     }
@@ -353,7 +353,7 @@
 
     const userId = state.usuario.id;
     const userConfig = config.jugadores?.[userId];
-    
+
     return {
       imagen: userConfig?.imagen ?? config.global.imagen,
       nombre: userConfig?.nombre ?? config.global.nombre,
@@ -406,11 +406,18 @@
       alert('❌ Error: ' + msg);
     });
 
-    socket.on('escena_cambiada', ({ escenaActiva, figuras, dibujos }) => {
+    socket.on('escena_cambiada', ({ escenaActiva, figuras, dibujos, posiciones_fichas }) => {
       state.escenaActiva = escenaActiva;
       state.figuras = figuras || [];
       state.dibujos = dibujos || [];
       if (dom.currentSceneName) dom.currentSceneName.textContent = escenaActiva.nombre;
+      
+      state.fichas.forEach(f => {
+        const pos = (posiciones_fichas || []).find(p => p.ficha_id === f.id);
+        f.x = pos ? pos.x : 0;
+        f.y = pos ? pos.y : 0;
+      });
+
       loadMapImage(escenaActiva.mapa);
       renderCanvas();
     });
@@ -551,7 +558,7 @@
 
     socket.on('evento_musica', ({ accion, url, volume }) => {
       const container = document.getElementById('youtube-music-container');
-      
+
       if (accion === 'play') {
         if (url) {
           // Extraer ID de YouTube
@@ -561,7 +568,7 @@
           if (m1) videoId = m1[1];
           else if (m2) videoId = m2[1];
           else videoId = url; // asume que es el id directo si no coincide
-          
+
           if (videoId) {
             container.style.display = 'block';
             if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
@@ -749,7 +756,7 @@
           ctx.fill();
           ctx.stroke();
         }
-        
+
         // Deshacer rotación para la etiqueta, si no quieres que el texto rote.
         // Pero si la rotación se deshace, hay que recordar que ya estamos en centerX, centerY.
         ctx.restore();
@@ -885,7 +892,7 @@
         ctx.fillText(displayName, cx, py - 6);
       }
       ctx.restore();
-      
+
       // Reset alpha for following drawings (like dice animations)
       ctx.globalAlpha = 1.0;
 
@@ -994,17 +1001,19 @@
     if (activeTool === 'move' || activeTool === 'figures') {
       const clickedFig = (state.figuras || []).find(fig => {
         return gridPos.x >= fig.x - (fig.tamanio || 1) && gridPos.x <= fig.x + (fig.tamanio || 1) &&
-               gridPos.y >= fig.y - (fig.tamanio || 1) && gridPos.y <= fig.y + (fig.tamanio || 1);
+          gridPos.y >= fig.y - (fig.tamanio || 1) && gridPos.y <= fig.y + (fig.tamanio || 1);
       });
 
       if (clickedFig && !isDraggingToken) {
         selectedFigureId = clickedFig.id;
-        
+
         if (activeTool === 'move') {
-          isDraggingFigure = true;
-          dragOffset = { x: gridPos.x - clickedFig.x, y: gridPos.y - clickedFig.y };
+          if (state.usuario.esDM || clickedFig.creador_id === state.usuario.id) {
+            isDraggingFigure = true;
+            dragOffset = { x: gridPos.x - clickedFig.x, y: gridPos.y - clickedFig.y };
+          }
         }
-        
+
         // Poblar la UI con los datos de la figura seleccionada
         if (dom.figType) dom.figType.value = clickedFig.tipo;
         if (dom.figSize) dom.figSize.value = clickedFig.tamanio || 1;
@@ -1041,14 +1050,14 @@
         etiqueta: dom.figLabel.value,
         creador_id: state.usuario.id
       };
-      
+
       // La nueva figura queda seleccionada
       selectedFigureId = newFigId;
-      
+
       socket?.emit('guardar_figura', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, figuraData: nuevaFig });
     } else if (activeTool === 'erase') {
       // Borrar figura o trazo en ese punto (Dueño o DM)
-      const figToDel = (state.figuras || []).find(fig => 
+      const figToDel = (state.figuras || []).find(fig =>
         (fig.creador_id === state.usuario.id || state.usuario.esDM) &&
         Math.hypot(fig.x - gridPos.x, fig.y - gridPos.y) <= fig.tamanio
       );
@@ -1121,14 +1130,14 @@
     if (isDraggingFigure && selectedFigureId) {
       const fig = state.figuras.find(f => f.id === selectedFigureId);
       if (fig) {
-               // Snap al grid solo para fichas, no para figuras
-          // fig.x = Math.round(fig.x);
-          // fig.y = Math.round(fig.y);
-          socket?.emit('guardar_figura', {
-            partidaId: state.partida.id,
-            escenaId: state.escenaActiva.id,
-            figuraData: fig
-          });
+        // Snap al grid solo para fichas, no para figuras
+        // fig.x = Math.round(fig.x);
+        // fig.y = Math.round(fig.y);
+        socket?.emit('guardar_figura', {
+          partidaId: state.partida.id,
+          escenaId: state.escenaActiva.id,
+          figuraData: fig
+        });
       }
       isDraggingFigure = false;
       renderCanvas();
@@ -1159,18 +1168,18 @@
   function handleWheel(e) {
     e.preventDefault();
     const gridPos = screenToGrid(e.clientX, e.clientY);
-    const myFig = (state.figuras || []).find(fig => 
-      (fig.creador_id === state.usuario.id || state.usuario.esDM) && 
+    const myFig = (state.figuras || []).find(fig =>
+      (fig.creador_id === state.usuario.id || state.usuario.esDM) &&
       Math.hypot(fig.x - gridPos.x, fig.y - gridPos.y) <= fig.tamanio
     );
 
     if (myFig) {
       const scale = e.deltaY < 0 ? 1.1 : 0.9;
       myFig.tamanio = Math.max(0.5, myFig.tamanio * scale);
-      socket?.emit('guardar_figura', { 
-        partidaId: state.partida.id, 
-        escenaId: state.escenaActiva.id, 
-        figuraData: myFig 
+      socket?.emit('guardar_figura', {
+        partidaId: state.partida.id,
+        escenaId: state.escenaActiva.id,
+        figuraData: myFig
       });
       renderCanvas();
       return;
@@ -1219,9 +1228,9 @@
       const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
       const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
       const gridPos = screenToGrid(midX, midY);
-      
-      const myFig = (state.figuras || []).find(fig => 
-        (fig.creador_id === state.usuario.id || state.usuario.esDM) && 
+
+      const myFig = (state.figuras || []).find(fig =>
+        (fig.creador_id === state.usuario.id || state.usuario.esDM) &&
         Math.hypot(fig.x - gridPos.x, fig.y - gridPos.y) <= fig.tamanio
       );
 
@@ -1234,10 +1243,10 @@
 
       if (myFig) {
         myFig.tamanio = Math.max(0.5, myFig.tamanio * factor);
-        socket?.emit('guardar_figura', { 
-          partidaId: state.partida.id, 
-          escenaId: state.escenaActiva.id, 
-          figuraData: myFig 
+        socket?.emit('guardar_figura', {
+          partidaId: state.partida.id,
+          escenaId: state.escenaActiva.id,
+          figuraData: myFig
         });
         renderCanvas();
       } else {
@@ -1324,7 +1333,7 @@
       const imagenPortada = document.getElementById('new-game-image').value.trim();
       const cols = parseInt(document.getElementById('new-game-cols').value) || 40;
       const rows = parseInt(document.getElementById('new-game-rows').value) || 40;
-      
+
       const savedName = localStorage.getItem('vtt_username') || 'Dungeon Master';
       const deterministicId = 'usr_' + savedName.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
       state.usuario.id = deterministicId;
@@ -1351,7 +1360,7 @@
       e.preventDefault();
       const codigo = document.getElementById('join-code-input').value;
       const nombreUsuario = document.getElementById('join-username-input').value.trim();
-      
+
       // Guardamos el nombre de usuario localmente para que se auto-rellene en el futuro
       localStorage.setItem('vtt_username', nombreUsuario);
 
@@ -1415,14 +1424,14 @@
               fig.color = dom.figColor.value;
               fig.transparencia = parseFloat(dom.figOpacity.value) || 0.4;
               fig.etiqueta = dom.figLabel.value;
-              
+
               renderCanvas();
-              
+
               // Emitir actualización al servidor
-              socket?.emit('guardar_figura', { 
-                partidaId: state.partida.id, 
-                escenaId: state.escenaActiva.id, 
-                figuraData: fig 
+              socket?.emit('guardar_figura', {
+                partidaId: state.partida.id,
+                escenaId: state.escenaActiva.id,
+                figuraData: fig
               });
             }
           }
@@ -1574,7 +1583,7 @@
       btn.addEventListener('click', () => {
         dom.classifButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        
+
         currentClassif = btn.dataset.classif;
         if (currentClassif === 'Daño' || currentClassif === 'Curación') {
           dom.diceTargetContainer.classList.remove('hidden');
@@ -1609,7 +1618,7 @@
     dom.gifSearchInput.addEventListener('input', (e) => {
       const q = e.target.value.trim().toLowerCase();
       clearTimeout(searchTimeout);
-      
+
       if (!q) {
         renderGifGrid(PRESET_GIFS);
         return;
@@ -1686,20 +1695,20 @@
         reader.onload = (evt) => {
           const img = new Image();
           img.onload = () => {
-             const canvas = document.createElement('canvas');
-             let w = img.width;
-             let h = img.height;
-             const MAX_DIM = 2048; 
-             if (w > MAX_DIM || h > MAX_DIM) {
-               if (w > h) { h = Math.round((h * MAX_DIM) / w); w = MAX_DIM; }
-               else { w = Math.round((w * MAX_DIM) / h); h = MAX_DIM; }
-             }
-             canvas.width = w; canvas.height = h;
-             const ctx = canvas.getContext('2d');
-             ctx.drawImage(img, 0, 0, w, h);
-             const resizedBase64 = canvas.toDataURL('image/jpeg', 0.85);
-             
-             socket?.emit('actualizar_mapa', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, mapaBase64: resizedBase64 });
+            const canvas = document.createElement('canvas');
+            let w = img.width;
+            let h = img.height;
+            const MAX_DIM = 2048;
+            if (w > MAX_DIM || h > MAX_DIM) {
+              if (w > h) { h = Math.round((h * MAX_DIM) / w); w = MAX_DIM; }
+              else { w = Math.round((w * MAX_DIM) / h); h = MAX_DIM; }
+            }
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            const resizedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+
+            socket?.emit('actualizar_mapa', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, mapaBase64: resizedBase64 });
           };
           img.src = evt.target.result;
         };
@@ -1745,7 +1754,7 @@
     dom.btnAplicarRevelado?.addEventListener('click', () => {
       const fichaId = dom.revelarFichaId.value;
       const targetJugador = dom.revJugadoresSelect.value;
-      
+
       if (!currentFichaReveladoConfig.jugadores) currentFichaReveladoConfig.jugadores = {};
 
       const newConf = {
@@ -2055,7 +2064,7 @@
     if (sortInitiative) {
       listToRender.sort((a, b) => (b.iniciativa || 0) - (a.iniciativa || 0));
     }
-    
+
     // Si sortInitiative está activo, asegurar que el botón se vea activo
     if (dom.btnSortInitiative) {
       dom.btnSortInitiative.classList.toggle('active', sortInitiative);
@@ -2191,7 +2200,7 @@
 
     (state.fichas || []).forEach(f => {
       const esPropia = esDuenioDeFicha(f);
-      
+
       const opt = document.createElement('option');
       opt.value = f.id;
       opt.textContent = f.nombre;
@@ -2483,10 +2492,10 @@
 
       const data = await res.json();
       alert(`✅ Sesión restaurada con éxito! Código de partida: ${data.codigo}`);
-      
+
       // Si estamos en la pantalla de inicio, recargar la lista de partidas
       loadGamesList();
-      
+
       // Auto unirse a la partida restaurada
       const username = localStorage.getItem('vtt_username') || 'Dungeon Master';
       socket?.emit('unirse_partida', { codigo: data.codigo, nombreUsuario: username, usuarioId: state.usuario.id });
@@ -2524,19 +2533,19 @@
 
   function abrirMenuRevelado(ficha) {
     dom.revelarFichaId.value = ficha.id;
-    
+
     // Parsear config actual
     let config;
     try {
       config = JSON.parse(ficha.revelado);
-    } catch(e) {
+    } catch (e) {
       const isRevealed = ficha.revelado === 1 || ficha.revelado === '1' || ficha.revelado === true;
       config = { global: { imagen: isRevealed, nombre: isRevealed, hp: isRevealed, ac: isRevealed, notas: isRevealed }, jugadores: {} };
     }
     if (!config || !config.global) {
       config = { global: { imagen: false, nombre: false, hp: false, ac: false, notas: false }, jugadores: {} };
     }
-    
+
     currentFichaReveladoConfig = config;
 
     // Llenar select de jugadores conectados
@@ -2552,7 +2561,7 @@
 
     dom.revJugadoresSelect.value = 'todos';
     cargarCheckboxesRevelado('todos');
-    
+
     dom.revJugadoresSelect.onchange = () => {
       cargarCheckboxesRevelado(dom.revJugadoresSelect.value);
     };

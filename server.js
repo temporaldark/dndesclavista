@@ -321,6 +321,19 @@ io.on('connection', (socket) => {
       // Obtener listas completas
       const escenas = await dbAll(`SELECT id, nombre FROM escenas WHERE partida_id = ?`, [partida.id]);
       const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ?`, [partida.id]);
+      if (escenaActiva) {
+        const posiciones = await dbAll(`SELECT * FROM posiciones_fichas WHERE escena_id = ?`, [escenaActiva.id]);
+        fichas.forEach(f => {
+          const pos = posiciones.find(p => p.ficha_id === f.id);
+          if (pos) {
+            f.x = pos.x;
+            f.y = pos.y;
+          } else {
+            f.x = 0;
+            f.y = 0;
+          }
+        });
+      }
       const figuras = escenaActiva ? await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaActiva.id]) : [];
       const dibujoRow = escenaActiva ? await dbGet(`SELECT datos FROM dibujos WHERE escena_id = ?`, [escenaActiva.id]) : null;
       const dibujos = dibujoRow ? JSON.parse(dibujoRow.datos || '[]') : [];
@@ -383,8 +396,9 @@ io.on('connection', (socket) => {
       const figuras = await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaId]);
       const dibujoRow = await dbGet(`SELECT datos FROM dibujos WHERE escena_id = ?`, [escenaId]);
       const dibujos = dibujoRow ? JSON.parse(dibujoRow.datos || '[]') : [];
+      const posiciones_fichas = await dbAll(`SELECT * FROM posiciones_fichas WHERE escena_id = ?`, [escenaId]);
 
-      io.to(partidaId).emit('escena_cambiada', { escenaActiva, figuras, dibujos });
+      io.to(partidaId).emit('escena_cambiada', { escenaActiva, figuras, dibujos, posiciones_fichas });
     } catch (err) {
       console.error(err);
     }
@@ -441,6 +455,7 @@ io.on('connection', (socket) => {
   socket.on('mover_ficha', async ({ partidaId, escenaId, fichaId, x, y }) => {
     try {
       await dbRun(`UPDATE fichas SET x = ?, y = ? WHERE id = ?`, [x, y, fichaId]);
+      await dbRun(`INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`, [fichaId, escenaId, x, y]);
       io.to(partidaId).emit('ficha_movida', { fichaId, x, y });
     } catch (err) {
       console.error(err);
