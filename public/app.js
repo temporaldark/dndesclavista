@@ -664,7 +664,7 @@
 
     const cols = state.partida?.config_grid_x || 40;
     const rows = state.partida?.config_grid_y || 40;
-    const tileSize = getTileSize();
+    const tileSize = viewport.tileSize; // Se usa base para no escalar 2 veces
 
     ctx.save();
     ctx.translate(viewport.panX, viewport.panY);
@@ -673,6 +673,8 @@
     // Sincronizar el img (GIF) si está activo
     if (dom.mapBgImg && !dom.mapBgImg.classList.contains('hidden')) {
       dom.mapBgImg.style.transform = `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`;
+      dom.mapBgImg.style.width = (cols * tileSize) + 'px';
+      dom.mapBgImg.style.height = (rows * tileSize) + 'px';
     }
 
     const mapWidth = cols * tileSize;
@@ -870,12 +872,26 @@
         ctx.globalAlpha = 0.4;
       }
 
-      // Dibujar Borde Dorado del Token
-      ctx.strokeStyle = '#c9a84c';
-      ctx.lineWidth = 2;
+      // Dibujar Borde Dorado del Token (o del color del aro)
+      const colorAro = ficha.color_aro || '#c9a84c';
+      
+      // Si tiene color personalizado, lo hacemos más grueso/aura
+      ctx.strokeStyle = colorAro;
+      ctx.lineWidth = ficha.color_aro ? 3 : 2;
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.stroke();
+
+      // Si tiene color_aro, le damos un leve resplandor interior/exterior al aro
+      if (ficha.color_aro) {
+        ctx.strokeStyle = colorAro;
+        ctx.globalAlpha = 0.5;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+      }
 
       // Floating HP Bar & Floating Name
       ctx.save();
@@ -1578,6 +1594,7 @@
         altura: parseInt(document.getElementById('ficha-altura').value) || 2,
         tamanioBase: document.getElementById('ficha-tamanio').value,
         tamanio_base: document.getElementById('ficha-tamanio').value,
+        color_aro: document.getElementById('ficha-color-aro') ? document.getElementById('ficha-color-aro').value : '#c9a84c',
         notas: document.getElementById('ficha-notas').value
       };
 
@@ -2169,6 +2186,7 @@
           document.getElementById('ficha-nivel').value = ficha.nivel || 1;
           document.getElementById('ficha-altura').value = ficha.altura || 2;
           document.getElementById('ficha-tamanio').value = ficha.tamanio_base || 'mediano';
+          if (document.getElementById('ficha-color-aro')) document.getElementById('ficha-color-aro').value = ficha.color_aro || '#c9a84c';
           document.getElementById('ficha-notas').value = ficha.notas || '';
 
           dom.modalFichaTitle.textContent = 'Editar Ficha: ' + ficha.nombre;

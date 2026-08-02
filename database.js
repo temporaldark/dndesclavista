@@ -190,6 +190,13 @@ async function initDb() {
     // Ignore error if column already exists
   }
 
+  // Add color_aro to fichas if it doesn't exist
+  try {
+    await dbRun(`ALTER TABLE fichas ADD COLUMN color_aro TEXT DEFAULT '#c9a84c'`);
+  } catch (err) {
+    // Ignore error if column already exists
+  }
+
   console.log('✅ Base de datos SQLite inicializada correctamente en data/vtt.db');
 }
 
