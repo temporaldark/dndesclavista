@@ -151,7 +151,8 @@
     <!-- ÁREA CENTRAL: CANVAS TABLERO -->
     <section id="canvas-wrapper" class="canvas-wrapper">
       <div id="vtt-canvas-container" class="vtt-canvas-container">
-        <canvas id="vtt-canvas"></canvas>
+        <img id="vtt-map-bg" class="hidden" style="position: absolute; top: 0; left: 0; transform-origin: 0 0; pointer-events: none; z-index: 0;" alt="Map Background">
+        <canvas id="vtt-canvas" style="position: relative; z-index: 1;"></canvas>
       </div>
 
       <!-- Controles flotantes de Zoom y Posición -->
@@ -363,7 +364,7 @@
               <button id="btn-trigger-map-upload" type="button" class="btn btn-secondary btn-block">
                 <i class="fa-solid fa-image"></i> Subir Imagen de Mapa (Fondo)
               </button>
-              <input type="file" id="map-file-input" accept="image/png, image/jpeg, image/webp" class="hidden">
+              <input type="file" id="map-file-input" accept="image/png, image/jpeg, image/webp, image/gif" class="hidden">
               <button id="btn-clear-map-bg" class="btn btn-danger btn-sm btn-block mt-5"><i
                   class="fa-solid fa-trash"></i> Eliminar Imagen de Fondo</button>
             </div>

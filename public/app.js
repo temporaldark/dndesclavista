@@ -171,6 +171,7 @@
       canvasWrapper: document.getElementById('canvas-wrapper'),
       canvasContainer: document.getElementById('vtt-canvas-container'),
       canvas: document.getElementById('vtt-canvas'),
+      mapBgImg: document.getElementById('vtt-map-bg'),
       btnZoomIn: document.getElementById('btn-zoom-in'),
       btnZoomOut: document.getElementById('btn-zoom-out'),
       btnZoomReset: document.getElementById('btn-zoom-reset'),
@@ -514,7 +515,7 @@
       state.jugadoresConectados = jugadores || [];
     });
 
-    socket.on('dibujos_actualizados', (dibujos) => {
+    socket.on('dibujos_actualizadas', (dibujos) => {
       state.dibujos = dibujos || [];
       renderCanvas();
     });
@@ -624,12 +625,23 @@
       mapImage.src = '';
       return;
     }
-    mapImage = new Image();
-    mapImage.onload = () => {
-      mapImageLoaded = true;
+    const img = new Image();
+    img.onload = () => {
+      mapImage = img;
+      
+      if (src.startsWith('data:image/gif')) {
+        dom.mapBgImg.src = src;
+        dom.mapBgImg.classList.remove('hidden');
+        mapImage = null; // Don't render with canvas if it's a GIF
+      } else {
+        dom.mapBgImg.classList.add('hidden');
+        dom.mapBgImg.src = '';
+      }
+      
+      if (!isPanning) centerMap(); // Centrar si no se está haciendo pan actualmente
       renderCanvas();
     };
-    mapImage.src = src;
+    img.src = src;
   }
 
   function getTileSize() {
@@ -656,12 +668,18 @@
 
     ctx.save();
     ctx.translate(viewport.panX, viewport.panY);
+    ctx.scale(viewport.zoom, viewport.zoom);
+
+    // Sincronizar el img (GIF) si está activo
+    if (dom.mapBgImg && !dom.mapBgImg.classList.contains('hidden')) {
+      dom.mapBgImg.style.transform = `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`;
+    }
 
     const mapWidth = cols * tileSize;
     const mapHeight = rows * tileSize;
 
-    // 1. Dibujar Imagen de Mapa de Fondo
-    if (mapImageLoaded && mapImage.src) {
+    // 1. Dibujar Mapa de Fondo (si existe y no es GIF)
+    if (mapImage) {
       ctx.drawImage(mapImage, 0, 0, mapWidth, mapHeight);
     } else {
       // Fondo oscuro por defecto
