@@ -52,7 +52,8 @@ async function initDb() {
       fecha_modificacion TEXT,
       config_grid_x INTEGER DEFAULT 40,
       config_grid_y INTEGER DEFAULT 40,
-      config_casilla INTEGER DEFAULT 5
+      config_casilla INTEGER DEFAULT 5,
+      imagen_portada TEXT
     )
   `);
 
@@ -166,6 +167,13 @@ async function initDb() {
   // Add rotacion to figuras if it doesn't exist
   try {
     await dbRun(`ALTER TABLE figuras ADD COLUMN rotacion REAL DEFAULT 0`);
+  } catch (err) {
+    // Ignore error if column already exists
+  }
+
+  // Add imagen_portada to partidas if it doesn't exist
+  try {
+    await dbRun(`ALTER TABLE partidas ADD COLUMN imagen_portada TEXT`);
   } catch (err) {
     // Ignore error if column already exists
   }

@@ -32,6 +32,20 @@
 
   // --- ESTADO GLOBAL CLIENTE ---
   let socket = null;
+  let ytPlayer = null;
+  window.onYouTubeIframeAPIReady = function() {
+    ytPlayer = new YT.Player('youtube-player', {
+      height: '113',
+      width: '200',
+      playerVars: { 'autoplay': 1, 'controls': 1 },
+      events: {
+        'onReady': function(event) {
+          console.log('YouTube Player Ready');
+        }
+      }
+    });
+  };
+
   let state = {
     partida: null,
     escenaActiva: null,
@@ -356,7 +370,13 @@
       return;
     }
 
-    socket = io();
+    socket = io({
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000
+    });
 
     socket.on('estado_inicial', (data) => {
       state.partida = data.partida;
@@ -529,9 +549,9 @@
       showSaveIndicator('✅ Guardado');
     });
 
-    socket.on('evento_musica', ({ accion, url }) => {
+    socket.on('evento_musica', ({ accion, url, volume }) => {
       const container = document.getElementById('youtube-music-container');
-      const iframe = document.getElementById('youtube-iframe');
+      
       if (accion === 'play') {
         if (url) {
           // Extraer ID de YouTube
@@ -543,13 +563,21 @@
           else videoId = url; // asume que es el id directo si no coincide
           
           if (videoId) {
-            iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
             container.style.display = 'block';
+            if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
+              ytPlayer.loadVideoById(videoId);
+            }
           }
         }
       } else if (accion === 'stop') {
-        iframe.src = '';
+        if (ytPlayer && typeof ytPlayer.stopVideo === 'function') {
+          ytPlayer.stopVideo();
+        }
         container.style.display = 'none';
+      } else if (accion === 'volume') {
+        if (ytPlayer && typeof ytPlayer.setVolume === 'function') {
+          ytPlayer.setVolume(volume);
+        }
       }
     });
   }
@@ -1292,7 +1320,8 @@
 
     dom.formCreateGame.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const nombre = document.getElementById('new-game-name').value;
+      const nombre = document.getElementById('new-game-name').value.trim();
+      const imagenPortada = document.getElementById('new-game-image').value.trim();
       const cols = parseInt(document.getElementById('new-game-cols').value) || 40;
       const rows = parseInt(document.getElementById('new-game-rows').value) || 40;
       
@@ -1306,7 +1335,7 @@
         const res = await fetch('/api/partidas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre, creatorId: state.usuario.id, configGridX: cols, configGridY: rows })
+          body: JSON.stringify({ nombre, creatorId: state.usuario.id, configGridX: cols, configGridY: rows, imagenPortada })
         });
         const data = await res.json();
         closeModal(dom.modalCreateGame);
@@ -1423,11 +1452,15 @@
     const btnPlayMusic = document.getElementById('btn-play-music');
     const btnStopMusic = document.getElementById('btn-stop-music');
     const inputYtUrl = document.getElementById('yt-music-url');
+    const inputVolume = document.getElementById('music-volume');
     if (btnPlayMusic && btnStopMusic && inputYtUrl) {
       btnPlayMusic.addEventListener('click', () => {
         const url = inputYtUrl.value.trim();
         if (url && state.partida) {
           socket?.emit('evento_musica', { partidaId: state.partida.id, accion: 'play', url });
+          if (inputVolume) {
+            socket?.emit('evento_musica', { partidaId: state.partida.id, accion: 'volume', volume: parseInt(inputVolume.value) });
+          }
         }
       });
       btnStopMusic.addEventListener('click', () => {
@@ -1435,6 +1468,14 @@
           socket?.emit('evento_musica', { partidaId: state.partida.id, accion: 'stop' });
         }
       });
+      if (inputVolume) {
+        inputVolume.addEventListener('input', (e) => {
+          const volume = parseInt(e.target.value);
+          if (state.partida) {
+            socket?.emit('evento_musica', { partidaId: state.partida.id, accion: 'volume', volume });
+          }
+        });
+      }
     }
 
     // Pestañas Derechas
@@ -2377,7 +2418,9 @@
       partidas.forEach(p => {
         const card = document.createElement('div');
         card.className = 'game-card';
+        const imagenHtml = p.imagen_portada ? `<img src="${p.imagen_portada}" alt="Portada" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;">` : '';
         card.innerHTML = `
+          ${imagenHtml}
           <div class="card-title">${p.nombre}</div>
           <div class="card-meta">
             <span>Code: <strong>${p.codigo}</strong></span>

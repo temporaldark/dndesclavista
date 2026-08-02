@@ -326,6 +326,10 @@
               <input type="text" id="yt-music-url" placeholder="Ej: https://youtube.com/watch?v=...">
               <button id="btn-play-music" class="btn btn-primary btn-sm"><i class="fa-solid fa-play"></i> Reproducir</button>
             </div>
+            <div class="form-group" style="margin-top: 5px; display: flex; align-items: center; gap: 10px;">
+              <label for="music-volume" style="font-size: 0.8rem; margin: 0; white-space: nowrap;"><i class="fa-solid fa-volume-high"></i> Volumen:</label>
+              <input type="range" id="music-volume" min="0" max="100" value="50" style="flex-grow: 1;">
+            </div>
             <button id="btn-stop-music" class="btn btn-danger btn-sm btn-block" style="margin-top: 5px;"><i class="fa-solid fa-stop"></i> Detener Música</button>
           </div>
 
@@ -586,6 +590,10 @@
           <label>Nombre de la Partida *</label>
           <input type="text" id="new-game-name" required placeholder="Ej: La Mina Perdida de Phandelver">
         </div>
+        <div class="form-group">
+          <label>URL Imagen de Portada (Opcional)</label>
+          <input type="text" id="new-game-image" placeholder="https://ejemplo.com/imagen.jpg">
+        </div>
         <div class="form-row">
           <div class="form-group"><label>Grid Ancho (Cols)</label><input type="number" id="new-game-cols" value="40" min="10" max="500"></div>
           <div class="form-group"><label>Grid Alto (Filas)</label><input type="number" id="new-game-rows" value="40" min="10" max="500"></div>
@@ -630,8 +638,11 @@
     <div style="padding: 5px; background: #222; text-align: right; color: #fff;">
       <button onclick="document.getElementById('youtube-music-container').style.display='none'" style="background: none; border: none; color: white; cursor: pointer;">✕</button>
     </div>
-    <iframe id="youtube-iframe" width="200" height="113" src="" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+    <div id="youtube-player" style="width: 100%; height: 113px;"></div>
   </div>
+  
+  <!-- YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
 
   <!-- Cargar Socket.io -->
   <script src="/socket.io/socket.io.js"></script>

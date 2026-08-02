@@ -10,7 +10,13 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
-  maxHttpBufferSize: 1e8 // 100MB para imágenes de mapa base64 de alta resolución
+  maxHttpBufferSize: 1e8, // 100MB para imágenes de mapa base64 de alta resolución
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 2 * 60 * 1000,
+    skipMiddlewares: true
+  }
 });
 
 app.use(cors());
@@ -56,7 +62,7 @@ app.get('/api/partidas', async (req, res) => {
 // Crear una nueva partida
 app.post('/api/partidas', async (req, res) => {
   try {
-    const { nombre, creatorId, configGridX = 40, configGridY = 40, configCasilla = 5 } = req.body;
+    const { nombre, creatorId, configGridX = 40, configGridY = 40, configCasilla = 5, imagenPortada = null } = req.body;
     const partidaId = uuidv4();
     const escenaId = uuidv4();
     const codigo = generarCodigoPartida();
@@ -64,9 +70,9 @@ app.post('/api/partidas', async (req, res) => {
 
     // Insertar partida
     await dbRun(
-      `INSERT INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [partidaId, nombre || 'Nueva Partida', codigo, creatorId || null, escenaId, ahora, ahora, configGridX, configGridY, configCasilla]
+      `INSERT INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla, imagen_portada)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [partidaId, nombre || 'Nueva Partida', codigo, creatorId || null, escenaId, ahora, ahora, configGridX, configGridY, configCasilla, imagenPortada]
     );
 
     // Crear escena por defecto
@@ -184,9 +190,9 @@ app.post('/api/partidas/import', async (req, res) => {
 
     // Insertar partida
     await dbRun(
-      `INSERT INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [newPartidaId, (partida.nombre || 'Partida Restaurada') + ' (Restaurada)', newCodigo, partida.dm_id || null, null, ahora, ahora, partida.config_grid_x || 40, partida.config_grid_y || 40, partida.config_casilla || 5]
+      `INSERT INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla, imagen_portada)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [newPartidaId, (partida.nombre || 'Partida Restaurada') + ' (Restaurada)', newCodigo, partida.dm_id || null, null, ahora, ahora, partida.config_grid_x || 40, partida.config_grid_y || 40, partida.config_casilla || 5, partida.imagen_portada || null]
     );
 
     let firstNewEscenaId = null;
@@ -447,8 +453,8 @@ io.on('connection', (socket) => {
       const id = uuidv4();
       const {
         nombre, tipo, jugadorId, jugador_id, imagen, fuerza, destreza, constitucion,
-        inteligencia, sabiduria, carisma, hpActual, hpMaximo, ac, velocidad,
-        iniciativa, nivel, altura, tamanioBase, notas, x = 5, y = 5, revelado = 0
+        inteligencia, sabiduria, carisma, hpActual, hp_actual, hpMaximo, hp_maximo, ac, velocidad,
+        iniciativa, nivel, altura, tamanioBase, tamanio_base, notas, x = 5, y = 5, revelado = 0
       } = fichaData;
 
       const ownerId = jugador_id || jugadorId || socket.data?.usuarioId;
@@ -461,7 +467,7 @@ io.on('connection', (socket) => {
       await dbRun(
         `INSERT INTO fichas (id, partida_id, escena_id, nombre, tipo, jugador_id, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, notas, x, y, revelado)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, partidaId, escenaId, nombre, tipo || 'jugador', ownerId, imagen, fuerza || 10, destreza || 10, constitucion || 10, inteligencia || 10, sabiduria || 10, carisma || 10, hpActual || 10, hpMaximo || 10, ac || 10, velocidad || 30, iniciativa || 0, nivel || 1, altura || 2, tamanioBase || 'mediano', notas || '', x, y, revelado !== undefined ? revelado : defaultRevelado]
+        [id, partidaId, escenaId, nombre, tipo || 'jugador', ownerId, imagen, fuerza || 10, destreza || 10, constitucion || 10, inteligencia || 10, sabiduria || 10, carisma || 10, hpActual ?? hp_actual ?? 10, hpMaximo ?? hp_maximo ?? 10, ac ?? 10, velocidad ?? 30, iniciativa ?? 0, nivel ?? 1, altura ?? 2, tamanioBase || tamanio_base || 'mediano', notas || '', x, y, revelado !== undefined ? revelado : defaultRevelado]
       );
 
       const nuevaFicha = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [id]);
@@ -738,8 +744,8 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('evento_musica', ({ partidaId, accion, url }) => {
-    io.to(partidaId).emit('evento_musica', { accion, url });
+  socket.on('evento_musica', ({ partidaId, accion, url, volume }) => {
+    io.to(partidaId).emit('evento_musica', { accion, url, volume });
   });
 
   socket.on('disconnect', () => {
