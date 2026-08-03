@@ -77,8 +77,8 @@ app.post('/api/partidas', async (req, res) => {
 
     // Crear escena por defecto
     await dbRun(
-      `INSERT INTO escenas (id, partida_id, nombre, mapa) VALUES (?, ?, ?, ?)`,
-      [escenaId, partidaId, 'Mazmorra Principal', null]
+      `INSERT INTO escenas (id, partida_id, nombre, mapa, config_grid_x, config_grid_y, config_casilla) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [escenaId, partidaId, 'Mazmorra Principal', null, configGridX, configGridY, configCasilla]
     );
 
     res.json({ id: partidaId, codigo, escenaId });
@@ -205,8 +205,8 @@ app.post('/api/partidas/import', async (req, res) => {
         firstNewEscenaId = newEscenaId;
       }
       await dbRun(
-        `INSERT INTO escenas (id, partida_id, nombre, mapa) VALUES (?, ?, ?, ?)`,
-        [newEscenaId, newPartidaId, esc.nombre, esc.mapa || null]
+        `INSERT INTO escenas (id, partida_id, nombre, mapa, config_grid_x, config_grid_y, config_casilla) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [newEscenaId, newPartidaId, esc.nombre, esc.mapa || null, esc.config_grid_x || partida.config_grid_x || 40, esc.config_grid_y || partida.config_grid_y || 40, esc.config_casilla || partida.config_casilla || 5]
       );
     }
 
@@ -319,7 +319,7 @@ io.on('connection', (socket) => {
       }
 
       // Obtener listas completas
-      const escenas = await dbAll(`SELECT id, nombre FROM escenas WHERE partida_id = ?`, [partida.id]);
+      const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [partida.id]);
       const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ?`, [partida.id]);
       if (escenaActiva) {
         const posiciones = await dbAll(`SELECT * FROM posiciones_fichas WHERE escena_id = ?`, [escenaActiva.id]);
@@ -408,8 +408,9 @@ io.on('connection', (socket) => {
   socket.on('crear_escena', async ({ partidaId, nombre }) => {
     try {
       const escenaId = uuidv4();
-      await dbRun(`INSERT INTO escenas (id, partida_id, nombre, mapa) VALUES (?, ?, ?, ?)`, [escenaId, partidaId, nombre, null]);
-      const escenas = await dbAll(`SELECT id, nombre FROM escenas WHERE partida_id = ?`, [partidaId]);
+      const p = await dbGet(`SELECT config_grid_x, config_grid_y, config_casilla FROM partidas WHERE id = ?`, [partidaId]);
+      await dbRun(`INSERT INTO escenas (id, partida_id, nombre, mapa, config_grid_x, config_grid_y, config_casilla) VALUES (?, ?, ?, ?, ?, ?, ?)`, [escenaId, partidaId, nombre, null, p.config_grid_x, p.config_grid_y, p.config_casilla]);
+      const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [partidaId]);
       io.to(partidaId).emit('escenas_actualizadas', escenas);
     } catch (err) {
       console.error(err);
@@ -420,7 +421,7 @@ io.on('connection', (socket) => {
   socket.on('eliminar_escena', async ({ partidaId, escenaId }) => {
     try {
       await dbRun(`DELETE FROM escenas WHERE id = ?`, [escenaId]);
-      const escenas = await dbAll(`SELECT id, nombre FROM escenas WHERE partida_id = ?`, [partidaId]);
+      const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [partidaId]);
       io.to(partidaId).emit('escenas_actualizadas', escenas);
     } catch (err) {
       console.error(err);
@@ -439,13 +440,17 @@ io.on('connection', (socket) => {
   });
 
   // Actualizar tamaño de Grid (DM)
-  socket.on('actualizar_grid', async ({ partidaId, gridX, gridY, casilla }) => {
+  socket.on('actualizar_grid', async ({ partidaId, escenaId, gridX, gridY, casilla }) => {
     try {
+      await dbRun(
+        `UPDATE escenas SET config_grid_x = ?, config_grid_y = ?, config_casilla = ? WHERE id = ?`,
+        [gridX, gridY, casilla, escenaId]
+      );
       await dbRun(
         `UPDATE partidas SET config_grid_x = ?, config_grid_y = ?, config_casilla = ?, fecha_modificacion = ? WHERE id = ?`,
         [gridX, gridY, casilla, new Date().toISOString(), partidaId]
       );
-      io.to(partidaId).emit('grid_actualizado', { gridX, gridY, casilla });
+      io.to(partidaId).emit('grid_actualizado', { escenaId, gridX, gridY, casilla });
     } catch (err) {
       console.error(err);
     }

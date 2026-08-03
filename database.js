@@ -63,6 +63,9 @@ async function initDb() {
       partida_id TEXT NOT NULL,
       nombre TEXT NOT NULL,
       mapa TEXT,
+      config_grid_x INTEGER DEFAULT 40,
+      config_grid_y INTEGER DEFAULT 40,
+      config_casilla INTEGER DEFAULT 5,
       FOREIGN KEY (partida_id) REFERENCES partidas(id) ON DELETE CASCADE
     )
   `);
@@ -193,6 +196,15 @@ async function initDb() {
   // Add color_aro to fichas if it doesn't exist
   try {
     await dbRun(`ALTER TABLE fichas ADD COLUMN color_aro TEXT DEFAULT '#c9a84c'`);
+  } catch (err) {
+    // Ignore error if column already exists
+  }
+
+  // Add grid config to escenas if they don't exist
+  try {
+    await dbRun(`ALTER TABLE escenas ADD COLUMN config_grid_x INTEGER DEFAULT 40`);
+    await dbRun(`ALTER TABLE escenas ADD COLUMN config_grid_y INTEGER DEFAULT 40`);
+    await dbRun(`ALTER TABLE escenas ADD COLUMN config_casilla INTEGER DEFAULT 5`);
   } catch (err) {
     // Ignore error if column already exists
   }

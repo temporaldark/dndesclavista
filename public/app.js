@@ -412,6 +412,9 @@
       state.figuras = figuras || [];
       state.dibujos = dibujos || [];
       if (dom.currentSceneName) dom.currentSceneName.textContent = escenaActiva.nombre;
+      if (dom.gridColsInput) dom.gridColsInput.value = escenaActiva.config_grid_x || 40;
+      if (dom.gridRowsInput) dom.gridRowsInput.value = escenaActiva.config_grid_y || 40;
+      if (dom.gridFeetInput) dom.gridFeetInput.value = escenaActiva.config_casilla || 5;
       
       state.fichas.forEach(f => {
         const pos = (posiciones_fichas || []).find(p => p.ficha_id === f.id);
@@ -420,6 +423,8 @@
       });
 
       loadMapImage(escenaActiva.mapa);
+      renderFichasList();
+      renderTokenSelects();
       renderCanvas();
     });
 
@@ -436,11 +441,25 @@
       }
     });
 
-    socket.on('grid_actualizado', ({ gridX, gridY, casilla }) => {
+    socket.on('grid_actualizado', ({ escenaId, gridX, gridY, casilla }) => {
       if (state.partida) {
         state.partida.config_grid_x = gridX;
         state.partida.config_grid_y = gridY;
         state.partida.config_casilla = casilla;
+      }
+      const esc = state.escenas.find(e => e.id === escenaId);
+      if (esc) {
+        esc.config_grid_x = gridX;
+        esc.config_grid_y = gridY;
+        esc.config_casilla = casilla;
+      }
+      if (state.escenaActiva && state.escenaActiva.id === escenaId) {
+        state.escenaActiva.config_grid_x = gridX;
+        state.escenaActiva.config_grid_y = gridY;
+        state.escenaActiva.config_casilla = casilla;
+        if (dom.gridColsInput) dom.gridColsInput.value = gridX;
+        if (dom.gridRowsInput) dom.gridRowsInput.value = gridY;
+        if (dom.gridFeetInput) dom.gridFeetInput.value = casilla;
         renderCanvas();
       }
     });
@@ -662,8 +681,8 @@
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const cols = state.partida?.config_grid_x || 40;
-    const rows = state.partida?.config_grid_y || 40;
+    const cols = state.escenaActiva?.config_grid_x || state.partida?.config_grid_x || 40;
+    const rows = state.escenaActiva?.config_grid_y || state.partida?.config_grid_y || 40;
     const tileSize = viewport.tileSize; // Se usa base para no escalar 2 veces
 
     ctx.save();
@@ -796,7 +815,8 @@
     }
 
     // 5. Dibujar Fichas / Tokens de Personaje
-    (state.fichas || []).forEach(ficha => {
+    const fichasEnEscena = (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id);
+    fichasEnEscena.forEach(ficha => {
       const isMonster = ficha.tipo === 'monstruo' || ficha.tipo === 'npc';
       const isPlayerView = !state.usuario.esDM;
       const visibility = getFichaVisibility(ficha);
@@ -965,7 +985,7 @@
 
       // Distancia en casillas y pies
       const distTiles = Math.hypot(measureCurrent.x - measureStart.x, measureCurrent.y - measureStart.y);
-      const feetPerTile = state.partida?.config_casilla || 5;
+      const feetPerTile = state.escenaActiva?.config_casilla || state.partida?.config_casilla || 5;
       const totalFeet = Math.round(distTiles * feetPerTile);
 
       ctx.fillStyle = '#f0d060';
@@ -1760,7 +1780,7 @@
       const gridY = parseInt(dom.gridRowsInput.value) || 40;
       const casilla = parseInt(dom.gridFeetInput.value) || 5;
 
-      socket?.emit('actualizar_grid', { partidaId: state.partida.id, gridX, gridY, casilla });
+      socket?.emit('actualizar_grid', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, gridX, gridY, casilla });
     });
 
     dom.btnSaveCurrentTemplate.addEventListener('click', () => {
@@ -2078,9 +2098,9 @@
       document.querySelectorAll('.dm-only').forEach(el => el.classList.add('hidden'));
     }
 
-    dom.gridColsInput.value = state.partida.config_grid_x || 40;
-    dom.gridRowsInput.value = state.partida.config_grid_y || 40;
-    dom.gridFeetInput.value = state.partida.config_casilla || 5;
+    dom.gridColsInput.value = state.escenaActiva?.config_grid_x || state.partida.config_grid_x || 40;
+    dom.gridRowsInput.value = state.escenaActiva?.config_grid_y || state.partida.config_grid_y || 40;
+    dom.gridFeetInput.value = state.escenaActiva?.config_casilla || state.partida.config_casilla || 5;
 
     renderFichasList();
     renderTokenSelects();
@@ -2095,7 +2115,7 @@
     dom.fichasList.innerHTML = '';
     const filter = dom.filterFichasInput.value.toLowerCase();
 
-    let listToRender = [...(state.fichas || [])];
+    let listToRender = [...(state.fichas || [])].filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id);
     if (sortInitiative) {
       listToRender.sort((a, b) => (b.iniciativa || 0) - (a.iniciativa || 0));
     }
@@ -2234,7 +2254,7 @@
     dom.diceTokenSelect.innerHTML = '<option value="">-- Sin ficha (Jugador) --</option>';
     dom.hdTokenSelect.innerHTML = '';
 
-    (state.fichas || []).forEach(f => {
+    (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id).forEach(f => {
       const esPropia = esDuenioDeFicha(f);
 
       const opt = document.createElement('option');
@@ -2255,7 +2275,7 @@
   function updateDiceTargetOptions(classif) {
     dom.diceTargetSelect.innerHTML = '<option value="">-- Sin objetivo --</option>';
 
-    (state.fichas || []).forEach(f => {
+    (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id).forEach(f => {
       const visibility = getFichaVisibility(f);
       let include = false;
 
@@ -2307,7 +2327,7 @@
 
     listEl.innerHTML = '';
 
-    (state.fichas || []).forEach(f => {
+    (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id).forEach(f => {
       const visibility = getFichaVisibility(f);
       let include = false;
 
