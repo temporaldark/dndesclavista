@@ -102,7 +102,7 @@ app.get('/api/gifs', async (req, res) => {
   const query = req.query.q || 'dnd';
   try {
     const apiKey = 'AIzaSyCZt6SSh5VgVPzD9fhyzG1DprdPRhtoaR4'; // Public V2 key embedded in Tenor frontend
-    const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${apiKey}&client_key=dnd_vtt&limit=20`;
+    const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${apiKey}&client_key=tenor_web&limit=20`;
     const response = await fetch(url);
     const data = await response.json();
     
