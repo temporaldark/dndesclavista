@@ -768,6 +768,28 @@ io.on('connection', (socket) => {
     io.to(partidaId).emit('evento_musica', { accion, url, volume });
   });
 
+  // Toggle DM status (DM only)
+  socket.on('toggle_dm', async ({ partidaId, targetUsuarioId, makeDM }) => {
+    try {
+      if (!socket.data?.esDM) return; // Only current DMs can grant/revoke DM
+
+      const pUsers = connectedUsers.get(partidaId);
+      if (pUsers && pUsers.has(targetUsuarioId)) {
+        const targetUser = pUsers.get(targetUsuarioId);
+        targetUser.esDM = makeDM;
+        
+        // Notify the specific user to update their UI
+        io.to(targetUser.socketId).emit('update_dm_status', { esDM: makeDM });
+        
+        // Update the full list for everyone
+        const jugadoresConectados = Array.from(pUsers.values());
+        io.to(partidaId).emit('lista_jugadores', jugadoresConectados);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log(`❌ Cliente desconectado: ${socket.id}`);
     

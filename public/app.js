@@ -84,9 +84,9 @@
   };
 
   let activeTool = 'move'; // 'move', 'measure', 'draw', 'erase', 'figures', 'healdamage'
-  let selectedFichaId = null;
+  let selectedFichasIds = [];
   let isDraggingToken = false;
-  let dragOffset = { x: 0, y: 0 };
+  let dragOffsets = {};
   let isDraggingFigure = false;
   let selectedFigureId = null;
 
@@ -231,6 +231,7 @@
 
       // Panel DM
       scenesList: document.getElementById('scenes-list'),
+      dmPlayersList: document.getElementById('dm-players-list'),
       newSceneName: document.getElementById('new-scene-name'),
       btnCreateScene: document.getElementById('btn-create-scene'),
       mapFileInput: document.getElementById('map-file-input'),
@@ -529,9 +530,15 @@
       renderCanvas();
     });
 
+    socket.on('update_dm_status', ({ esDM }) => {
+      state.usuario.esDM = esDM;
+      updateUIForCurrentGame();
+    });
+
     // Lista de jugadores conectados (para menú de visibilidad)
     socket.on('lista_jugadores', (jugadores) => {
       state.jugadoresConectados = jugadores || [];
+      renderDmPlayersList();
     });
 
     socket.on('dibujos_actualizadas', (dibujos) => {
@@ -840,9 +847,9 @@
       }
 
       // Borde exterior / resplandor si está seleccionada
-      if (ficha.id === selectedFichaId) {
-        ctx.strokeStyle = '#f0d060';
-        ctx.lineWidth = 4;
+      if (selectedFichasIds.includes(ficha.id)) {
+        ctx.shadowColor = '#f0d060';
+        ctx.shadowBlur = 15;
         ctx.shadowColor = '#f0d060';
         ctx.shadowBlur = 10;
         ctx.beginPath();
@@ -1033,10 +1040,27 @@
         // Verificar permisos: DM o dueño directo de la ficha
         const esDuenio = esDuenioDeFicha(clickedFicha);
         if (esDuenio) {
-          selectedFichaId = clickedFicha.id;
-          if (dom.diceTokenSelect) dom.diceTokenSelect.value = clickedFicha.id;
-          isDraggingToken = true;
-          dragOffset = { x: gridPos.x - clickedFicha.x, y: gridPos.y - clickedFicha.y };
+          if (!e.shiftKey && !selectedFichasIds.includes(clickedFicha.id)) {
+            selectedFichasIds = [clickedFicha.id];
+          } else if (e.shiftKey) {
+            if (selectedFichasIds.includes(clickedFicha.id)) {
+              selectedFichasIds = selectedFichasIds.filter(id => id !== clickedFicha.id);
+            } else {
+              selectedFichasIds.push(clickedFicha.id);
+            }
+          }
+          
+          if (dom.diceTokenSelect) dom.diceTokenSelect.value = selectedFichasIds[0] || '';
+          isDraggingToken = selectedFichasIds.length > 0;
+          
+          dragOffsets = {};
+          selectedFichasIds.forEach(id => {
+            const f = state.fichas.find(fi => fi.id === id);
+            if (f) {
+              dragOffsets[id] = { x: gridPos.x - f.x, y: gridPos.y - f.y };
+            }
+          });
+          
           renderFichasList();
           renderCanvas();
           return;
@@ -1124,25 +1148,35 @@
   function handleMouseMove(e) {
     const gridPos = screenToGrid(e.clientX, e.clientY);
 
-    if (isDraggingToken && selectedFichaId) {
-      const ficha = state.fichas.find(f => f.id === selectedFichaId);
-      if (ficha) {
-        ficha.x = gridPos.x - dragOffset.x;
-        ficha.y = gridPos.y - dragOffset.y;
-        renderCanvas();
+    if (isDraggingToken && selectedFichasIds.length > 0) {
+      const now = Date.now();
+      let didMove = false;
 
-        // Emitir posición en tiempo real a la sala (throttled cada 40ms)
-        const now = Date.now();
+      selectedFichasIds.forEach(id => {
+        const ficha = state.fichas.find(f => f.id === id);
+        if (ficha && dragOffsets[id]) {
+          ficha.x = gridPos.x - dragOffsets[id].x;
+          ficha.y = gridPos.y - dragOffsets[id].y;
+          didMove = true;
+
+          // Emitir posición en tiempo real a la sala (throttled cada 40ms)
+          if (now - lastMoveEmitTime > 40) {
+            socket?.emit('mover_ficha', {
+              partidaId: state.partida.id,
+              escenaId: state.escenaActiva.id,
+              fichaId: ficha.id,
+              x: ficha.x,
+              y: ficha.y
+            });
+          }
+        }
+      });
+      
+      if (didMove) {
         if (now - lastMoveEmitTime > 40) {
           lastMoveEmitTime = now;
-          socket?.emit('mover_ficha', {
-            partidaId: state.partida.id,
-            escenaId: state.escenaActiva.id,
-            fichaId: ficha.id,
-            x: ficha.x,
-            y: ficha.y
-          });
         }
+        renderCanvas();
       }
     } else if (isDraggingFigure && selectedFigureId) {
       const fig = state.figuras.find(f => f.id === selectedFigureId);
@@ -1165,20 +1199,22 @@
   }
 
   function handleMouseUp() {
-    if (isDraggingToken && selectedFichaId) {
-      const ficha = state.fichas.find(f => f.id === selectedFichaId);
-      if (ficha) {
-        // Snap al grid en números enteros más cercanos
-        ficha.x = Math.round(ficha.x);
-        ficha.y = Math.round(ficha.y);
-        socket?.emit('mover_ficha', {
-          partidaId: state.partida.id,
-          escenaId: state.escenaActiva.id,
-          fichaId: ficha.id,
-          x: ficha.x,
-          y: ficha.y
-        });
-      }
+    if (isDraggingToken && selectedFichasIds.length > 0) {
+      selectedFichasIds.forEach(id => {
+        const ficha = state.fichas.find(f => f.id === id);
+        if (ficha) {
+          // Snap al grid en números enteros más cercanos
+          ficha.x = Math.round(ficha.x);
+          ficha.y = Math.round(ficha.y);
+          socket?.emit('mover_ficha', {
+            partidaId: state.partida.id,
+            escenaId: state.escenaActiva.id,
+            fichaId: ficha.id,
+            x: ficha.x,
+            y: ficha.y
+          });
+        }
+      });
     }
 
     if (isDraggingFigure && selectedFigureId) {
@@ -1664,9 +1700,18 @@
       if (e.key === 'Enter') sendChatMessage();
     });
 
-    dom.btnOpenGifModal.addEventListener('click', () => {
-      renderGifGrid(PRESET_GIFS);
+    dom.btnOpenGifModal.addEventListener('click', async () => {
       openModal(dom.modalGifPicker);
+      dom.gifGrid.innerHTML = '<p style="color:white; text-align:center; width:100%;">Cargando GIFs...</p>';
+      try {
+        const res = await fetch(`/api/gifs?q=dnd`);
+        if (res.ok) {
+          const fetchedGifs = await res.json();
+          renderGifGrid(fetchedGifs);
+        }
+      } catch (e) {
+        console.error(e);
+      }
     });
 
     let searchTimeout;
@@ -1675,24 +1720,20 @@
       clearTimeout(searchTimeout);
 
       if (!q) {
-        renderGifGrid(PRESET_GIFS);
+        dom.gifGrid.innerHTML = '';
         return;
       }
 
       searchTimeout = setTimeout(async () => {
         try {
-          // Usa el endpoint local del servidor que escrapea Tenor
+          dom.gifGrid.innerHTML = '<p style="color:white; text-align:center; width:100%;">Buscando...</p>';
           const res = await fetch(`/api/gifs?q=${encodeURIComponent(q)}`);
           if (res.ok) {
             const fetchedGifs = await res.json();
-            renderGifGrid(fetchedGifs.length > 0 ? fetchedGifs : PRESET_GIFS.filter(g => g.name.toLowerCase().includes(q) || g.tag.toLowerCase().includes(q)));
-          } else {
-            const filtered = PRESET_GIFS.filter(g => g.name.toLowerCase().includes(q) || g.tag.toLowerCase().includes(q));
-            renderGifGrid(filtered);
+            renderGifGrid(fetchedGifs);
           }
         } catch (err) {
-          const filtered = PRESET_GIFS.filter(g => g.name.toLowerCase().includes(q) || g.tag.toLowerCase().includes(q));
-          renderGifGrid(filtered);
+          console.error(err);
         }
       }, 500);
     });
@@ -1784,11 +1825,11 @@
     });
 
     dom.btnSaveCurrentTemplate.addEventListener('click', () => {
-      if (!selectedFichaId) {
+      if (selectedFichasIds.length === 0) {
         alert('Por favor selecciona una ficha primero en la pestaña Fichas.');
         return;
       }
-      const ficha = state.fichas.find(f => f.id === selectedFichaId);
+      const ficha = state.fichas.find(f => f.id === selectedFichasIds[0]);
       if (ficha) {
         socket?.emit('guardar_galeria', { partidaId: state.partida.id, nombre: ficha.nombre, datos: ficha });
       }
@@ -2049,7 +2090,7 @@
       const tileSize = getTileSize();
       viewport.panX = canvas.width / 2 - (ficha.x * tileSize);
       viewport.panY = canvas.height / 2 - (ficha.y * tileSize);
-      selectedFichaId = ficha.id;
+      selectedFichasIds = [ficha.id];
       renderCanvas();
     }
   }
@@ -2109,6 +2150,41 @@
     renderChatMessages();
     renderHistoryTable();
     renderQuickHistory();
+    renderDmPlayersList();
+  }
+
+  function renderDmPlayersList() {
+    if (!dom.dmPlayersList) return;
+    dom.dmPlayersList.innerHTML = '';
+    (state.jugadoresConectados || []).forEach(j => {
+      const isMe = j.id === state.usuario.id;
+      const btnMakeDM = state.usuario.esDM && !j.esDM ? `<button class="btn btn-sm btn-primary btn-make-dm" style="margin-left:8px;" data-id="${j.id}">Hacer DM</button>` : '';
+      const btnRemoveDM = state.usuario.esDM && j.esDM && !isMe ? `<button class="btn btn-sm btn-danger btn-remove-dm" style="margin-left:8px;" data-id="${j.id}">Quitar DM</button>` : '';
+      
+      const div = document.createElement('div');
+      div.className = 'dm-player-item';
+      div.style = 'display: flex; justify-content: space-between; align-items: center; padding: 5px; background: rgba(0,0,0,0.3); border-radius: 4px;';
+      div.innerHTML = `
+        <span><i class="fa-solid fa-user${j.esDM ? '-shield gold-text' : ''}"></i> ${j.nombre}</span>
+        <div>${btnMakeDM}${btnRemoveDM}</div>
+      `;
+      
+      const btnMake = div.querySelector('.btn-make-dm');
+      if (btnMake) {
+        btnMake.addEventListener('click', () => {
+          socket?.emit('toggle_dm', { partidaId: state.partida.id, targetUsuarioId: j.id, makeDM: true });
+        });
+      }
+      
+      const btnRemove = div.querySelector('.btn-remove-dm');
+      if (btnRemove) {
+        btnRemove.addEventListener('click', () => {
+          socket?.emit('toggle_dm', { partidaId: state.partida.id, targetUsuarioId: j.id, makeDM: false });
+        });
+      }
+      
+      dom.dmPlayersList.appendChild(div);
+    });
   }
 
   function renderFichasList() {
@@ -2129,7 +2205,7 @@
       if (filter && !ficha.nombre.toLowerCase().includes(filter)) return;
 
       const card = document.createElement('div');
-      card.className = `ficha-card ${ficha.id === selectedFichaId ? 'selected' : ''}`;
+      card.className = `ficha-card ${selectedFichasIds.includes(ficha.id) ? 'selected' : ''}`;
 
       const isMonster = ficha.tipo === 'monstruo' || ficha.tipo === 'npc';
       const isPlayerView = !state.usuario.esDM;
@@ -2240,8 +2316,18 @@
 
       card.addEventListener('click', (e) => {
         if (e.target.closest('button') || e.target.closest('img')) return;
-        selectedFichaId = ficha.id;
-        if (dom.diceTokenSelect) dom.diceTokenSelect.value = ficha.id;
+        
+        if (e.shiftKey) {
+          if (selectedFichasIds.includes(ficha.id)) {
+            selectedFichasIds = selectedFichasIds.filter(id => id !== ficha.id);
+          } else {
+            selectedFichasIds.push(ficha.id);
+          }
+        } else {
+          selectedFichasIds = [ficha.id];
+        }
+        
+        if (dom.diceTokenSelect) dom.diceTokenSelect.value = selectedFichasIds[0] || '';
         renderFichasList();
         renderCanvas();
       });
