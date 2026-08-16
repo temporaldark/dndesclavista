@@ -6,30 +6,6 @@
 (function () {
   'use strict';
 
-  // --- COLECCIÓN DE 20 GIFS TEMÁTICOS DE D&D ---
-  const PRESET_GIFS = [
-    { name: 'Dado d20 Crítico', url: 'https://media.giphy.com/media/3o7TKrEzvLbsVAud8I/giphy.gif', tag: 'dado' },
-    { name: 'Dragón Fuego', url: 'https://media.giphy.com/media/l41YkFIiBxQdRlMnC/giphy.gif', tag: 'dragon' },
-    { name: 'Mago Hechizo', url: 'https://media.giphy.com/media/l2Jhv95fOGznTSRZ6/giphy.gif', tag: 'mago' },
-    { name: 'Guerrero Ataque', url: 'https://media.giphy.com/media/3oKIPkOgsH64rz0uPO/giphy.gif', tag: 'ataque' },
-    { name: 'Fallo Pifia d20', url: 'https://media.giphy.com/media/26ufcVAp3AiJJsrIs/giphy.gif', tag: 'dado' },
-    { name: 'Tesoro Cofre', url: 'https://media.giphy.com/media/3o6Mb5XDALv9c3qQeY/giphy.gif', tag: 'tesoro' },
-    { name: 'Taberna Cerveza', url: 'https://media.giphy.com/media/l0HlHJGHe3yAMhdQY/giphy.gif', tag: 'taberna' },
-    { name: 'Rogue Escondido', url: 'https://media.giphy.com/media/3o7TKTDn976rzVgky4/giphy.gif', tag: 'rogue' },
-    { name: 'Orco Furia', url: 'https://media.giphy.com/media/l41Ye03sVz56VjPZC/giphy.gif', tag: 'monstruo' },
-    { name: 'Curación Aura', url: 'https://media.giphy.com/media/3o7TKMt1VVNkHV2PaE/giphy.gif', tag: 'hechizo' },
-    { name: 'Explosión Bola de Fuego', url: 'https://media.giphy.com/media/xT0Gqs2LQIevTVmjNm/giphy.gif', tag: 'fuego' },
-    { name: 'Esqueleto Danza', url: 'https://media.giphy.com/media/QuxqWk7m9ffxyfoa0a/giphy.gif', tag: 'monstruo' },
-    { name: 'D20 Rodando', url: 'https://media.giphy.com/media/xT9IgG50lhyPMOCURy/giphy.gif', tag: 'dado' },
-    { name: 'Clérigo Luz', url: 'https://media.giphy.com/media/3o7TKpmf61254f14vC/giphy.gif', tag: 'hechizo' },
-    { name: 'Mimic Cofre', url: 'https://media.giphy.com/media/3o7TKvhW3S7dJ4jEHu/giphy.gif', tag: 'monstruo' },
-    { name: 'Iniciativa Combate', url: 'https://media.giphy.com/media/l0HlQXkh1wx1RjtUA/giphy.gif', tag: 'ataque' },
-    { name: 'Risa DM Malvado', url: 'https://media.giphy.com/media/xl5QdxfNonh3q/giphy.gif', tag: 'dm' },
-    { name: 'Victoria Nivel Up', url: 'https://media.giphy.com/media/l46CvkT8i3aQ2GjLi/giphy.gif', tag: 'victoria' },
-    { name: 'Trampa Calabozo', url: 'https://media.giphy.com/media/3o6Zt62PeJedb4LQI8/giphy.gif', tag: 'trampa' },
-    { name: 'Huida Correr', url: 'https://media.giphy.com/media/3o7ZetMrj4XA0S0Gre/giphy.gif', tag: 'huida' }
-  ];
-
   // --- ESTADO GLOBAL CLIENTE ---
   let socket = null;
   let ytPlayer = null;
@@ -218,7 +194,6 @@
       chatMessagesContainer: document.getElementById('chat-messages-container'),
       chatTextInput: document.getElementById('chat-text-input'),
       btnSendChat: document.getElementById('btn-send-chat'),
-      btnOpenGifModal: document.getElementById('btn-open-gif-modal'),
 
       // Historial
       searchHistoryInput: document.getElementById('search-history-input'),
@@ -257,9 +232,6 @@
       btnApplyDamage: document.getElementById('btn-apply-damage'),
       btnApplyHeal: document.getElementById('btn-apply-heal'),
 
-      modalGifPicker: document.getElementById('modal-gif-picker'),
-      gifSearchInput: document.getElementById('gif-search-input'),
-      gifGrid: document.getElementById('gif-grid'),
       modalGifView: document.getElementById('modal-gif-view'),
       enlargedGifImg: document.getElementById('enlarged-gif-img'),
       enlargedImgTitle: document.getElementById('enlarged-img-title'),
@@ -1700,44 +1672,6 @@
       if (e.key === 'Enter') sendChatMessage();
     });
 
-    dom.btnOpenGifModal.addEventListener('click', async () => {
-      openModal(dom.modalGifPicker);
-      dom.gifGrid.innerHTML = '<p style="color:white; text-align:center; width:100%;">Cargando GIFs...</p>';
-      try {
-        const res = await fetch(`/api/gifs?q=dnd`);
-        if (res.ok) {
-          const fetchedGifs = await res.json();
-          renderGifGrid(fetchedGifs);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    });
-
-    let searchTimeout;
-    dom.gifSearchInput.addEventListener('input', (e) => {
-      const q = e.target.value.trim().toLowerCase();
-      clearTimeout(searchTimeout);
-
-      if (!q) {
-        dom.gifGrid.innerHTML = '';
-        return;
-      }
-
-      searchTimeout = setTimeout(async () => {
-        try {
-          dom.gifGrid.innerHTML = '<p style="color:white; text-align:center; width:100%;">Buscando...</p>';
-          const res = await fetch(`/api/gifs?q=${encodeURIComponent(q)}`);
-          if (res.ok) {
-            const fetchedGifs = await res.json();
-            renderGifGrid(fetchedGifs);
-          }
-        } catch (err) {
-          console.error(err);
-        }
-      }, 500);
-    });
-
     // Historial
     dom.btnHistPrev.addEventListener('click', () => {
       if (historyPage > 1) {
@@ -2035,10 +1969,22 @@
     }
   }
 
-  // --- CHAT Y GIFS ---
+  // --- CHAT ---
+  // Regex para detectar URLs de imagen/gif
+  const IMAGE_URL_REGEX = /^https?:\/\/\S+\.(gif|png|jpg|jpeg|webp)(\?\S*)?$/i;
+  const TENOR_URL_REGEX = /^https?:\/\/(media[0-9]?\.tenor\.com|c\.tenor\.com|tenor\.com\/view)\/\S+/i;
+  const GIPHY_URL_REGEX = /^https?:\/\/(media[0-9]?\.giphy\.com|giphy\.com\/gifs)\/\S+/i;
+
+  function isImageUrl(text) {
+    return IMAGE_URL_REGEX.test(text) || TENOR_URL_REGEX.test(text) || GIPHY_URL_REGEX.test(text);
+  }
+
   function sendChatMessage() {
     const mensaje = dom.chatTextInput.value.trim();
     if (!mensaje) return;
+
+    // Detectar automáticamente si es una URL de imagen/GIF
+    const esGif = isImageUrl(mensaje);
 
     socket?.emit('enviar_mensaje', {
       partidaId: state.partida.id,
@@ -2046,7 +1992,7 @@
       nombreUsuario: state.usuario.nombre,
       colorUsuario: state.usuario.color,
       mensaje,
-      esGif: false
+      esGif
     });
 
     dom.chatTextInput.value = '';
@@ -2066,10 +2012,15 @@
 
     div.appendChild(senderSpan);
 
-    if (msg.es_gif) {
+    if (msg.es_gif || isImageUrl(msg.mensaje)) {
       const img = document.createElement('img');
       img.src = msg.mensaje;
       img.className = 'chat-gif-img';
+      img.style.maxWidth = '100%';
+      img.style.maxHeight = '200px';
+      img.style.borderRadius = '6px';
+      img.style.marginTop = '4px';
+      img.style.cursor = 'pointer';
       img.addEventListener('click', () => {
         dom.enlargedGifImg.src = msg.mensaje;
         openModal(dom.modalGifView);
@@ -2097,28 +2048,6 @@
 
   function scrollChatToBottom() {
     dom.chatMessagesContainer.scrollTop = dom.chatMessagesContainer.scrollHeight;
-  }
-
-  function renderGifGrid(gifs) {
-    dom.gifGrid.innerHTML = '';
-    gifs.forEach(gif => {
-      const img = document.createElement('img');
-      img.src = gif.url;
-      img.className = 'gif-item';
-      img.title = gif.name;
-      img.addEventListener('click', () => {
-        socket?.emit('enviar_mensaje', {
-          partidaId: state.partida.id,
-          usuarioId: state.usuario.id,
-          nombreUsuario: state.usuario.nombre,
-          colorUsuario: state.usuario.color,
-          mensaje: gif.url,
-          esGif: true
-        });
-        closeModal(dom.modalGifPicker);
-      });
-      dom.gifGrid.appendChild(img);
-    });
   }
 
   // --- RENDERIZADO DE LISTAS E INTERFAZ ---

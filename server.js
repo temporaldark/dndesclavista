@@ -97,38 +97,6 @@ app.delete('/api/partidas/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// Buscar GIFs via scraper de Tenor
-app.get('/api/gifs', async (req, res) => {
-  const query = req.query.q || 'dnd';
-  try {
-    const apiKey = 'AIzaSyCZt6SSh5VgVPzD9fhyzG1DprdPRhtoaR4'; // Public V2 key embedded in Tenor frontend
-    const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${apiKey}&client_key=tenor_web&limit=20`;
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    if (data && data.results) {
-      const gifs = data.results.map(gif => {
-        let bestUrl = '';
-        if (gif.media_formats?.tinygif?.url) bestUrl = gif.media_formats.tinygif.url;
-        else if (gif.media_formats?.gif?.url) bestUrl = gif.media_formats.gif.url;
-        else if (gif.media_formats?.mediumgif?.url) bestUrl = gif.media_formats.mediumgif.url;
-        
-        return {
-          url: bestUrl,
-          name: gif.title || query,
-          tag: query
-        };
-      }).filter(g => g.url);
-      
-      res.json(gifs);
-    } else {
-      res.json([]);
-    }
-  } catch (err) {
-    console.error('Error fetching gifs from Tenor API V2:', err);
-    res.json([]);
-  }
-});
 
 // Exportar partida completa (Backup JSON para guardar en Escritorio)
 app.get('/api/partidas/:id/export', async (req, res) => {

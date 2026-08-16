@@ -278,14 +278,9 @@
           <div id="chat-messages-container" class="chat-messages-container">
             <!-- Mensajes de chat -->
           </div>
-          <div class="chat-input-bar">
-            <button id="btn-open-gif-modal" class="btn btn-secondary btn-icon" title="Insertar GIF">
-              🎬 GIF
-            </button>
-            <input type="text" id="chat-text-input" placeholder="Escribe tu mensaje..." autocomplete="off">
-            <button id="btn-send-chat" class="btn btn-primary">
-              <i class="fa-solid fa-paper-plane"></i>
-            </button>
+          <div class="chat-input-area">
+            <input type="text" id="chat-text-input" placeholder="Escribe un mensaje o pega un link de imagen/GIF..." autocomplete="off">
+            <button id="btn-send-chat" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i></button>
           </div>
         </div>
 
@@ -533,25 +528,6 @@
             Daño</button>
           <button id="btn-apply-heal" class="btn btn-success flex-1"><i class="fa-solid fa-notes-medical"></i> Aplicar
             Curación</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: SELECTOR DE GIFS PARA CHAT -->
-  <div id="modal-gif-picker" class="modal-overlay hidden">
-    <div class="modal-content modal-md">
-      <div class="modal-header">
-        <h3>🎬 Galería de GIFs D&D</h3>
-        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modal-body">
-        <div class="search-box mb-10">
-          <input type="text" id="gif-search-input"
-            placeholder="🔍 Filtrar GIFs por categoría (dragón, dado, ataque...)...">
-        </div>
-        <div id="gif-grid" class="gif-grid">
-          <!-- Colección de 20 GIFs de D&D y Fantasía -->
         </div>
       </div>
     </div>
