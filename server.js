@@ -101,23 +101,17 @@ app.delete('/api/partidas/:id', async (req, res) => {
 app.get('/api/gifs', async (req, res) => {
   const query = req.query.q || 'dnd';
   try {
-    const url = `https://tenor.com/search/${encodeURIComponent(query)}-gifs`;
+    const apiKey = 'AIzaSyCZt6SSh5VgVPzD9fhyzG1DprdPRhtoaR4'; // Public V2 key embedded in Tenor frontend
+    const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=${apiKey}&client_key=dnd_vtt&limit=20`;
     const response = await fetch(url);
-    const html = await response.text();
+    const data = await response.json();
     
-    // Scrape window.__PRELOADED_STATE__ from Tenor HTML
-    const regex = /window\.__PRELOADED_STATE__\s*=\s*(\{.*?\});\s*<\/script>/;
-    const match = html.match(regex);
-    if (match && match[1]) {
-      const state = JSON.parse(match[1]);
-      const results = state.gifs?.byId || {};
-      const gifs = Object.values(results).map(gif => {
-        // Find best tiny or regular gif URL
+    if (data && data.results) {
+      const gifs = data.results.map(gif => {
         let bestUrl = '';
         if (gif.media_formats?.tinygif?.url) bestUrl = gif.media_formats.tinygif.url;
         else if (gif.media_formats?.gif?.url) bestUrl = gif.media_formats.gif.url;
         else if (gif.media_formats?.mediumgif?.url) bestUrl = gif.media_formats.mediumgif.url;
-        else if (gif.media_formats?.gifpreview?.url) bestUrl = gif.media_formats.gifpreview.url;
         
         return {
           url: bestUrl,
@@ -126,12 +120,12 @@ app.get('/api/gifs', async (req, res) => {
         };
       }).filter(g => g.url);
       
-      res.json(gifs.slice(0, 20));
+      res.json(gifs);
     } else {
       res.json([]);
     }
   } catch (err) {
-    console.error('Error fetching gifs from Tenor API proxy:', err);
+    console.error('Error fetching gifs from Tenor API V2:', err);
     res.json([]);
   }
 });
