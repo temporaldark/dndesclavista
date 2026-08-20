@@ -272,11 +272,6 @@ app.post('/api/partidas/import', async (req, res) => {
 io.on('connection', (socket) => {
   console.log(`🔌 Cliente conectado: ${socket.id}`);
 
-  // Responder al ping del cliente para medir latencia
-  socket.on('ping_check', (timestamp) => {
-    socket.emit('pong_check', timestamp);
-  });
-
   // Unirse a una partida con código
   socket.on('unirse_partida', async ({ codigo, nombreUsuario, usuarioId, esDMRequested }) => {
     try {
@@ -521,6 +516,20 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Toggle Ocultar Ficha (DM)
+  socket.on('toggle_oculto', async ({ partidaId, fichaId }) => {
+    try {
+      const ficha = await dbGet(`SELECT oculto FROM fichas WHERE id = ?`, [fichaId]);
+      if (ficha) {
+        const nuevoEstado = ficha.oculto ? 0 : 1;
+        await dbRun(`UPDATE fichas SET oculto = ? WHERE id = ?`, [nuevoEstado, fichaId]);
+        io.to(partidaId).emit('oculto_toggled', { fichaId, oculto: nuevoEstado });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  });
+
   // Actualizar Configuración de Revelado
   socket.on('actualizar_config_revelado', async ({ partidaId, fichaId, config }) => {
     try {
@@ -751,10 +760,6 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error(err);
     }
-  });
-
-  socket.on('evento_musica', ({ partidaId, accion, url, volume }) => {
-    io.to(partidaId).emit('evento_musica', { accion, url, volume });
   });
 
   // Toggle DM status (DM only)

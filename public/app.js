@@ -8,19 +8,6 @@
 
   // --- ESTADO GLOBAL CLIENTE ---
   let socket = null;
-  let ytPlayer = null;
-  window.onYouTubeIframeAPIReady = function () {
-    ytPlayer = new YT.Player('youtube-player', {
-      height: '113',
-      width: '200',
-      playerVars: { 'autoplay': 1, 'controls': 1 },
-      events: {
-        'onReady': function (event) {
-          console.log('YouTube Player Ready');
-        }
-      }
-    });
-  };
 
   let state = {
     partida: null,
@@ -116,10 +103,8 @@
     initDOM();
     initCanvas();
     initSocket();
-    initGifSearch();
     loadGamesList();
     setupAutoSave();
-    initPing();
   });
 
   // --- ELEMENTOS DOM ---
@@ -139,8 +124,6 @@
       userRoleText: document.getElementById('user-role-text'),
       currentSceneName: document.getElementById('current-scene-name'),
       saveStatusIndicator: document.getElementById('save-status-indicator'),
-      pingIndicator: document.getElementById('ping-indicator'),
-      pingValue: document.getElementById('ping-value'),
       btnNavInicio: document.getElementById('btn-nav-inicio'),
       btnMobileMenu: document.getElementById('btn-mobile-menu'),
       btnMobileDmTools: document.getElementById('btn-mobile-dm-tools'),
@@ -204,16 +187,13 @@
       d20ModeContainer: document.getElementById('d20-mode-container'),
       modeButtons: document.querySelectorAll('.btn-mode'),
       diceTokenSelect: document.getElementById('dice-token-select'),
-      diceTargetContainer: document.getElementById('dice-target-container'),
-      diceTargetSelect: document.getElementById('dice-target-select'),
-      friendlyFireContainer: document.getElementById('friendly-fire-container'),
-      friendlyFireCheckbox: document.getElementById('friendly-fire-checkbox'),
       quickDiceHistory: document.getElementById('quick-dice-history'),
 
       // Chat
       chatMessagesContainer: document.getElementById('chat-messages-container'),
       chatTextInput: document.getElementById('chat-text-input'),
-      btnOpenGifSearch: document.getElementById('btn-open-gif-search'),
+      btnUploadChatMedia: document.getElementById('btn-upload-chat-media'),
+      chatFileInput: document.getElementById('chat-file-input'),
       btnSendChat: document.getElementById('btn-send-chat'),
 
       // Historial
@@ -247,17 +227,32 @@
       fichaImagenUrl: document.getElementById('ficha-imagen-url'),
       fichaImgPreview: document.getElementById('ficha-img-preview'),
 
-      modalDanoCuracion: document.getElementById('modal-dano-curacion'),
-      hdTokenSelect: document.getElementById('hd-token-select'),
-      hdAmountInput: document.getElementById('hd-amount-input'),
-      btnApplyDamage: document.getElementById('btn-apply-damage'),
-      btnApplyHeal: document.getElementById('btn-apply-heal'),
+      modalGifView: document.getElementById('modal-gif-view'),
+      enlargedGifImg: document.getElementById('enlarged-gif-img'),
+      enlargedImgTitle: document.getElementById('enlarged-img-title'),
+      enlargedImgNotas: document.getElementById('enlarged-img-notas'),
 
-      modalGifSearch: document.getElementById('modal-gif-search'),
-      inputSearchGif: document.getElementById('input-search-gif'),
-      btnDoGifSearch: document.getElementById('btn-do-gif-search'),
-      gifResultsContainer: document.getElementById('gif-results-container'),
-      gifSearchLoading: document.getElementById('gif-search-loading'),
+      modalRevelar: document.getElementById('modal-revelar-ficha'),
+      revelarFichaId: document.getElementById('revelar-ficha-id'),
+      revImagen: document.getElementById('rev-imagen'),
+      revNombre: document.getElementById('rev-nombre'),
+      revHp: document.getElementById('rev-hp'),
+      revAc: document.getElementById('rev-ac'),
+      revNotas: document.getElementById('rev-notas'),
+      revJugadoresSelect: document.getElementById('rev-jugadores-select'),
+      btnSaveRevelar: document.getElementById('btn-save-revelar'),
+
+      modalCreateGame: document.getElementById('modal-create-game'),
+      formCreateGame: document.getElementById('form-create-game'),
+      createGameTitle: document.getElementById('create-game-title'),
+      createDmName: document.getElementById('create-dm-name'),
+      createGameImgFile: document.getElementById('create-game-img-file'),
+      createGameImgUrl: document.getElementById('create-game-img-url'),
+
+      modalJoinGame: document.getElementById('modal-join-game'),
+      formJoinGame: document.getElementById('form-join-game'),
+      joinCodeInput: document.getElementById('join-code-input'),
+      joinUsernameInput: document.getElementById('join-username-input')
 
       modalGifView: document.getElementById('modal-gif-view'),
       enlargedGifImg: document.getElementById('enlarged-gif-img'),
@@ -582,40 +577,12 @@
       showSaveIndicator('✅ Guardado');
     });
 
-    socket.on('pong_check', (timestamp) => {
-      const ping = Math.max(1, Date.now() - timestamp);
-      updatePingDisplay(ping);
-    });
-
-    socket.on('evento_musica', ({ accion, url, volume }) => {
-      const container = document.getElementById('youtube-music-container');
-
-      if (accion === 'play') {
-        if (url) {
-          // Extraer ID de YouTube
-          let videoId = '';
-          const m1 = url.match(/v=([^&]+)/);
-          const m2 = url.match(/youtu\.be\/([^?]+)/);
-          if (m1) videoId = m1[1];
-          else if (m2) videoId = m2[1];
-          else videoId = url; // asume que es el id directo si no coincide
-
-          if (videoId) {
-            container.style.display = 'block';
-            if (ytPlayer && typeof ytPlayer.loadVideoById === 'function') {
-              ytPlayer.loadVideoById(videoId);
-            }
-          }
-        }
-      } else if (accion === 'stop') {
-        if (ytPlayer && typeof ytPlayer.stopVideo === 'function') {
-          ytPlayer.stopVideo();
-        }
-        container.style.display = 'none';
-      } else if (accion === 'volume') {
-        if (ytPlayer && typeof ytPlayer.setVolume === 'function') {
-          ytPlayer.setVolume(volume);
-        }
+    socket.on('oculto_toggled', ({ fichaId, oculto }) => {
+      const f = (state.fichas || []).find(x => x.id === fichaId);
+      if (f) {
+        f.oculto = oculto;
+        renderFichasList();
+        renderCanvas();
       }
     });
   }
@@ -828,6 +795,13 @@
     // 5. Dibujar Fichas / Tokens de Personaje
     const fichasEnEscena = (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id);
     fichasEnEscena.forEach(ficha => {
+      // Si la ficha está oculta por el DM: jugadores no la ven en absoluto, DM la ve translúcida
+      if (ficha.oculto) {
+        if (!state.usuario.esDM && !esDuenioDeFicha(ficha)) {
+          return;
+        }
+      }
+
       const isMonster = ficha.tipo === 'monstruo' || ficha.tipo === 'npc';
       const isPlayerView = !state.usuario.esDM;
       const visibility = getFichaVisibility(ficha);
@@ -849,6 +823,8 @@
 
       if (ficha.hp_actual <= 0) {
         ctx.globalAlpha = 0.4;
+      } else if (ficha.oculto) {
+        ctx.globalAlpha = 0.45;
       }
 
       // Borde exterior / resplandor si está seleccionada
@@ -1561,36 +1537,6 @@
       renderCanvas();
     });
 
-    // Eventos Música YouTube
-    const btnPlayMusic = document.getElementById('btn-play-music');
-    const btnStopMusic = document.getElementById('btn-stop-music');
-    const inputYtUrl = document.getElementById('yt-music-url');
-    const inputVolume = document.getElementById('music-volume');
-    if (btnPlayMusic && btnStopMusic && inputYtUrl) {
-      btnPlayMusic.addEventListener('click', () => {
-        const url = inputYtUrl.value.trim();
-        if (url && state.partida) {
-          socket?.emit('evento_musica', { partidaId: state.partida.id, accion: 'play', url });
-          if (inputVolume) {
-            socket?.emit('evento_musica', { partidaId: state.partida.id, accion: 'volume', volume: parseInt(inputVolume.value) });
-          }
-        }
-      });
-      btnStopMusic.addEventListener('click', () => {
-        if (state.partida) {
-          socket?.emit('evento_musica', { partidaId: state.partida.id, accion: 'stop' });
-        }
-      });
-      if (inputVolume) {
-        inputVolume.addEventListener('input', (e) => {
-          const volume = parseInt(e.target.value);
-          if (state.partida) {
-            socket?.emit('evento_musica', { partidaId: state.partida.id, accion: 'volume', volume });
-          }
-        });
-      }
-    }
-
     // Pestañas Derechas
     dom.tabButtons.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1688,31 +1634,8 @@
       btn.addEventListener('click', () => {
         dom.classifButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-
         currentClassif = btn.dataset.classif;
-        if (currentClassif === 'Daño' || currentClassif === 'Curación') {
-          // Ocultar modo d20 ventaja/desventaja cuando se pulsa daño o curación
-          if (dom.d20ModeContainer) dom.d20ModeContainer.classList.add('hidden');
-          dom.modeButtons.forEach(b => b.classList.remove('active'));
-          document.querySelector('.btn-mode[data-mode="normal"]')?.classList.add('active');
-
-          dom.diceTargetContainer.classList.remove('hidden');
-          if (currentClassif === 'Daño') {
-            dom.friendlyFireContainer?.classList.remove('hidden');
-          } else {
-            dom.friendlyFireContainer?.classList.add('hidden');
-          }
-          updateDiceTargetOptions(currentClassif);
-        } else {
-          if (dom.d20ModeContainer) dom.d20ModeContainer.classList.remove('hidden');
-          dom.diceTargetContainer.classList.add('hidden');
-          dom.friendlyFireContainer?.classList.add('hidden');
-        }
       });
-    });
-
-    dom.friendlyFireCheckbox?.addEventListener('change', () => {
-      updateDiceTargetOptions(currentClassif);
     });
 
     dom.modeButtons.forEach(btn => {
@@ -1729,6 +1652,32 @@
     dom.chatTextInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') sendChatMessage();
     });
+
+    if (dom.btnUploadChatMedia && dom.chatFileInput) {
+      dom.btnUploadChatMedia.addEventListener('click', () => {
+        dom.chatFileInput.click();
+      });
+
+      dom.chatFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            const dataUrl = evt.target.result;
+            socket?.emit('enviar_mensaje', {
+              partidaId: state.partida?.id,
+              usuarioId: state.usuario.id,
+              nombreUsuario: state.usuario.nombre,
+              colorUsuario: state.usuario.color,
+              mensaje: dataUrl,
+              esGif: 1
+            });
+          };
+          reader.readAsDataURL(file);
+        }
+        e.target.value = '';
+      });
+    }
 
     // Historial
     dom.btnHistPrev.addEventListener('click', () => {
@@ -1937,24 +1886,6 @@
         }
       }
 
-      // Apply HP if Daño or Curación is selected
-      const targetId = dom.diceTargetSelect.value;
-      if (classif === 'Daño' || classif === 'Curación') {
-        if (targetId) {
-          // Objetivo ya seleccionado, aplicar directamente
-          socket?.emit('aplicar_dano_curacion', {
-            partidaId: state.partida.id,
-            fichaId: targetId,
-            cantidad: finalResult,
-            esCuracion: classif === 'Curación'
-          });
-        } else {
-          // No hay objetivo seleccionado, abrir modal para elegir
-          pendingDiceResult = { resultado: finalResult, esCuracion: classif === 'Curación', classif };
-          openPostRollTargetModal(classif, finalResult);
-        }
-      }
-
     } catch (err) {
       alert('Fórmula de dados inválida. Usa formato ej: 2d10+6+1d6 o 1d20+5');
     }
@@ -2033,12 +1964,22 @@
 
   // --- CHAT ---
   // Regex para detectar URLs de imagen/gif
-  const IMAGE_URL_REGEX = /^https?:\/\/\S+\.(gif|png|jpg|jpeg|webp)(\?\S*)?$/i;
+  const IMAGE_URL_REGEX = /^https?:\/\/\S+\.(gif|png|jpg|jpeg|webp|svg)(\?\S*)?$/i;
   const TENOR_URL_REGEX = /^https?:\/\/(media[0-9]?\.tenor\.com|c\.tenor\.com|tenor\.com\/view)\/\S+/i;
   const GIPHY_URL_REGEX = /^https?:\/\/(media[0-9]?\.giphy\.com|giphy\.com\/gifs)\/\S+/i;
+  const IMGBB_REGEX = /^https?:\/\/(i\.ibb\.co|ibb\.co)\/\S+/i;
+  const DISCORD_MEDIA_REGEX = /^https?:\/\/(cdn\.discordapp\.com|media\.discordapp\.net)\/attachments\/\S+/i;
 
   function isImageUrl(text) {
-    return IMAGE_URL_REGEX.test(text) || TENOR_URL_REGEX.test(text) || GIPHY_URL_REGEX.test(text);
+    if (!text || typeof text !== 'string') return false;
+    const trimmed = text.trim();
+    if (trimmed.startsWith('data:image/')) return true;
+    return IMAGE_URL_REGEX.test(trimmed) ||
+           TENOR_URL_REGEX.test(trimmed) ||
+           GIPHY_URL_REGEX.test(trimmed) ||
+           IMGBB_REGEX.test(trimmed) ||
+           DISCORD_MEDIA_REGEX.test(trimmed) ||
+           /\.(gif|png|jpe?g|webp|svg)(\?.*)?$/i.test(trimmed);
   }
 
   function sendChatMessage() {
@@ -2183,6 +2124,11 @@
     const filter = dom.filterFichasInput.value.toLowerCase();
 
     let listToRender = [...(state.fichas || [])].filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id);
+    // Filtrar fichas ocultas para jugadores
+    if (!state.usuario.esDM) {
+      listToRender = listToRender.filter(f => !f.oculto || esDuenioDeFicha(f));
+    }
+
     if (sortInitiative) {
       listToRender.sort((a, b) => (b.iniciativa || 0) - (a.iniciativa || 0));
     }
@@ -2196,7 +2142,7 @@
       if (filter && !ficha.nombre.toLowerCase().includes(filter)) return;
 
       const card = document.createElement('div');
-      card.className = `ficha-card ${selectedFichasIds.includes(ficha.id) ? 'selected' : ''}`;
+      card.className = `ficha-card ${selectedFichasIds.includes(ficha.id) ? 'selected' : ''} ${ficha.oculto ? 'ficha-oculta' : ''}`;
 
       const isMonster = ficha.tipo === 'monstruo' || ficha.tipo === 'npc';
       const isPlayerView = !state.usuario.esDM;
@@ -2208,12 +2154,13 @@
       const avatarSrc = (isMonster && isPlayerView && !visibility.imagen) ? 'https://via.placeholder.com/48?text=?' : (ficha.imagen || 'https://via.placeholder.com/48?text=Avatar');
 
       const esPropietario = esDuenioDeFicha(ficha);
+      const ocultoBadge = (state.usuario.esDM && ficha.oculto) ? `<span style="background:#555; color:#f87171; font-size:0.75rem; padding:2px 6px; border-radius:4px; margin-left:6px;"><i class="fa-solid fa-eye-slash"></i> Oculto</span>` : '';
 
       card.innerHTML = `
         <div class="ficha-card-header">
           <img src="${avatarSrc}" class="ficha-avatar" style="cursor: pointer;" title="Haz clic para ampliar">
           <div class="ficha-info">
-            <div class="ficha-name">${(isMonster && isPlayerView && !visibility.nombre) ? '???' : ficha.nombre}</div>
+            <div class="ficha-name">${ficha.nombre} ${ocultoBadge}</div>
             <div class="ficha-sub">${ficha.tipo.toUpperCase()} | HP: ${hpText} | AC: ${acText} | INI: <strong class="gold-text">${iniText}</strong></div>
             <div class="hp-bar-outer">
               <div class="hp-bar-inner" style="width: ${Math.max(0, Math.min(100, (ficha.hp_actual / (ficha.hp_maximo || 1)) * 100))}%"></div>
@@ -2222,7 +2169,7 @@
         </div>
         <div class="ficha-actions">
           ${esPropietario ? '<button class="btn btn-sm btn-secondary btn-gigante"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Gigante</button>' : ''}
-          ${esPropietario ? '<button class="btn btn-sm btn-danger btn-hp-token" title="Modificar vida (Daño o Curación)"><i class="fa-solid fa-heart-pulse"></i> HP</button>' : ''}
+          ${state.usuario.esDM ? `<button class="btn btn-sm btn-secondary btn-toggle-oculto" title="${ficha.oculto ? 'Mostrar en mapa a jugadores' : 'Ocultar en mapa a jugadores'}"><i class="fa-solid ${ficha.oculto ? 'fa-eye' : 'fa-eye-slash'}"></i> ${ficha.oculto ? 'Mostrar' : 'Ocultar'}</button>` : ''}
           ${state.usuario.esDM && isMonster ? `<button class="btn btn-sm btn-primary btn-revelar-menu"><i class="fa-solid fa-eye"></i> Visibilidad</button>` : ''}
           ${esPropietario ? '<button class="btn btn-sm btn-primary btn-edit-ficha"><i class="fa-solid fa-pen"></i> Editar</button>' : ''}
           ${state.usuario.esDM ? '<button class="btn btn-sm btn-danger btn-del-ficha"><i class="fa-solid fa-trash"></i></button>' : ''}
@@ -2232,9 +2179,9 @@
       const avatarImg = card.querySelector('.ficha-avatar');
       if (avatarImg) {
         avatarImg.addEventListener('click', () => {
-          dom.enlargedGifImg.src = avatarSrc; // Uses placeholder if hidden
+          dom.enlargedGifImg.src = avatarSrc;
           if (dom.enlargedImgTitle) {
-            dom.enlargedImgTitle.textContent = (isMonster && isPlayerView && !visibility.nombre) ? '???' : ficha.nombre;
+            dom.enlargedImgTitle.textContent = ficha.nombre;
           }
           if (dom.enlargedImgNotas) {
             const showNotas = state.usuario.esDM || !isMonster || visibility.notas;
@@ -2249,6 +2196,10 @@
           openModal(dom.modalGifView);
         });
       }
+
+      card.querySelector('.btn-toggle-oculto')?.addEventListener('click', () => {
+        socket?.emit('toggle_oculto', { partidaId: state.partida.id, fichaId: ficha.id });
+      });
 
       if (esPropietario) {
         card.querySelector('.btn-gigante')?.addEventListener('click', () => {
@@ -2337,8 +2288,8 @@
   }
 
   function renderTokenSelects() {
+    if (!dom.diceTokenSelect) return;
     dom.diceTokenSelect.innerHTML = '<option value="">-- Sin ficha (Jugador) --</option>';
-    dom.hdTokenSelect.innerHTML = '';
 
     (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id).forEach(f => {
       const esPropia = esDuenioDeFicha(f);
@@ -2349,50 +2300,11 @@
 
       if (esPropia || state.usuario.esDM) {
         dom.diceTokenSelect.appendChild(opt.cloneNode(true));
-        dom.hdTokenSelect.appendChild(opt);
-      }
-    });
-
-    // Actualizar el selector de objetivo según clasificación activa
-    updateDiceTargetOptions(currentClassif);
-  }
-
-  // Actualizar opciones del selector de objetivo según clasificación
-  function updateDiceTargetOptions(classif) {
-    dom.diceTargetSelect.innerHTML = '<option value="">-- Sin objetivo --</option>';
-
-    const allowFriendlyFire = !!(dom.friendlyFireCheckbox && dom.friendlyFireCheckbox.checked);
-
-    (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id).forEach(f => {
-      const visibility = getFichaVisibility(f);
-      let include = false;
-
-      if (classif === 'Curación') {
-        // Aliados o cualquiera si es DM
-        include = (f.tipo === 'jugador' || state.usuario.esDM);
-      } else if (classif === 'Daño') {
-        // Monstruos/NPCs, o aliados si fuego amigo está activo, o la ficha propia del jugador para autodaño
-        const esPropia = esDuenioDeFicha(f);
-        if (allowFriendlyFire || state.usuario.esDM || esPropia || f.tipo === 'monstruo' || f.tipo === 'npc') {
-          include = true;
-        }
-      } else {
-        include = true;
-      }
-
-      if (include) {
-        const opt = document.createElement('option');
-        opt.value = f.id;
-        // Mostrar HP si es visible o es DM
-        const showHp = state.usuario.esDM || f.tipo === 'jugador' || visibility.hp;
-        const hpInfo = showHp ? ` [HP: ${f.hp_actual}/${f.hp_maximo}]` : '';
-        opt.textContent = `${f.nombre}${hpInfo}`;
-        dom.diceTargetSelect.appendChild(opt);
       }
     });
   }
 
-  // Modal post-lanzamiento para elegir objetivo
+  // Modal post-lanzamiento para elegir objetivo de iniciativa
   function openPostRollTargetModal(classif, resultado) {
     const modal = document.getElementById('modal-post-roll-target');
     if (!modal) return;
@@ -2402,68 +2314,33 @@
     const resultEl = modal.querySelector('.post-roll-result');
     const iconEl = modal.querySelector('.post-roll-icon');
 
-    if (iconEl) {
-      if (classif === 'Curación') iconEl.textContent = '❤️';
-      else if (classif === 'Iniciativa') iconEl.textContent = '🎯';
-      else iconEl.textContent = '⚔️';
-    }
-    if (titleEl) {
-      if (classif === 'Curación') titleEl.textContent = '¿A quién quieres curar?';
-      else if (classif === 'Iniciativa') titleEl.textContent = '¿A quién asignar iniciativa?';
-      else titleEl.textContent = '¿A quién atacas?';
-    }
+    if (iconEl) iconEl.textContent = '🎯';
+    if (titleEl) titleEl.textContent = '¿A quién asignar iniciativa?';
     if (resultEl) resultEl.textContent = `Resultado del dado: ${resultado}`;
 
     listEl.innerHTML = '';
 
-    const allowFriendlyFire = !!(dom.friendlyFireCheckbox && dom.friendlyFireCheckbox.checked);
-
     (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id).forEach(f => {
-      const visibility = getFichaVisibility(f);
-      let include = false;
+      if (!state.usuario.esDM && f.oculto && !esDuenioDeFicha(f)) return;
 
-      if (classif === 'Curación') {
-        include = (f.tipo === 'jugador' || state.usuario.esDM);
-      } else if (classif === 'Daño') {
-        const esPropia = esDuenioDeFicha(f);
-        if (allowFriendlyFire || state.usuario.esDM || esPropia || f.tipo === 'monstruo' || f.tipo === 'npc') {
-          include = true;
+      const hpPercent = Math.max(0, Math.min(100, (f.hp_actual / (f.hp_maximo || 1)) * 100));
+
+      const btn = document.createElement('button');
+      btn.className = 'post-roll-target-btn';
+      btn.innerHTML = `
+        <span class="post-roll-target-name">${f.nombre}</span>
+        <span class="post-roll-target-hp">HP: ${f.hp_actual}/${f.hp_maximo}</span>
+        <div class="post-roll-hp-bar"><div class="post-roll-hp-fill" style="width: ${hpPercent}%"></div></div>
+      `;
+      btn.addEventListener('click', () => {
+        if (pendingDiceResult) {
+          f.iniciativa = pendingDiceResult.resultado;
+          socket?.emit('actualizar_ficha', { partidaId: state.partida.id, fichaData: f });
+          pendingDiceResult = null;
         }
-      } else if (classif === 'Iniciativa') {
-        include = true; // Todo el mundo puede recibir iniciativa
-      }
-
-      if (include) {
-        const showHp = state.usuario.esDM || f.tipo === 'jugador' || visibility.hp;
-        const hpPercent = Math.max(0, Math.min(100, (f.hp_actual / (f.hp_maximo || 1)) * 100));
-        const hpInfo = showHp ? `${f.hp_actual}/${f.hp_maximo}` : '???';
-
-        const btn = document.createElement('button');
-        btn.className = 'post-roll-target-btn';
-        btn.innerHTML = `
-          <span class="post-roll-target-name">${f.nombre}</span>
-          <span class="post-roll-target-hp">HP: ${hpInfo}</span>
-          <div class="post-roll-hp-bar"><div class="post-roll-hp-fill" style="width: ${showHp ? hpPercent : 50}%"></div></div>
-        `;
-        btn.addEventListener('click', () => {
-          if (pendingDiceResult) {
-            if (classif === 'Iniciativa') {
-              f.iniciativa = pendingDiceResult.resultado;
-              socket?.emit('actualizar_ficha', { partidaId: state.partida.id, fichaData: f });
-            } else {
-              socket?.emit('aplicar_dano_curacion', {
-                partidaId: state.partida.id,
-                fichaId: f.id,
-                cantidad: pendingDiceResult.resultado,
-                esCuracion: pendingDiceResult.esCuracion
-              });
-            }
-            pendingDiceResult = null;
-          }
-          closeModal(modal);
-        });
-        listEl.appendChild(btn);
-      }
+        closeModal(modal);
+      });
+      listEl.appendChild(btn);
     });
 
     openModal(modal);
@@ -2753,135 +2630,6 @@
     } else {
       dom.multiSelectCount.classList.add('hidden');
     }
-  }
-
-  // --- LATENCIA / PING EN TIEMPO REAL ---
-  function initPing() {
-    if (pingInterval) clearInterval(pingInterval);
-    pingInterval = setInterval(() => {
-      if (socket && socket.connected) {
-        socket.emit('ping_check', Date.now());
-      }
-    }, 3000);
-  }
-
-  function updatePingDisplay(pingMs) {
-    if (!dom.pingValue || !dom.pingIndicator) return;
-    dom.pingValue.textContent = `${pingMs} ms`;
-    dom.pingIndicator.classList.remove('ping-good', 'ping-medium', 'ping-bad');
-    if (pingMs < 100) {
-      dom.pingIndicator.classList.add('ping-good');
-    } else if (pingMs < 250) {
-      dom.pingIndicator.classList.add('ping-medium');
-    } else {
-      dom.pingIndicator.classList.add('ping-bad');
-    }
-  }
-
-  // --- BUSCADOR DE GIFS EN TIEMPO REAL (CHAT) ---
-  const FALLBACK_GIFS = [
-    { url: 'https://media.giphy.com/media/l2YWgOm7cak7P4C4M/giphy.gif', title: 'Critical Hit' },
-    { url: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif', title: 'Roll 20' },
-    { url: 'https://media.giphy.com/media/3oKIPnAiaMCws8nOsE/giphy.gif', title: 'Dragon Roar' },
-    { url: 'https://media.giphy.com/media/xT0xeJpnrWC4XWblEk/giphy.gif', title: 'Fireball Spell' },
-    { url: 'https://media.giphy.com/media/26AHONQ79FdWZhAI0/giphy.gif', title: 'Victory Dance' },
-    { url: 'https://media.giphy.com/media/l0HlvtIPzPdt2usKs/giphy.gif', title: 'Sword Fight' },
-    { url: 'https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif', title: 'Magic Cast' },
-    { url: 'https://media.giphy.com/media/d2lcHJTG5Tscg/giphy.gif', title: 'Facepalm Fail' },
-    { url: 'https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif', title: 'D&D Dungeon' }
-  ];
-
-  function initGifSearch() {
-    if (!dom.btnOpenGifSearch) return;
-
-    dom.btnOpenGifSearch.addEventListener('click', () => {
-      openModal(dom.modalGifSearch);
-      if (!dom.gifResultsContainer.hasChildNodes()) {
-        searchGifs('dnd');
-      }
-    });
-
-    dom.btnDoGifSearch?.addEventListener('click', () => {
-      const query = dom.inputSearchGif.value.trim();
-      if (query) searchGifs(query);
-    });
-
-    dom.inputSearchGif?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const query = dom.inputSearchGif.value.trim();
-        if (query) searchGifs(query);
-      }
-    });
-
-    document.querySelectorAll('.btn-gif-tag').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tag = btn.dataset.tag;
-        if (dom.inputSearchGif) dom.inputSearchGif.value = tag;
-        searchGifs(tag);
-      });
-    });
-  }
-
-  async function searchGifs(query) {
-    if (!dom.gifResultsContainer) return;
-    dom.gifResultsContainer.innerHTML = '';
-    if (dom.gifSearchLoading) dom.gifSearchLoading.classList.remove('hidden');
-
-    try {
-      const tenorUrl = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=LIVDSRZULELA&limit=24&media_filter=gif,tinygif`;
-      const res = await fetch(tenorUrl);
-      if (!res.ok) throw new Error('Tenor fetch error');
-      const data = await res.json();
-      
-      if (dom.gifSearchLoading) dom.gifSearchLoading.classList.add('hidden');
-
-      if (data.results && data.results.length > 0) {
-        data.results.forEach(item => {
-          const gifUrl = item.media_formats?.gif?.url || item.media_formats?.tinygif?.url || item.url;
-          if (gifUrl) {
-            const div = document.createElement('div');
-            div.className = 'gif-thumb-item';
-            div.innerHTML = `<img src="${gifUrl}" alt="${item.content_description || 'GIF'}" loading="lazy">`;
-            div.addEventListener('click', () => {
-              sendDirectGif(gifUrl);
-              closeModal(dom.modalGifSearch);
-            });
-            dom.gifResultsContainer.appendChild(div);
-          }
-        });
-      } else {
-        renderFallbackGifs();
-      }
-    } catch (err) {
-      if (dom.gifSearchLoading) dom.gifSearchLoading.classList.add('hidden');
-      renderFallbackGifs();
-    }
-  }
-
-  function renderFallbackGifs() {
-    if (!dom.gifResultsContainer) return;
-    dom.gifResultsContainer.innerHTML = '';
-    FALLBACK_GIFS.forEach(g => {
-      const div = document.createElement('div');
-      div.className = 'gif-thumb-item';
-      div.innerHTML = `<img src="${g.url}" alt="${g.title}" loading="lazy">`;
-      div.addEventListener('click', () => {
-        sendDirectGif(g.url);
-        closeModal(dom.modalGifSearch);
-      });
-      dom.gifResultsContainer.appendChild(div);
-    });
-  }
-
-  function sendDirectGif(gifUrl) {
-    socket?.emit('enviar_mensaje', {
-      partidaId: state.partida?.id,
-      usuarioId: state.usuario.id,
-      nombreUsuario: state.usuario.nombre,
-      colorUsuario: state.usuario.color,
-      mensaje: gifUrl,
-      esGif: 1
-    });
   }
 
 })();

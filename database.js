@@ -200,6 +200,13 @@ async function initDb() {
     // Ignore error if column already exists
   }
 
+  // Add oculto to fichas if it doesn't exist
+  try {
+    await dbRun(`ALTER TABLE fichas ADD COLUMN oculto BOOLEAN DEFAULT 0`);
+  } catch (err) {
+    // Ignore error if column already exists
+  }
+
   // Add grid config to escenas if they don't exist
   try {
     await dbRun(`ALTER TABLE escenas ADD COLUMN config_grid_x INTEGER DEFAULT 40`);
