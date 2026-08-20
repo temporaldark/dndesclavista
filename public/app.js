@@ -1380,18 +1380,11 @@
     });
 
     // Menús y Navegación & Botones Inicio
-    dom.btnNavInicio.addEventListener('click', () => {
+    dom.btnNavInicio?.addEventListener('click', () => {
       autoSaveGame();
       loadGamesList();
       showScreen('start');
     });
-
-    if (dom.btnMobileMenuBtn) {
-      dom.btnMobileMenuBtn.addEventListener('click', () => {
-        const panel = document.querySelector('.right-panel');
-        if (panel) panel.classList.toggle('open');
-      });
-    }
 
     if (dom.codeBadge) {
       dom.codeBadge.addEventListener('click', () => {
@@ -1402,15 +1395,9 @@
       });
     }
 
-    if (dom.btnMobileMenu) {
-      dom.btnMobileMenu.addEventListener('click', () => {
-        dom.dmToolsPanel.classList.toggle('open');
-      });
-    }
-
     // Modal Crear / Unirse / Importar Partida
-    dom.btnCreateGameModal.addEventListener('click', () => openModal(dom.modalCreateGame));
-    dom.btnJoinGameModal.addEventListener('click', () => openModal(dom.modalJoinGame));
+    dom.btnCreateGameModal?.addEventListener('click', () => openModal(dom.modalCreateGame));
+    dom.btnJoinGameModal?.addEventListener('click', () => openModal(dom.modalJoinGame));
 
     if (dom.btnImportGame && dom.inputImportGameFile) {
       dom.btnImportGame.addEventListener('click', () => dom.inputImportGameFile.click());
@@ -1430,7 +1417,7 @@
       dom.inputDmImportFile.addEventListener('change', handleImportSessionFile);
     }
 
-    dom.formCreateGame.addEventListener('submit', async (e) => {
+    dom.formCreateGame?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const titleEl = document.getElementById('create-game-title') || document.getElementById('new-game-name');
       const dmNameEl = document.getElementById('create-dm-name');
@@ -1479,7 +1466,7 @@
       }
     });
 
-    dom.formJoinGame.addEventListener('submit', (e) => {
+    dom.formJoinGame?.addEventListener('submit', (e) => {
       e.preventDefault();
       const codigo = document.getElementById('join-code-input').value;
       const nombreUsuario = document.getElementById('join-username-input').value.trim();
@@ -1503,35 +1490,32 @@
     });
 
     // Herramientas DM (Panel Izquierdo)
-    dom.toolButtons.forEach(btn => {
+    dom.toolButtons?.forEach(btn => {
       btn.addEventListener('click', () => {
         dom.toolButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         activeTool = btn.dataset.tool;
 
         // Mostrar opciones de sub-herramienta
-        dom.toolOptionsContainer.classList.add('hidden');
-        dom.optDraw.classList.add('hidden');
-        dom.optFigures.classList.add('hidden');
+        dom.toolOptionsContainer?.classList.add('hidden');
+        dom.optDraw?.classList.add('hidden');
+        dom.optFigures?.classList.add('hidden');
 
         if (activeTool === 'draw') {
-          dom.toolOptionsContainer.classList.remove('hidden');
-          dom.optDraw.classList.remove('hidden');
+          dom.toolOptionsContainer?.classList.remove('hidden');
+          dom.optDraw?.classList.remove('hidden');
         } else if (activeTool === 'figures') {
-          dom.toolOptionsContainer.classList.remove('hidden');
-          dom.optFigures.classList.remove('hidden');
-        } else if (activeTool === 'healdamage') {
-          renderTokenSelects();
-          openModal(dom.modalDanoCuracion);
+          dom.toolOptionsContainer?.classList.remove('hidden');
+          dom.optFigures?.classList.remove('hidden');
         }
       });
     });
 
-    dom.btnClearDrawings.addEventListener('click', () => {
+    dom.btnClearDrawings?.addEventListener('click', () => {
       socket?.emit('limpiar_dibujos', { partidaId: state.partida.id, escenaId: state.escenaActiva.id });
     });
 
-    dom.btnClearFigures.addEventListener('click', () => {
+    dom.btnClearFigures?.addEventListener('click', () => {
       if (state.usuario.esDM) {
         socket?.emit('limpiar_figuras', { partidaId: state.partida.id, escenaId: state.escenaActiva.id });
       } else {
@@ -1567,17 +1551,10 @@
       }
     });
 
-    // Actualizar texto del botón de limpiar figuras según rol
-    function updateClearFiguresButton() {
-      if (!state.usuario.esDM && dom.btnClearFigures) {
-        dom.btnClearFigures.innerHTML = '<i class="fa-solid fa-trash"></i> Limpiar Mis Figuras';
-      }
-    }
-
     // Zoom flotante
-    dom.btnZoomIn.addEventListener('click', () => zoomAt(canvas.width / 2, canvas.height / 2, 1.2));
-    dom.btnZoomOut.addEventListener('click', () => zoomAt(canvas.width / 2, canvas.height / 2, 0.8));
-    dom.btnZoomReset.addEventListener('click', () => {
+    dom.btnZoomIn?.addEventListener('click', () => zoomAt(canvas.width / 2, canvas.height / 2, 1.2));
+    dom.btnZoomOut?.addEventListener('click', () => zoomAt(canvas.width / 2, canvas.height / 2, 0.8));
+    dom.btnZoomReset?.addEventListener('click', () => {
       viewport.zoom = 1.0;
       viewport.panX = 0;
       viewport.panY = 0;
@@ -1586,7 +1563,7 @@
     });
 
     // Pestañas Derechas
-    dom.tabButtons.forEach(btn => {
+    dom.tabButtons?.forEach(btn => {
       btn.addEventListener('click', () => {
         dom.tabButtons.forEach(b => b.classList.remove('active'));
         dom.tabPanes.forEach(p => p.classList.remove('active'));
@@ -1597,7 +1574,7 @@
     });
 
     // Fichas
-    dom.btnOpenCreateFicha.addEventListener('click', () => {
+    dom.btnOpenCreateFicha?.addEventListener('click', () => {
       dom.formFicha.reset();
       document.getElementById('ficha-id').value = '';
       dom.fichaImgPreview.src = 'https://via.placeholder.com/100?text=Avatar';
@@ -1605,19 +1582,21 @@
 
       // Ocultar opciones de NPC/Monstruo si no es DM
       const fichaTipo = document.getElementById('ficha-tipo');
-      Array.from(fichaTipo.options).forEach(opt => {
-        if (!state.usuario.esDM && opt.value !== 'jugador') {
-          opt.style.display = 'none';
-        } else {
-          opt.style.display = '';
-        }
-      });
-      if (!state.usuario.esDM) fichaTipo.value = 'jugador';
+      if (fichaTipo) {
+        Array.from(fichaTipo.options).forEach(opt => {
+          if (!state.usuario.esDM && opt.value !== 'jugador') {
+            opt.style.display = 'none';
+          } else {
+            opt.style.display = '';
+          }
+        });
+        if (!state.usuario.esDM) fichaTipo.value = 'jugador';
+      }
 
       openModal(dom.modalFicha);
     });
 
-    dom.fichaImgFile.addEventListener('change', (e) => {
+    dom.fichaImgFile?.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (file) {
         const reader = new FileReader();
@@ -1628,11 +1607,11 @@
       }
     });
 
-    dom.fichaImagenUrl.addEventListener('input', (e) => {
+    dom.fichaImagenUrl?.addEventListener('input', (e) => {
       if (e.target.value) dom.fichaImgPreview.src = e.target.value;
     });
 
-    dom.formFicha.addEventListener('submit', (e) => {
+    dom.formFicha?.addEventListener('submit', (e) => {
       e.preventDefault();
       const id = document.getElementById('ficha-id').value;
       const fichaData = {
@@ -1672,13 +1651,13 @@
     });
 
     // Lanzador de Dados
-    dom.quickDiceButtons.forEach(btn => {
+    dom.quickDiceButtons?.forEach(btn => {
       btn.addEventListener('click', () => {
         dom.diceFormulaInput.value = btn.dataset.die;
       });
     });
 
-    dom.classifButtons.forEach(btn => {
+    dom.classifButtons?.forEach(btn => {
       btn.addEventListener('click', () => {
         dom.classifButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
@@ -1686,18 +1665,18 @@
       });
     });
 
-    dom.modeButtons.forEach(btn => {
+    dom.modeButtons?.forEach(btn => {
       btn.addEventListener('click', () => {
         dom.modeButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
       });
     });
 
-    dom.btnRollDice.addEventListener('click', rollDice);
+    dom.btnRollDice?.addEventListener('click', rollDice);
 
     // Chat
-    dom.btnSendChat.addEventListener('click', sendChatMessage);
-    dom.chatTextInput.addEventListener('keydown', (e) => {
+    dom.btnSendChat?.addEventListener('click', sendChatMessage);
+    dom.chatTextInput?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') sendChatMessage();
     });
 
@@ -1728,36 +1707,36 @@
     }
 
     // Historial
-    dom.btnHistPrev.addEventListener('click', () => {
+    dom.btnHistPrev?.addEventListener('click', () => {
       if (historyPage > 1) {
         historyPage--;
         renderHistoryTable();
       }
     });
 
-    dom.btnHistNext.addEventListener('click', () => {
+    dom.btnHistNext?.addEventListener('click', () => {
       if (historyPage * historyPerPage < (state.historial || []).length) {
         historyPage++;
         renderHistoryTable();
       }
     });
 
-    dom.searchHistoryInput.addEventListener('input', renderHistoryTable);
+    dom.searchHistoryInput?.addEventListener('input', renderHistoryTable);
 
-    dom.btnExportHistory.addEventListener('click', () => {
+    dom.btnExportHistory?.addEventListener('click', () => {
       if (state.partida?.id) {
         window.location.href = `/api/partidas/${state.partida.id}/export`;
       }
     });
 
-    dom.btnClearHistory.addEventListener('click', () => {
+    dom.btnClearHistory?.addEventListener('click', () => {
       if (confirm('¿Limpiar todo el historial de tiradas de la partida?')) {
         socket?.emit('limpiar_historial', { partidaId: state.partida.id });
       }
     });
 
     // Panel DM
-    dom.btnCreateScene.addEventListener('click', () => {
+    dom.btnCreateScene?.addEventListener('click', () => {
       const nombre = dom.newSceneName.value.trim();
       if (nombre) {
         socket?.emit('crear_escena', { partidaId: state.partida.id, nombre });
@@ -1769,11 +1748,11 @@
     const btnTriggerMap = document.getElementById('btn-trigger-map-upload');
     if (btnTriggerMap) {
       btnTriggerMap.addEventListener('click', () => {
-        dom.mapFileInput.click();
+        dom.mapFileInput?.click();
       });
     }
 
-    dom.mapFileInput.addEventListener('change', (e) => {
+    dom.mapFileInput?.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (file) {
         const reader = new FileReader();
@@ -1801,11 +1780,11 @@
       }
     });
 
-    dom.btnClearMapBg.addEventListener('click', () => {
+    dom.btnClearMapBg?.addEventListener('click', () => {
       socket?.emit('actualizar_mapa', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, mapaBase64: null });
     });
 
-    dom.btnApplyGrid.addEventListener('click', () => {
+    dom.btnApplyGrid?.addEventListener('click', () => {
       const gridX = parseInt(dom.gridColsInput.value) || 40;
       const gridY = parseInt(dom.gridRowsInput.value) || 40;
       const casilla = parseInt(dom.gridFeetInput.value) || 5;
@@ -1813,7 +1792,7 @@
       socket?.emit('actualizar_grid', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, gridX, gridY, casilla });
     });
 
-    dom.btnSaveCurrentTemplate.addEventListener('click', () => {
+    dom.btnSaveCurrentTemplate?.addEventListener('click', () => {
       if (selectedFichasIds.length === 0) {
         alert('Por favor selecciona una ficha primero en la pestaña Fichas.');
         return;
@@ -1824,10 +1803,6 @@
       }
     });
 
-    // Daño / Curación Rápido
-    dom.btnApplyDamage.addEventListener('click', () => applyHpChange(false));
-    dom.btnApplyHeal.addEventListener('click', () => applyHpChange(true));
-
     // Cerrar Modales
     document.querySelectorAll('.btn-close-modal').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -1836,7 +1811,8 @@
       });
     });
 
-    dom.btnAplicarRevelado?.addEventListener('click', () => {
+    const btnSaveRev = dom.btnSaveRevelar || dom.btnAplicarRevelado;
+    btnSaveRev?.addEventListener('click', () => {
       const fichaId = dom.revelarFichaId.value;
       const targetJugador = dom.revJugadoresSelect.value;
 
@@ -1856,7 +1832,7 @@
         currentFichaReveladoConfig.jugadores[targetJugador] = newConf;
       }
 
-      socket.emit('actualizar_config_revelado', {
+      socket?.emit('actualizar_config_revelado', {
         partidaId: state.partida.id,
         fichaId: fichaId,
         config: currentFichaReveladoConfig
@@ -1906,7 +1882,7 @@
       }
 
       // Determinar la ficha objetivo para animación y asignaciones (Iniciativa / Daño / Curación)
-      const targetTokenId = fichaId || selectedFichaId || dom.diceTargetSelect?.value;
+      const targetTokenId = fichaId || (selectedFichasIds && selectedFichasIds[0]) || dom.diceTokenSelect?.value || '';
 
       socket?.emit('lanzar_dados', {
         partidaId: state.partida.id,
@@ -1996,6 +1972,7 @@
 
   // --- APLICAR DAÑO / CURACIÓN ---
   function applyHpChange(esCuracion) {
+    if (!dom.hdTokenSelect || !dom.hdAmountInput) return;
     const fichaId = dom.hdTokenSelect.value;
     const cantidad = parseInt(dom.hdAmountInput.value) || 0;
 
@@ -2006,7 +1983,7 @@
         cantidad,
         esCuracion
       });
-      closeModal(dom.modalDanoCuracion);
+      if (dom.modalDanoCuracion) closeModal(dom.modalDanoCuracion);
     }
   }
 
@@ -2252,12 +2229,6 @@
       if (esPropietario) {
         card.querySelector('.btn-gigante')?.addEventListener('click', () => {
           socket?.emit('toggle_gigante', { partidaId: state.partida.id, fichaId: ficha.id });
-        });
-
-        card.querySelector('.btn-hp-token')?.addEventListener('click', () => {
-          renderTokenSelects();
-          dom.hdTokenSelect.value = ficha.id;
-          openModal(dom.modalDanoCuracion);
         });
 
         card.querySelector('.btn-edit-ficha')?.addEventListener('click', () => {
