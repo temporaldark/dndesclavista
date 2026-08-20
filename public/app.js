@@ -61,6 +61,7 @@
 
   let activeTool = 'move'; // 'move', 'measure', 'draw', 'erase', 'figures', 'healdamage'
   let selectedFichasIds = [];
+  let isMultiSelectMode = false;
   let isDraggingToken = false;
   let dragOffsets = {};
   let isDraggingFigure = false;
@@ -83,9 +84,19 @@
   // Animaciones de dados en el mapa
   let activeDiceAnimations = []; // { fichaId, icono, resultado, startTime }
 
+  // Ping timer
+  let pingInterval = null;
+
   // Paginación Historial
   let historyPage = 1;
   const historyPerPage = 10;
+
+  // Helper para parsear números preservando 0
+  function parseNumberSafe(val, fallback = 0) {
+    if (val === '' || val === null || val === undefined) return fallback;
+    const n = parseInt(val, 10);
+    return isNaN(n) ? fallback : n;
+  }
 
   // --- INICIALIZACIÓN ---
   window.addEventListener('DOMContentLoaded', () => {
@@ -105,8 +116,10 @@
     initDOM();
     initCanvas();
     initSocket();
+    initGifSearch();
     loadGamesList();
     setupAutoSave();
+    initPing();
   });
 
   // --- ELEMENTOS DOM ---
@@ -126,6 +139,8 @@
       userRoleText: document.getElementById('user-role-text'),
       currentSceneName: document.getElementById('current-scene-name'),
       saveStatusIndicator: document.getElementById('save-status-indicator'),
+      pingIndicator: document.getElementById('ping-indicator'),
+      pingValue: document.getElementById('ping-value'),
       btnNavInicio: document.getElementById('btn-nav-inicio'),
       btnMobileMenu: document.getElementById('btn-mobile-menu'),
       btnMobileDmTools: document.getElementById('btn-mobile-dm-tools'),
@@ -148,6 +163,8 @@
       canvasContainer: document.getElementById('vtt-canvas-container'),
       canvas: document.getElementById('vtt-canvas'),
       mapBgImg: document.getElementById('vtt-map-bg'),
+      btnMultiSelectMode: document.getElementById('btn-multi-select-mode'),
+      multiSelectCount: document.getElementById('multi-select-count'),
       btnZoomIn: document.getElementById('btn-zoom-in'),
       btnZoomOut: document.getElementById('btn-zoom-out'),
       btnZoomReset: document.getElementById('btn-zoom-reset'),
@@ -184,15 +201,19 @@
       btnRollDice: document.getElementById('btn-roll-dice'),
       quickDiceButtons: document.querySelectorAll('.btn-quick-die'),
       classifButtons: document.querySelectorAll('.btn-classif'),
+      d20ModeContainer: document.getElementById('d20-mode-container'),
       modeButtons: document.querySelectorAll('.btn-mode'),
       diceTokenSelect: document.getElementById('dice-token-select'),
       diceTargetContainer: document.getElementById('dice-target-container'),
       diceTargetSelect: document.getElementById('dice-target-select'),
+      friendlyFireContainer: document.getElementById('friendly-fire-container'),
+      friendlyFireCheckbox: document.getElementById('friendly-fire-checkbox'),
       quickDiceHistory: document.getElementById('quick-dice-history'),
 
       // Chat
       chatMessagesContainer: document.getElementById('chat-messages-container'),
       chatTextInput: document.getElementById('chat-text-input'),
+      btnOpenGifSearch: document.getElementById('btn-open-gif-search'),
       btnSendChat: document.getElementById('btn-send-chat'),
 
       // Historial
@@ -231,6 +252,12 @@
       hdAmountInput: document.getElementById('hd-amount-input'),
       btnApplyDamage: document.getElementById('btn-apply-damage'),
       btnApplyHeal: document.getElementById('btn-apply-heal'),
+
+      modalGifSearch: document.getElementById('modal-gif-search'),
+      inputSearchGif: document.getElementById('input-search-gif'),
+      btnDoGifSearch: document.getElementById('btn-do-gif-search'),
+      gifResultsContainer: document.getElementById('gif-results-container'),
+      gifSearchLoading: document.getElementById('gif-search-loading'),
 
       modalGifView: document.getElementById('modal-gif-view'),
       enlargedGifImg: document.getElementById('enlarged-gif-img'),
@@ -555,6 +582,11 @@
       showSaveIndicator('✅ Guardado');
     });
 
+    socket.on('pong_check', (timestamp) => {
+      const ping = Math.max(1, Date.now() - timestamp);
+      updatePingDisplay(ping);
+    });
+
     socket.on('evento_musica', ({ accion, url, volume }) => {
       const container = document.getElementById('youtube-music-container');
 
@@ -804,6 +836,7 @@
       let scaleMult = 1;
       if (ficha.tamanio_base === 'grande') scaleMult = 2;
       if (ficha.tamanio_base === 'enorme') scaleMult = 3;
+      if (ficha.tamanio_base === 'gargantua') scaleMult = 4;
       if (ficha.tamanio_base === 'enano') scaleMult = 0.75;
       if (ficha.gigante) scaleMult *= 2;
 
@@ -1003,7 +1036,7 @@
     if (activeTool === 'move') {
       // Buscar si hizo clic sobre alguna ficha
       const clickedFicha = [...(state.fichas || [])].reverse().find(f => {
-        let mult = f.tamanio_base === 'grande' ? 2 : f.tamanio_base === 'enorme' ? 3 : f.tamanio_base === 'enano' ? 0.75 : 1;
+        let mult = f.tamanio_base === 'gargantua' ? 4 : f.tamanio_base === 'enorme' ? 3 : f.tamanio_base === 'grande' ? 2 : f.tamanio_base === 'enano' ? 0.75 : 1;
         if (f.gigante) mult *= 2;
         return gridPos.x >= f.x && gridPos.x <= f.x + mult && gridPos.y >= f.y && gridPos.y <= f.y + mult;
       });
@@ -1012,9 +1045,10 @@
         // Verificar permisos: DM o dueño directo de la ficha
         const esDuenio = esDuenioDeFicha(clickedFicha);
         if (esDuenio) {
-          if (!e.shiftKey && !selectedFichasIds.includes(clickedFicha.id)) {
+          const isMulti = e.shiftKey || isMultiSelectMode;
+          if (!isMulti && !selectedFichasIds.includes(clickedFicha.id)) {
             selectedFichasIds = [clickedFicha.id];
-          } else if (e.shiftKey) {
+          } else if (isMulti) {
             if (selectedFichasIds.includes(clickedFicha.id)) {
               selectedFichasIds = selectedFichasIds.filter(id => id !== clickedFicha.id);
             } else {
@@ -1022,6 +1056,7 @@
             }
           }
           
+          updateMultiSelectBadge();
           if (dom.diceTokenSelect) dom.diceTokenSelect.value = selectedFichasIds[0] || '';
           isDraggingToken = selectedFichasIds.length > 0;
           
@@ -1338,6 +1373,12 @@
       }
     });
 
+    dom.btnMultiSelectMode?.addEventListener('click', () => {
+      isMultiSelectMode = !isMultiSelectMode;
+      dom.btnMultiSelectMode.classList.toggle('active', isMultiSelectMode);
+      updateMultiSelectBadge();
+    });
+
     // Menús y Navegación & Botones Inicio
     dom.btnNavInicio.addEventListener('click', () => {
       autoSaveGame();
@@ -1456,6 +1497,7 @@
           dom.toolOptionsContainer.classList.remove('hidden');
           dom.optFigures.classList.remove('hidden');
         } else if (activeTool === 'healdamage') {
+          renderTokenSelects();
           openModal(dom.modalDanoCuracion);
         }
       });
@@ -1605,21 +1647,21 @@
         tipo: document.getElementById('ficha-tipo').value,
         jugadorId: state.usuario.id,
         imagen: dom.fichaImgPreview.src,
-        fuerza: parseInt(document.getElementById('ficha-fue').value) || 10,
-        destreza: parseInt(document.getElementById('ficha-des').value) || 10,
-        constitucion: parseInt(document.getElementById('ficha-con').value) || 10,
-        inteligencia: parseInt(document.getElementById('ficha-int').value) || 10,
-        sabiduria: parseInt(document.getElementById('ficha-sab').value) || 10,
-        carisma: parseInt(document.getElementById('ficha-car').value) || 10,
-        hpActual: parseInt(document.getElementById('ficha-hp-act').value) || 10,
-        hpMaximo: parseInt(document.getElementById('ficha-hp-max').value) || 10,
-        hp_actual: parseInt(document.getElementById('ficha-hp-act').value) || 10,
-        hp_maximo: parseInt(document.getElementById('ficha-hp-max').value) || 10,
-        ac: parseInt(document.getElementById('ficha-ac').value) || 10,
-        velocidad: parseInt(document.getElementById('ficha-vel').value) || 30,
-        iniciativa: parseInt(document.getElementById('ficha-ini').value) || 0,
-        nivel: parseInt(document.getElementById('ficha-nivel').value) || 1,
-        altura: parseInt(document.getElementById('ficha-altura').value) || 2,
+        fuerza: parseNumberSafe(document.getElementById('ficha-fue').value, 10),
+        destreza: parseNumberSafe(document.getElementById('ficha-des').value, 10),
+        constitucion: parseNumberSafe(document.getElementById('ficha-con').value, 10),
+        inteligencia: parseNumberSafe(document.getElementById('ficha-int').value, 10),
+        sabiduria: parseNumberSafe(document.getElementById('ficha-sab').value, 10),
+        carisma: parseNumberSafe(document.getElementById('ficha-car').value, 10),
+        hpActual: parseNumberSafe(document.getElementById('ficha-hp-act').value, 10),
+        hpMaximo: parseNumberSafe(document.getElementById('ficha-hp-max').value, 10),
+        hp_actual: parseNumberSafe(document.getElementById('ficha-hp-act').value, 10),
+        hp_maximo: parseNumberSafe(document.getElementById('ficha-hp-max').value, 10),
+        ac: parseNumberSafe(document.getElementById('ficha-ac').value, 10),
+        velocidad: parseNumberSafe(document.getElementById('ficha-vel').value, 30),
+        iniciativa: parseNumberSafe(document.getElementById('ficha-ini').value, 0),
+        nivel: parseNumberSafe(document.getElementById('ficha-nivel').value, 1),
+        altura: parseNumberSafe(document.getElementById('ficha-altura').value, 2),
         tamanioBase: document.getElementById('ficha-tamanio').value,
         tamanio_base: document.getElementById('ficha-tamanio').value,
         color_aro: document.getElementById('ficha-color-aro') ? document.getElementById('ficha-color-aro').value : '#c9a84c',
@@ -1649,12 +1691,28 @@
 
         currentClassif = btn.dataset.classif;
         if (currentClassif === 'Daño' || currentClassif === 'Curación') {
+          // Ocultar modo d20 ventaja/desventaja cuando se pulsa daño o curación
+          if (dom.d20ModeContainer) dom.d20ModeContainer.classList.add('hidden');
+          dom.modeButtons.forEach(b => b.classList.remove('active'));
+          document.querySelector('.btn-mode[data-mode="normal"]')?.classList.add('active');
+
           dom.diceTargetContainer.classList.remove('hidden');
+          if (currentClassif === 'Daño') {
+            dom.friendlyFireContainer?.classList.remove('hidden');
+          } else {
+            dom.friendlyFireContainer?.classList.add('hidden');
+          }
           updateDiceTargetOptions(currentClassif);
         } else {
+          if (dom.d20ModeContainer) dom.d20ModeContainer.classList.remove('hidden');
           dom.diceTargetContainer.classList.add('hidden');
+          dom.friendlyFireContainer?.classList.add('hidden');
         }
       });
+    });
+
+    dom.friendlyFireCheckbox?.addEventListener('change', () => {
+      updateDiceTargetOptions(currentClassif);
     });
 
     dom.modeButtons.forEach(btn => {
@@ -1827,11 +1885,15 @@
     if (classif === 'Iniciativa') icon = '🎯';
     if (classif === 'Curación') icon = '❤️';
 
+    const isDamageOrHeal = (classif === 'Daño' || classif === 'Curación');
+
     try {
-      if (mode === 'ventaja') {
-        rawFormula = rawFormula.replace(/1d20/g, '2d20kh1');
-      } else if (mode === 'desventaja') {
-        rawFormula = rawFormula.replace(/1d20/g, '2d20kl1');
+      if (!isDamageOrHeal) {
+        if (mode === 'ventaja') {
+          rawFormula = rawFormula.replace(/1d20/g, '2d20kh1');
+        } else if (mode === 'desventaja') {
+          rawFormula = rawFormula.replace(/1d20/g, '2d20kl1');
+        }
       }
 
       const diceResult = evalDiceFormula(rawFormula);
@@ -1839,7 +1901,7 @@
 
       // Construir texto de fórmula con detalle de dados
       let formulaDisplay = originalFormula;
-      if (mode !== 'normal' && diceResult.rollDetails.length > 0) {
+      if (!isDamageOrHeal && mode !== 'normal' && diceResult.rollDetails.length > 0) {
         const modeLabel = mode === 'ventaja' ? '⭐Ventaja' : '🌑Desventaja';
         formulaDisplay = `${originalFormula} [${modeLabel}: ${diceResult.rollDetails.join(', ')}]`;
       } else if (diceResult.rollDetails.length > 0) {
@@ -2160,6 +2222,7 @@
         </div>
         <div class="ficha-actions">
           ${esPropietario ? '<button class="btn btn-sm btn-secondary btn-gigante"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Gigante</button>' : ''}
+          ${esPropietario ? '<button class="btn btn-sm btn-danger btn-hp-token" title="Modificar vida (Daño o Curación)"><i class="fa-solid fa-heart-pulse"></i> HP</button>' : ''}
           ${state.usuario.esDM && isMonster ? `<button class="btn btn-sm btn-primary btn-revelar-menu"><i class="fa-solid fa-eye"></i> Visibilidad</button>` : ''}
           ${esPropietario ? '<button class="btn btn-sm btn-primary btn-edit-ficha"><i class="fa-solid fa-pen"></i> Editar</button>' : ''}
           ${state.usuario.esDM ? '<button class="btn btn-sm btn-danger btn-del-ficha"><i class="fa-solid fa-trash"></i></button>' : ''}
@@ -2192,24 +2255,30 @@
           socket?.emit('toggle_gigante', { partidaId: state.partida.id, fichaId: ficha.id });
         });
 
+        card.querySelector('.btn-hp-token')?.addEventListener('click', () => {
+          renderTokenSelects();
+          dom.hdTokenSelect.value = ficha.id;
+          openModal(dom.modalDanoCuracion);
+        });
+
         card.querySelector('.btn-edit-ficha')?.addEventListener('click', () => {
           document.getElementById('ficha-id').value = ficha.id;
           document.getElementById('ficha-nombre').value = ficha.nombre;
           document.getElementById('ficha-tipo').value = ficha.tipo;
           dom.fichaImgPreview.src = ficha.imagen || 'https://via.placeholder.com/100?text=Avatar';
-          document.getElementById('ficha-fue').value = ficha.fuerza || 10;
-          document.getElementById('ficha-des').value = ficha.destreza || 10;
-          document.getElementById('ficha-con').value = ficha.constitucion || 10;
-          document.getElementById('ficha-int').value = ficha.inteligencia || 10;
-          document.getElementById('ficha-sab').value = ficha.sabiduria || 10;
-          document.getElementById('ficha-car').value = ficha.carisma || 10;
-          document.getElementById('ficha-hp-act').value = ficha.hp_actual;
-          document.getElementById('ficha-hp-max').value = ficha.hp_maximo;
-          document.getElementById('ficha-ac').value = ficha.ac;
-          document.getElementById('ficha-vel').value = ficha.velocidad || 30;
-          document.getElementById('ficha-ini').value = ficha.iniciativa || 0;
-          document.getElementById('ficha-nivel').value = ficha.nivel || 1;
-          document.getElementById('ficha-altura').value = ficha.altura || 2;
+          document.getElementById('ficha-fue').value = ficha.fuerza ?? 10;
+          document.getElementById('ficha-des').value = ficha.destreza ?? 10;
+          document.getElementById('ficha-con').value = ficha.constitucion ?? 10;
+          document.getElementById('ficha-int').value = ficha.inteligencia ?? 10;
+          document.getElementById('ficha-sab').value = ficha.sabiduria ?? 10;
+          document.getElementById('ficha-car').value = ficha.carisma ?? 10;
+          document.getElementById('ficha-hp-act').value = ficha.hp_actual ?? 10;
+          document.getElementById('ficha-hp-max').value = ficha.hp_maximo ?? 10;
+          document.getElementById('ficha-ac').value = ficha.ac ?? 10;
+          document.getElementById('ficha-vel').value = ficha.velocidad ?? 30;
+          document.getElementById('ficha-ini').value = ficha.iniciativa ?? 0;
+          document.getElementById('ficha-nivel').value = ficha.nivel ?? 1;
+          document.getElementById('ficha-altura').value = ficha.altura ?? 2;
           document.getElementById('ficha-tamanio').value = ficha.tamanio_base || 'mediano';
           if (document.getElementById('ficha-color-aro')) document.getElementById('ficha-color-aro').value = ficha.color_aro || '#c9a84c';
           document.getElementById('ficha-notas').value = ficha.notas || '';
@@ -2246,7 +2315,8 @@
       card.addEventListener('click', (e) => {
         if (e.target.closest('button') || e.target.closest('img')) return;
         
-        if (e.shiftKey) {
+        const isMulti = e.shiftKey || isMultiSelectMode;
+        if (isMulti) {
           if (selectedFichasIds.includes(ficha.id)) {
             selectedFichasIds = selectedFichasIds.filter(id => id !== ficha.id);
           } else {
@@ -2256,6 +2326,7 @@
           selectedFichasIds = [ficha.id];
         }
         
+        updateMultiSelectBadge();
         if (dom.diceTokenSelect) dom.diceTokenSelect.value = selectedFichasIds[0] || '';
         renderFichasList();
         renderCanvas();
@@ -2276,7 +2347,7 @@
       opt.value = f.id;
       opt.textContent = f.nombre;
 
-      if (esPropia) {
+      if (esPropia || state.usuario.esDM) {
         dom.diceTokenSelect.appendChild(opt.cloneNode(true));
         dom.hdTokenSelect.appendChild(opt);
       }
@@ -2290,18 +2361,21 @@
   function updateDiceTargetOptions(classif) {
     dom.diceTargetSelect.innerHTML = '<option value="">-- Sin objetivo --</option>';
 
+    const allowFriendlyFire = !!(dom.friendlyFireCheckbox && dom.friendlyFireCheckbox.checked);
+
     (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id).forEach(f => {
       const visibility = getFichaVisibility(f);
       let include = false;
 
       if (classif === 'Curación') {
-        // Solo aliados (fichas tipo jugador)
-        include = (f.tipo === 'jugador');
+        // Aliados o cualquiera si es DM
+        include = (f.tipo === 'jugador' || state.usuario.esDM);
       } else if (classif === 'Daño') {
-        // Solo enemigos (monstruos y NPCs)
-        include = (f.tipo === 'monstruo' || f.tipo === 'npc');
-        // DM puede dañar a cualquiera
-        if (state.usuario.esDM) include = true;
+        // Monstruos/NPCs, o aliados si fuego amigo está activo, o la ficha propia del jugador para autodaño
+        const esPropia = esDuenioDeFicha(f);
+        if (allowFriendlyFire || state.usuario.esDM || esPropia || f.tipo === 'monstruo' || f.tipo === 'npc') {
+          include = true;
+        }
       } else {
         include = true;
       }
@@ -2342,15 +2416,19 @@
 
     listEl.innerHTML = '';
 
+    const allowFriendlyFire = !!(dom.friendlyFireCheckbox && dom.friendlyFireCheckbox.checked);
+
     (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id).forEach(f => {
       const visibility = getFichaVisibility(f);
       let include = false;
 
       if (classif === 'Curación') {
-        include = (f.tipo === 'jugador');
+        include = (f.tipo === 'jugador' || state.usuario.esDM);
       } else if (classif === 'Daño') {
-        include = (f.tipo === 'monstruo' || f.tipo === 'npc');
-        if (state.usuario.esDM) include = true;
+        const esPropia = esDuenioDeFicha(f);
+        if (allowFriendlyFire || state.usuario.esDM || esPropia || f.tipo === 'monstruo' || f.tipo === 'npc') {
+          include = true;
+        }
       } else if (classif === 'Iniciativa') {
         include = true; // Todo el mundo puede recibir iniciativa
       }
@@ -2664,6 +2742,146 @@
       dom.screenVTT.classList.remove('hidden');
       resizeCanvas();
     }
+  }
+
+  // --- MULTISELECCIÓN EN MÓVIL Y CANVAS ---
+  function updateMultiSelectBadge() {
+    if (!dom.multiSelectCount) return;
+    if (selectedFichasIds.length > 0) {
+      dom.multiSelectCount.textContent = `${selectedFichasIds.length} sel.`;
+      dom.multiSelectCount.classList.remove('hidden');
+    } else {
+      dom.multiSelectCount.classList.add('hidden');
+    }
+  }
+
+  // --- LATENCIA / PING EN TIEMPO REAL ---
+  function initPing() {
+    if (pingInterval) clearInterval(pingInterval);
+    pingInterval = setInterval(() => {
+      if (socket && socket.connected) {
+        socket.emit('ping_check', Date.now());
+      }
+    }, 3000);
+  }
+
+  function updatePingDisplay(pingMs) {
+    if (!dom.pingValue || !dom.pingIndicator) return;
+    dom.pingValue.textContent = `${pingMs} ms`;
+    dom.pingIndicator.classList.remove('ping-good', 'ping-medium', 'ping-bad');
+    if (pingMs < 100) {
+      dom.pingIndicator.classList.add('ping-good');
+    } else if (pingMs < 250) {
+      dom.pingIndicator.classList.add('ping-medium');
+    } else {
+      dom.pingIndicator.classList.add('ping-bad');
+    }
+  }
+
+  // --- BUSCADOR DE GIFS EN TIEMPO REAL (CHAT) ---
+  const FALLBACK_GIFS = [
+    { url: 'https://media.giphy.com/media/l2YWgOm7cak7P4C4M/giphy.gif', title: 'Critical Hit' },
+    { url: 'https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif', title: 'Roll 20' },
+    { url: 'https://media.giphy.com/media/3oKIPnAiaMCws8nOsE/giphy.gif', title: 'Dragon Roar' },
+    { url: 'https://media.giphy.com/media/xT0xeJpnrWC4XWblEk/giphy.gif', title: 'Fireball Spell' },
+    { url: 'https://media.giphy.com/media/26AHONQ79FdWZhAI0/giphy.gif', title: 'Victory Dance' },
+    { url: 'https://media.giphy.com/media/l0HlvtIPzPdt2usKs/giphy.gif', title: 'Sword Fight' },
+    { url: 'https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif', title: 'Magic Cast' },
+    { url: 'https://media.giphy.com/media/d2lcHJTG5Tscg/giphy.gif', title: 'Facepalm Fail' },
+    { url: 'https://media.giphy.com/media/26u4cqiYI30juCOGY/giphy.gif', title: 'D&D Dungeon' }
+  ];
+
+  function initGifSearch() {
+    if (!dom.btnOpenGifSearch) return;
+
+    dom.btnOpenGifSearch.addEventListener('click', () => {
+      openModal(dom.modalGifSearch);
+      if (!dom.gifResultsContainer.hasChildNodes()) {
+        searchGifs('dnd');
+      }
+    });
+
+    dom.btnDoGifSearch?.addEventListener('click', () => {
+      const query = dom.inputSearchGif.value.trim();
+      if (query) searchGifs(query);
+    });
+
+    dom.inputSearchGif?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const query = dom.inputSearchGif.value.trim();
+        if (query) searchGifs(query);
+      }
+    });
+
+    document.querySelectorAll('.btn-gif-tag').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tag = btn.dataset.tag;
+        if (dom.inputSearchGif) dom.inputSearchGif.value = tag;
+        searchGifs(tag);
+      });
+    });
+  }
+
+  async function searchGifs(query) {
+    if (!dom.gifResultsContainer) return;
+    dom.gifResultsContainer.innerHTML = '';
+    if (dom.gifSearchLoading) dom.gifSearchLoading.classList.remove('hidden');
+
+    try {
+      const tenorUrl = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(query)}&key=LIVDSRZULELA&limit=24&media_filter=gif,tinygif`;
+      const res = await fetch(tenorUrl);
+      if (!res.ok) throw new Error('Tenor fetch error');
+      const data = await res.json();
+      
+      if (dom.gifSearchLoading) dom.gifSearchLoading.classList.add('hidden');
+
+      if (data.results && data.results.length > 0) {
+        data.results.forEach(item => {
+          const gifUrl = item.media_formats?.gif?.url || item.media_formats?.tinygif?.url || item.url;
+          if (gifUrl) {
+            const div = document.createElement('div');
+            div.className = 'gif-thumb-item';
+            div.innerHTML = `<img src="${gifUrl}" alt="${item.content_description || 'GIF'}" loading="lazy">`;
+            div.addEventListener('click', () => {
+              sendDirectGif(gifUrl);
+              closeModal(dom.modalGifSearch);
+            });
+            dom.gifResultsContainer.appendChild(div);
+          }
+        });
+      } else {
+        renderFallbackGifs();
+      }
+    } catch (err) {
+      if (dom.gifSearchLoading) dom.gifSearchLoading.classList.add('hidden');
+      renderFallbackGifs();
+    }
+  }
+
+  function renderFallbackGifs() {
+    if (!dom.gifResultsContainer) return;
+    dom.gifResultsContainer.innerHTML = '';
+    FALLBACK_GIFS.forEach(g => {
+      const div = document.createElement('div');
+      div.className = 'gif-thumb-item';
+      div.innerHTML = `<img src="${g.url}" alt="${g.title}" loading="lazy">`;
+      div.addEventListener('click', () => {
+        sendDirectGif(g.url);
+        closeModal(dom.modalGifSearch);
+      });
+      dom.gifResultsContainer.appendChild(div);
+    });
+  }
+
+  function sendDirectGif(gifUrl) {
+    socket?.emit('enviar_mensaje', {
+      partidaId: state.partida?.id,
+      usuarioId: state.usuario.id,
+      nombreUsuario: state.usuario.nombre,
+      colorUsuario: state.usuario.color,
+      mensaje: gifUrl,
+      esGif: 1
+    });
   }
 
 })();

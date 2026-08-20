@@ -46,6 +46,9 @@
     </div>
 
     <div class="nav-right">
+      <span id="ping-indicator" class="ping-badge" title="Ping / Latencia con el servidor">
+        <i class="fa-solid fa-signal"></i> <span id="ping-value">-- ms</span>
+      </span>
       <span id="save-status-indicator" class="save-status" title="Estado de Guardado">
         <i class="fa-solid fa-cloud-arrow-up"></i> <span>Listo</span>
       </span>
@@ -91,7 +94,7 @@
   <main id="screen-vtt" class="screen-container hidden">
     <div id="mobile-overlay" class="mobile-overlay hidden"></div>
 
-    <!-- PANEL IZQUIERDO (HERRAMIENTAS DE MAPA: MOVER, MEDIR, FIGURAS PARA TODOS / DIBUJAR Y HP SOLO DM) -->
+    <!-- PANEL IZQUIERDO (HERRAMIENTAS DE MAPA: MOVER, MEDIR, FIGURAS, HP PARA TODOS / DIBUJAR SOLO DM) -->
     <aside id="dm-tools-panel" class="dm-tools-panel">
       <div class="panel-header">
         <i class="fa-solid fa-toolbox gold-text"></i> <span>Herramientas</span>
@@ -112,7 +115,7 @@
         <button id="tool-erase" class="tool-btn" data-tool="erase" title="Borrar Dibujo/Figura">
           <i class="fa-solid fa-eraser"></i> <span>Borrar</span>
         </button>
-        <button id="tool-heal-damage" class="tool-btn dm-only" data-tool="healdamage" title="Daño y Curación (Solo DM)">
+        <button id="tool-heal-damage" class="tool-btn" data-tool="healdamage" title="Daño y Curación (HP +- )">
           <i class="fa-solid fa-heart-pulse"></i> <span>HP +-</span>
         </button>
       </div>
@@ -157,6 +160,10 @@
 
       <!-- Controles flotantes de Zoom y Posición -->
       <div class="canvas-controls">
+        <button id="btn-multi-select-mode" class="btn-circle" title="Modo Multiselección de Fichas (Móvil / Táctil)">
+          <i class="fa-solid fa-object-group"></i>
+        </button>
+        <span id="multi-select-count" class="multi-select-badge hidden" title="Fichas seleccionadas">0</span>
         <button id="btn-zoom-in" class="btn-circle" title="Acercar (Zoom In)"><i class="fa-solid fa-plus"></i></button>
         <button id="btn-zoom-reset" class="btn-circle" title="Recentrar Vista"><i
             class="fa-solid fa-crosshairs"></i></button>
@@ -242,11 +249,13 @@
               <button class="btn-classif" data-classif="Curación">❤️ Curación</button>
             </div>
 
-            <label class="input-label">Modo d20 Especial:</label>
-            <div class="d20-mode-grid">
-              <button class="btn-mode active" data-mode="normal">✨ Normal</button>
-              <button class="btn-mode" data-mode="ventaja">⭐ Ventaja</button>
-              <button class="btn-mode" data-mode="desventaja">🌑 Desventaja</button>
+            <div id="d20-mode-container">
+              <label class="input-label">Modo d20 Especial:</label>
+              <div class="d20-mode-grid">
+                <button class="btn-mode active" data-mode="normal">✨ Normal</button>
+                <button class="btn-mode" data-mode="ventaja">⭐ Ventaja</button>
+                <button class="btn-mode" data-mode="desventaja">🌑 Desventaja</button>
+              </div>
             </div>
 
             <label class="input-label">Asociar Tirada a Ficha (para animación):</label>
@@ -259,6 +268,13 @@
               <select id="dice-target-select" class="form-select">
                 <option value="">-- Sin objetivo --</option>
               </select>
+
+              <div id="friendly-fire-container" class="friendly-fire-box hidden" style="margin-top: 8px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9rem; color: #f87171; background: rgba(231, 76, 60, 0.12); padding: 6px 10px; border-radius: 6px; border: 1px dashed rgba(231, 76, 60, 0.4);">
+                  <input type="checkbox" id="friendly-fire-checkbox" style="cursor: pointer;">
+                  <i class="fa-solid fa-fire"></i> Fuego Amigo (Permitir dañar aliados / autodaño)
+                </label>
+              </div>
             </div>
 
             <div class="dice-recent-history">
@@ -280,7 +296,10 @@
           </div>
           <div class="chat-input-area">
             <input type="text" id="chat-text-input" placeholder="Escribe un mensaje o pega un link de imagen/GIF..." autocomplete="off">
-            <button id="btn-send-chat" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i></button>
+            <button id="btn-open-gif-search" type="button" class="btn btn-secondary" title="Buscar GIFs en tiempo real">
+              <i class="fa-solid fa-film"></i> GIF
+            </button>
+            <button id="btn-send-chat" type="button" class="btn btn-primary"><i class="fa-solid fa-paper-plane"></i></button>
           </div>
         </div>
 
@@ -479,11 +498,11 @@
           <div class="form-group">
             <label>Tamaño Base</label>
             <select id="ficha-tamanio" class="form-select">
-              <option value="pequeno">Pequeño (1x1)</option>
               <option value="enano">Enano (1x1)</option>
               <option value="mediano" selected>Mediano (1x1)</option>
               <option value="grande">Grande (2x2)</option>
               <option value="enorme">Enorme (3x3)</option>
+              <option value="gargantua">Gargantúa (4x4)</option>
             </select>
           </div>
         </div>
@@ -509,7 +528,7 @@
     </div>
   </div>
 
-  <!-- MODAL: DAÑO Y CURACIÓN RÁPIDO (DM) -->
+  <!-- MODAL: DAÑO Y CURACIÓN RÁPIDO -->
   <div id="modal-dano-curacion" class="modal-overlay hidden">
     <div class="modal-content modal-sm">
       <div class="modal-header">
@@ -528,6 +547,38 @@
             Daño</button>
           <button id="btn-apply-heal" class="btn btn-success flex-1"><i class="fa-solid fa-notes-medical"></i> Aplicar
             Curación</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: BUSCADOR DE GIFS EN TIEMPO REAL -->
+  <div id="modal-gif-search" class="modal-overlay hidden">
+    <div class="modal-content modal-md">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-film gold-text"></i> Buscar GIFs en Tiempo Real</h3>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="gif-search-bar" style="display: flex; gap: 8px; margin-bottom: 12px;">
+          <input type="text" id="input-search-gif" placeholder="Buscar GIFs (ej: dnd, dragon, nat20, victory, fireball...)" style="flex: 1; padding: 10px 14px; border-radius: 6px; background: var(--bg-input); border: 1px solid var(--border-subtle); color: #fff;">
+          <button id="btn-do-gif-search" class="btn btn-primary"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button>
+        </div>
+        <div class="gif-tags-quick" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
+          <button type="button" class="btn-gif-tag btn btn-sm btn-secondary" data-tag="dnd">⚔️ D&D</button>
+          <button type="button" class="btn-gif-tag btn btn-sm btn-secondary" data-tag="dice roll">🎲 Dados</button>
+          <button type="button" class="btn-gif-tag btn btn-sm btn-secondary" data-tag="dragon">🐉 Dragón</button>
+          <button type="button" class="btn-gif-tag btn btn-sm btn-secondary" data-tag="critical hit">💥 Crítico</button>
+          <button type="button" class="btn-gif-tag btn btn-sm btn-secondary" data-tag="magic spell">✨ Magia</button>
+          <button type="button" class="btn-gif-tag btn btn-sm btn-secondary" data-tag="fireball">🔥 Fireball</button>
+          <button type="button" class="btn-gif-tag btn btn-sm btn-secondary" data-tag="victory dance">🏆 Victoria</button>
+          <button type="button" class="btn-gif-tag btn btn-sm btn-secondary" data-tag="facepalm fail">💀 Fail</button>
+        </div>
+        <div id="gif-results-container" class="gif-results-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; max-height: 380px; overflow-y: auto; padding-right: 4px;">
+          <!-- GIFs cargados dinámicamente -->
+        </div>
+        <div id="gif-search-loading" class="hidden" style="text-align: center; padding: 20px; color: var(--gold-light);">
+          <i class="fa-solid fa-spinner fa-spin"></i> Buscando GIFs...
         </div>
       </div>
     </div>

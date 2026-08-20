@@ -109,20 +109,23 @@ app.get('/api/partidas/:id/export', async (req, res) => {
     const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ?`, [id]);
     const figuras = await dbAll(`SELECT f.* FROM figuras f JOIN escenas e ON f.escena_id = e.id WHERE e.partida_id = ?`, [id]);
     const dibujos = await dbAll(`SELECT d.* FROM dibujos d JOIN escenas e ON d.escena_id = e.id WHERE e.partida_id = ?`, [id]);
+    const posiciones_fichas = await dbAll(`SELECT pf.* FROM posiciones_fichas pf JOIN escenas e ON pf.escena_id = e.id WHERE e.partida_id = ?`, [id]);
     const mensajes = await dbAll(`SELECT * FROM mensajes WHERE partida_id = ?`, [id]);
     const historial = await dbAll(`SELECT * FROM historial_dados WHERE partida_id = ?`, [id]);
     const galeria = await dbAll(`SELECT * FROM galeria WHERE partida_id = ?`, [id]);
 
     const backup = {
+      version: '1.2.0',
+      fechaExport: new Date().toISOString(),
       partida,
       escenas,
       fichas,
+      posiciones_fichas,
       figuras,
       dibujos,
       mensajes,
       historial,
-      galeria,
-      fechaExport: new Date().toISOString()
+      galeria
     };
 
     const fileName = `sesion_dnd_${(partida.nombre || 'partida').replace(/[^a-zA-Z0-9]/g, '_')}_${partida.codigo}.json`;
@@ -142,13 +145,14 @@ app.post('/api/partidas/import', async (req, res) => {
       return res.status(400).json({ error: 'Formato de archivo de respaldo inválido.' });
     }
 
-    const { partida, escenas = [], fichas = [], figuras = [], dibujos = [], mensajes = [], historial = [], galeria = [] } = backupData;
+    const { partida, escenas = [], fichas = [], posiciones_fichas = [], figuras = [], dibujos = [], mensajes = [], historial = [], galeria = [] } = backupData;
     
     const newPartidaId = uuidv4();
     const newCodigo = generarCodigoPartida();
     const ahora = new Date().toISOString();
 
     const escenaIdMap = new Map();
+    const fichaIdMap = new Map();
 
     // Insertar partida
     await dbRun(
@@ -180,12 +184,30 @@ app.post('/api/partidas/import', async (req, res) => {
     // Insertar fichas
     for (const f of fichas) {
       const newFichaId = uuidv4();
+      fichaIdMap.set(f.id, newFichaId);
       const newEscenaId = escenaIdMap.get(f.escena_id) || firstNewEscenaId;
+      const hpAct = f.hp_actual !== undefined && f.hp_actual !== null ? f.hp_actual : 10;
+      const hpMax = f.hp_maximo !== undefined && f.hp_maximo !== null ? f.hp_maximo : 10;
+      const posX = f.x !== undefined && f.x !== null ? f.x : 0;
+      const posY = f.y !== undefined && f.y !== null ? f.y : 0;
+
       await dbRun(
-        `INSERT INTO fichas (id, partida_id, escena_id, nombre, tipo, jugador_id, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, gigante, notas, x, y, revelado)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [newFichaId, newPartidaId, newEscenaId, f.nombre, f.tipo || 'jugador', f.jugador_id || null, f.imagen, f.fuerza || 10, f.destreza || 10, f.constitucion || 10, f.inteligencia || 10, f.sabiduria || 10, f.carisma || 10, f.hp_actual || 10, f.hp_maximo || 10, f.ac || 10, f.velocidad || 30, f.iniciativa || 0, f.nivel || 1, f.altura || 2, f.tamanio_base || 'mediano', f.gigante || 0, f.notas || '', f.x || 5, f.y || 5, typeof f.revelado === 'object' ? JSON.stringify(f.revelado) : (f.revelado || 0)]
+        `INSERT INTO fichas (id, partida_id, escena_id, nombre, tipo, jugador_id, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro, gigante, notas, x, y, revelado)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [newFichaId, newPartidaId, newEscenaId, f.nombre, f.tipo || 'jugador', f.jugador_id || null, f.imagen, f.fuerza ?? 10, f.destreza ?? 10, f.constitucion ?? 10, f.inteligencia ?? 10, f.sabiduria ?? 10, f.carisma ?? 10, hpAct, hpMax, f.ac ?? 10, f.velocidad ?? 30, f.iniciativa ?? 0, f.nivel ?? 1, f.altura ?? 2, f.tamanio_base || 'mediano', f.color_aro || '#c9a84c', f.gigante ? 1 : 0, f.notas || '', posX, posY, typeof f.revelado === 'object' ? JSON.stringify(f.revelado) : (f.revelado || 0)]
       );
+    }
+
+    // Insertar posiciones_fichas guardadas
+    for (const pf of posiciones_fichas) {
+      const mappedFichaId = fichaIdMap.get(pf.ficha_id);
+      const mappedEscenaId = escenaIdMap.get(pf.escena_id);
+      if (mappedFichaId && mappedEscenaId) {
+        await dbRun(
+          `INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`,
+          [mappedFichaId, mappedEscenaId, pf.x ?? 0, pf.y ?? 0]
+        );
+      }
     }
 
     // Insertar figuras
@@ -249,6 +271,11 @@ app.post('/api/partidas/import', async (req, res) => {
 
 io.on('connection', (socket) => {
   console.log(`🔌 Cliente conectado: ${socket.id}`);
+
+  // Responder al ping del cliente para medir latencia
+  socket.on('ping_check', (timestamp) => {
+    socket.emit('pong_check', timestamp);
+  });
 
   // Unirse a una partida con código
   socket.on('unirse_partida', async ({ codigo, nombreUsuario, usuarioId, esDMRequested }) => {
