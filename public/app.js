@@ -232,41 +232,11 @@
       enlargedImgTitle: document.getElementById('enlarged-img-title'),
       enlargedImgNotas: document.getElementById('enlarged-img-notas'),
 
-      modalRevelar: document.getElementById('modal-revelar-ficha'),
-      revelarFichaId: document.getElementById('revelar-ficha-id'),
-      revImagen: document.getElementById('rev-imagen'),
-      revNombre: document.getElementById('rev-nombre'),
-      revHp: document.getElementById('rev-hp'),
-      revAc: document.getElementById('rev-ac'),
-      revNotas: document.getElementById('rev-notas'),
-      revJugadoresSelect: document.getElementById('rev-jugadores-select'),
-      btnSaveRevelar: document.getElementById('btn-save-revelar'),
-
-      modalCreateGame: document.getElementById('modal-create-game'),
-      formCreateGame: document.getElementById('form-create-game'),
-      createGameTitle: document.getElementById('create-game-title'),
-      createDmName: document.getElementById('create-dm-name'),
-      createGameImgFile: document.getElementById('create-game-img-file'),
-      createGameImgUrl: document.getElementById('create-game-img-url'),
-
-      modalJoinGame: document.getElementById('modal-join-game'),
-      formJoinGame: document.getElementById('form-join-game'),
-      joinCodeInput: document.getElementById('join-code-input'),
-      joinUsernameInput: document.getElementById('join-username-input')
-
       modalGifView: document.getElementById('modal-gif-view'),
       enlargedGifImg: document.getElementById('enlarged-gif-img'),
       enlargedImgTitle: document.getElementById('enlarged-img-title'),
       enlargedImgNotas: document.getElementById('enlarged-img-notas'),
 
-      modalCreateGame: document.getElementById('modal-create-game'),
-      formCreateGame: document.getElementById('form-create-game'),
-      modalJoinGame: document.getElementById('modal-join-game'),
-      formJoinGame: document.getElementById('form-join-game'),
-
-      codeBadge: document.getElementById('code-badge'),
-
-      // Modales Revelado Avanzado
       modalRevelar: document.getElementById('modal-revelar-ficha'),
       revelarFichaId: document.getElementById('revelar-ficha-id'),
       revImagen: document.getElementById('rev-imagen'),
@@ -275,7 +245,20 @@
       revAc: document.getElementById('rev-ac'),
       revNotas: document.getElementById('rev-notas'),
       revJugadoresSelect: document.getElementById('rev-jugadores-select'),
-      btnAplicarRevelado: document.getElementById('btn-aplicar-revelado')
+      btnSaveRevelar: document.getElementById('btn-save-revelar') || document.getElementById('btn-aplicar-revelado'),
+
+      modalCreateGame: document.getElementById('modal-create-game'),
+      formCreateGame: document.getElementById('form-create-game'),
+      createGameTitle: document.getElementById('create-game-title') || document.getElementById('new-game-name'),
+      createDmName: document.getElementById('create-dm-name'),
+      createGameImgFile: document.getElementById('create-game-img-file'),
+      createGameImgUrl: document.getElementById('create-game-img-url') || document.getElementById('new-game-image'),
+
+      modalJoinGame: document.getElementById('modal-join-game'),
+      formJoinGame: document.getElementById('form-join-game'),
+      joinCodeInput: document.getElementById('join-code-input'),
+      joinUsernameInput: document.getElementById('join-username-input'),
+      codeBadge: document.getElementById('code-badge')
     };
 
     setupEventListeners();
@@ -1408,28 +1391,42 @@
 
     dom.formCreateGame.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const nombre = document.getElementById('new-game-name').value.trim();
-      const imagenPortada = document.getElementById('new-game-image').value.trim();
-      const cols = parseInt(document.getElementById('new-game-cols').value) || 40;
-      const rows = parseInt(document.getElementById('new-game-rows').value) || 40;
+      const titleEl = document.getElementById('create-game-title') || document.getElementById('new-game-name');
+      const dmNameEl = document.getElementById('create-dm-name');
+      const imgUrlEl = document.getElementById('create-game-img-url') || document.getElementById('new-game-image');
+      const imgFileEl = document.getElementById('create-game-img-file');
+      
+      const nombre = titleEl ? titleEl.value.trim() : 'Nueva Partida';
+      const dmName = dmNameEl && dmNameEl.value.trim() ? dmNameEl.value.trim() : (localStorage.getItem('vtt_username') || 'Dungeon Master');
+      
+      let imagenPortada = imgUrlEl ? imgUrlEl.value.trim() : '';
+      if (imgFileEl && imgFileEl.files && imgFileEl.files[0]) {
+        try {
+          imagenPortada = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(imgFileEl.files[0]);
+          });
+        } catch (_) {}
+      }
 
-      const savedName = localStorage.getItem('vtt_username') || 'Dungeon Master';
-      const deterministicId = 'usr_' + savedName.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+      localStorage.setItem('vtt_username', dmName);
+      const deterministicId = 'usr_' + dmName.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
       state.usuario.id = deterministicId;
-      state.usuario.nombre = savedName;
+      state.usuario.nombre = dmName;
       localStorage.setItem('vtt_user_id', deterministicId);
 
       try {
         const res = await fetch('/api/partidas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nombre, creatorId: state.usuario.id, configGridX: cols, configGridY: rows, imagenPortada })
+          body: JSON.stringify({ nombre, creatorId: state.usuario.id, configGridX: 40, configGridY: 40, imagenPortada })
         });
         const data = await res.json();
         closeModal(dom.modalCreateGame);
 
         // Unirse automáticamente (el servidor asignará DM al creador)
-        socket?.emit('unirse_partida', { codigo: data.codigo, nombreUsuario: savedName, usuarioId: state.usuario.id });
+        socket?.emit('unirse_partida', { codigo: data.codigo, nombreUsuario: dmName, usuarioId: state.usuario.id });
       } catch (err) {
         alert('Error al crear la partida.');
       }
