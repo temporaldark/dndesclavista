@@ -53,6 +53,7 @@
   let dragOffsets = {};
   let isDraggingFigure = false;
   let selectedFigureId = null;
+  let dragOffset = { x: 0, y: 0 }; // Para arrastrar figuras individuales
 
   let isPanning = false;
   let panStart = { x: 0, y: 0 };
@@ -71,8 +72,9 @@
   // Animaciones de dados en el mapa
   let activeDiceAnimations = []; // { fichaId, icono, resultado, startTime }
 
-  // Ping timer
-  let pingInterval = null;
+  // RAF render flag
+  let isDirty = false;
+  let rafScheduled = false;
 
   // Paginación Historial
   let historyPage = 1;
@@ -232,11 +234,6 @@
       enlargedImgTitle: document.getElementById('enlarged-img-title'),
       enlargedImgNotas: document.getElementById('enlarged-img-notas'),
 
-      modalGifView: document.getElementById('modal-gif-view'),
-      enlargedGifImg: document.getElementById('enlarged-gif-img'),
-      enlargedImgTitle: document.getElementById('enlarged-img-title'),
-      enlargedImgNotas: document.getElementById('enlarged-img-notas'),
-
       modalRevelar: document.getElementById('modal-revelar-ficha'),
       revelarFichaId: document.getElementById('revelar-ficha-id'),
       revImagen: document.getElementById('rev-imagen'),
@@ -357,6 +354,16 @@
       timeout: 20000
     });
 
+    // Helper: emite cuando el socket esté conectado
+    window._emitWhenReady = function(event, data) {
+      if (!socket) { initSocket(); }
+      if (socket.connected) {
+        socket.emit(event, data);
+      } else {
+        socket.once('connect', () => socket.emit(event, data));
+      }
+    };
+
     socket.on('estado_inicial', (data) => {
       state.partida = data.partida;
       state.escenaActiva = data.escenaActiva;
@@ -377,7 +384,7 @@
       if (state.escenaActiva && state.escenaActiva.mapa) {
         loadMapImage(state.escenaActiva.mapa);
       } else {
-        renderCanvas();
+        markDirty();
       }
     });
 
@@ -403,7 +410,7 @@
       loadMapImage(escenaActiva.mapa);
       renderFichasList();
       renderTokenSelects();
-      renderCanvas();
+      markDirty();
     });
 
     socket.on('escenas_actualizadas', (escenas) => {
@@ -415,7 +422,7 @@
       if (state.escenaActiva && state.escenaActiva.id === escenaId) {
         state.escenaActiva.mapa = mapa;
         loadMapImage(mapa);
-        renderCanvas();
+        markDirty();
       }
     });
 
@@ -438,7 +445,7 @@
         if (dom.gridColsInput) dom.gridColsInput.value = gridX;
         if (dom.gridRowsInput) dom.gridRowsInput.value = gridY;
         if (dom.gridFeetInput) dom.gridFeetInput.value = casilla;
-        renderCanvas();
+        markDirty();
       }
     });
 
@@ -447,7 +454,7 @@
       if (ficha) {
         ficha.x = x;
         ficha.y = y;
-        renderCanvas();
+        markDirty();
       }
     });
 
@@ -455,7 +462,7 @@
       state.fichas.push(nuevaFicha);
       renderFichasList();
       renderTokenSelects();
-      renderCanvas();
+      markDirty();
     });
 
     socket.on('ficha_actualizada', (fichaActualizada) => {
@@ -464,7 +471,7 @@
         state.fichas[idx] = fichaActualizada;
         renderFichasList();
         renderTokenSelects();
-        renderCanvas();
+        markDirty();
       }
     });
 
@@ -472,7 +479,7 @@
       const ficha = state.fichas.find(f => f.id === fichaId);
       if (ficha) {
         ficha.gigante = !!gigante;
-        renderCanvas();
+        markDirty();
         renderFichasList();
       }
     });
@@ -480,8 +487,8 @@
     socket.on('revelado_toggled', ({ fichaId, revelado }) => {
       const ficha = state.fichas.find(f => f.id === fichaId);
       if (ficha) {
-        ficha.revelado = revelado; // es string JSON
-        renderCanvas();
+        ficha.revelado = revelado;
+        markDirty();
         renderFichasList();
       }
     });
@@ -490,7 +497,7 @@
       state.fichas = state.fichas.filter(f => f.id !== fichaId);
       renderFichasList();
       renderTokenSelects();
-      renderCanvas();
+      markDirty();
     });
 
     socket.on('hp_actualizado', ({ fichaId, hp_actual }) => {
@@ -498,13 +505,13 @@
       if (ficha) {
         ficha.hp_actual = hp_actual;
         renderFichasList();
-        renderCanvas();
+        markDirty();
       }
     });
 
     socket.on('figuras_actualizadas', (figuras) => {
       state.figuras = figuras || [];
-      renderCanvas();
+      markDirty();
     });
 
     socket.on('update_dm_status', ({ esDM }) => {
@@ -520,7 +527,7 @@
 
     socket.on('dibujos_actualizadas', (dibujos) => {
       state.dibujos = dibujos || [];
-      renderCanvas();
+      markDirty();
     });
 
     socket.on('nuevo_mensaje', (msg) => {
@@ -565,12 +572,28 @@
       if (f) {
         f.oculto = oculto;
         renderFichasList();
-        renderCanvas();
+        markDirty();
       }
     });
   }
 
   // --- CANVAS & VTT ENGINE ---
+  function markDirty() {
+    isDirty = true;
+    if (!rafScheduled) {
+      rafScheduled = true;
+      requestAnimationFrame(rafRender);
+    }
+  }
+
+  function rafRender() {
+    rafScheduled = false;
+    if (isDirty) {
+      isDirty = false;
+      renderCanvas();
+    }
+  }
+
   function initCanvas() {
     canvas = dom.canvas;
     if (!canvas) return;
@@ -596,13 +619,29 @@
     if (!dom.canvasWrapper || !canvas) return;
     canvas.width = dom.canvasWrapper.clientWidth;
     canvas.height = dom.canvasWrapper.clientHeight;
-    renderCanvas();
+    markDirty();
+  }
+
+  // Centra el viewport en el centro del mapa
+  function centerMap() {
+    if (!canvas) return;
+    const cols = state.escenaActiva?.config_grid_x || state.partida?.config_grid_x || 40;
+    const rows = state.escenaActiva?.config_grid_y || state.partida?.config_grid_y || 40;
+    const mapWidth = cols * viewport.tileSize;
+    const mapHeight = rows * viewport.tileSize;
+    viewport.panX = (canvas.width - mapWidth * viewport.zoom) / 2;
+    viewport.panY = (canvas.height - mapHeight * viewport.zoom) / 2;
   }
 
   function loadMapImage(src) {
     if (!src) {
       mapImageLoaded = false;
-      mapImage.src = '';
+      mapImage = new Image();
+      if (dom.mapBgImg) {
+        dom.mapBgImg.src = '';
+        dom.mapBgImg.classList.add('hidden');
+      }
+      markDirty();
       return;
     }
     const img = new Image();
@@ -614,12 +653,14 @@
         dom.mapBgImg.classList.remove('hidden');
         mapImage = null; // Don't render with canvas if it's a GIF
       } else {
-        dom.mapBgImg.classList.add('hidden');
-        dom.mapBgImg.src = '';
+        if (dom.mapBgImg) {
+          dom.mapBgImg.classList.add('hidden');
+          dom.mapBgImg.src = '';
+        }
       }
       
-      if (!isPanning) centerMap(); // Centrar si no se está haciendo pan actualmente
-      renderCanvas();
+      if (!isPanning) centerMap(); // Centrar al cargar mapa
+      markDirty();
     };
     img.src = src;
   }
@@ -846,7 +887,7 @@
           img = new Image();
           img.src = ficha.imagen;
           tokenImagesCache[ficha.imagen] = img;
-          img.onload = () => renderCanvas();
+          img.onload = () => markDirty();
         }
         if (img.complete && img.naturalWidth !== 0) {
           ctx.drawImage(img, px, py, tokenWidth, tokenHeight);
@@ -1028,7 +1069,7 @@
           });
           
           renderFichasList();
-          renderCanvas();
+          markDirty();
           return;
         }
       }
@@ -1066,7 +1107,7 @@
         if (dom.figOpacity) dom.figOpacity.value = clickedFig.transparencia || 0.4;
         if (dom.figLabel) dom.figLabel.value = clickedFig.etiqueta || '';
 
-        renderCanvas();
+        markDirty();
         return; // Detenemos aquí para no crear figuras nuevas ni hacer pan
       }
     }
@@ -1142,25 +1183,25 @@
         if (now - lastMoveEmitTime > 40) {
           lastMoveEmitTime = now;
         }
-        renderCanvas();
+        markDirty();
       }
     } else if (isDraggingFigure && selectedFigureId) {
       const fig = state.figuras.find(f => f.id === selectedFigureId);
       if (fig) {
         fig.x = gridPos.x - dragOffset.x;
         fig.y = gridPos.y - dragOffset.y;
-        renderCanvas();
+        markDirty();
       }
     } else if (isPanning) {
       viewport.panX = e.clientX - panStart.x;
       viewport.panY = e.clientY - panStart.y;
-      renderCanvas();
+      markDirty();
     } else if (activeTool === 'measure' && measureStart) {
       measureCurrent = gridPos;
-      renderCanvas();
+      markDirty();
     } else if (isDrawing && activeTool === 'draw' && state.usuario.esDM) {
       currentStroke.push({ x: gridPos.x, y: gridPos.y });
-      renderCanvas();
+      markDirty();
     }
   }
 
@@ -1196,7 +1237,7 @@
         });
       }
       isDraggingFigure = false;
-      renderCanvas();
+      markDirty();
     }
 
     if (isDrawing && currentStroke.length > 1) {
@@ -1218,7 +1259,7 @@
     measureCurrent = null;
     isDrawing = false;
     currentStroke = [];
-    renderCanvas();
+    markDirty();
   }
 
   function handleWheel(e) {
@@ -1237,7 +1278,7 @@
         escenaId: state.escenaActiva.id,
         figuraData: myFig
       });
-      renderCanvas();
+      markDirty();
       return;
     }
 
@@ -1257,7 +1298,7 @@
     viewport.zoom = newZoom;
 
     if (dom.zoomLevelText) dom.zoomLevelText.textContent = `${Math.round(viewport.zoom * 100)}%`;
-    renderCanvas();
+    markDirty();
   }
 
   // SOPORTE EVENTOS TÁCTILES MÓVIL
@@ -1304,7 +1345,7 @@
           escenaId: state.escenaActiva.id,
           figuraData: myFig
         });
-        renderCanvas();
+        markDirty();
       } else {
         zoomAt(midX, midY, factor);
       }
@@ -1321,7 +1362,7 @@
       showHpBars = !showHpBars;
       dom.btnToggleHp.classList.toggle('active', showHpBars);
       dom.btnToggleHp.title = showHpBars ? 'Ocultar Barras de HP' : 'Mostrar Barras de HP';
-      renderCanvas();
+      markDirty();
     });
 
     dom.btnSortInitiative?.addEventListener('click', () => {
@@ -1422,13 +1463,19 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ nombre, creatorId: state.usuario.id, configGridX: 40, configGridY: 40, imagenPortada })
         });
+        if (!res.ok) throw new Error('Error del servidor: ' + res.status);
         const data = await res.json();
+        if (!data.codigo) throw new Error('No se recibió código de partida');
         closeModal(dom.modalCreateGame);
 
-        // Unirse automáticamente (el servidor asignará DM al creador)
-        socket?.emit('unirse_partida', { codigo: data.codigo, nombreUsuario: dmName, usuarioId: state.usuario.id });
+        // Unirse automáticamente — espera conexión socket si hace falta
+        if (typeof window._emitWhenReady === 'function') {
+          window._emitWhenReady('unirse_partida', { codigo: data.codigo, nombreUsuario: dmName, usuarioId: state.usuario.id });
+        } else {
+          socket?.emit('unirse_partida', { codigo: data.codigo, nombreUsuario: dmName, usuarioId: state.usuario.id });
+        }
       } catch (err) {
-        alert('Error al crear la partida.');
+        alert('Error al crear la partida: ' + err.message);
       }
     });
 
@@ -1448,7 +1495,11 @@
       }
 
       closeModal(dom.modalJoinGame);
-      socket?.emit('unirse_partida', { codigo, nombreUsuario, usuarioId: state.usuario.id });
+      if (typeof window._emitWhenReady === 'function') {
+        window._emitWhenReady('unirse_partida', { codigo, nombreUsuario, usuarioId: state.usuario.id });
+      } else {
+        socket?.emit('unirse_partida', { codigo, nombreUsuario, usuarioId: state.usuario.id });
+      }
     });
 
     // Herramientas DM (Panel Izquierdo)
@@ -1502,7 +1553,7 @@
               fig.transparencia = parseFloat(dom.figOpacity.value) || 0.4;
               fig.etiqueta = dom.figLabel.value;
 
-              renderCanvas();
+              markDirty();
 
               // Emitir actualización al servidor
               socket?.emit('guardar_figura', {
@@ -1531,7 +1582,7 @@
       viewport.panX = 0;
       viewport.panY = 0;
       if (dom.zoomLevelText) dom.zoomLevelText.textContent = '100%';
-      renderCanvas();
+      markDirty();
     });
 
     // Pestañas Derechas
@@ -2042,7 +2093,7 @@
       viewport.panX = canvas.width / 2 - (ficha.x * tileSize);
       viewport.panY = canvas.height / 2 - (ficha.y * tileSize);
       selectedFichasIds = [ficha.id];
-      renderCanvas();
+      markDirty();
     }
   }
 
@@ -2277,7 +2328,7 @@
         updateMultiSelectBadge();
         if (dom.diceTokenSelect) dom.diceTokenSelect.value = selectedFichasIds[0] || '';
         renderFichasList();
-        renderCanvas();
+        markDirty();
       });
 
       dom.fichasList.appendChild(card);
@@ -2435,9 +2486,13 @@
 
   // --- GESTIÓN DE PARTIDAS GUARDADAS EN PANTALLA INICIO ---
   async function loadGamesList() {
+    if (!dom.gamesList) return;
     try {
-      const res = await fetch('/api/partidas');
-      if (!res.ok) throw new Error('Respuesta no OK');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch('/api/partidas', { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!res.ok) throw new Error('Respuesta no OK: ' + res.status);
       const partidas = await res.json();
 
       dom.gamesList.innerHTML = '';
