@@ -39,8 +39,14 @@ function dbGet(sql, params = []) {
   });
 }
 
-// Inicialización de Tablas
+// Inicialización de Tablas y Optimizaciones SQLite
 async function initDb() {
+  // Optimizaciones de alto rendimiento para SQLite
+  await dbRun(`PRAGMA journal_mode = WAL;`);
+  await dbRun(`PRAGMA synchronous = NORMAL;`);
+  await dbRun(`PRAGMA cache_size = 10000;`);
+  await dbRun(`PRAGMA temp_store = MEMORY;`);
+
   await dbRun(`
     CREATE TABLE IF NOT EXISTS partidas (
       id TEXT PRIMARY KEY,
@@ -216,7 +222,17 @@ async function initDb() {
     // Ignore error if column already exists
   }
 
-  console.log('✅ Base de datos SQLite inicializada correctamente en data/vtt.db');
+  // Índices de rendimiento para consultas concurrentes rápidas
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_fichas_partida ON fichas(partida_id)`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_fichas_escena ON fichas(escena_id)`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_escenas_partida ON escenas(partida_id)`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_posiciones_ficha_escena ON posiciones_fichas(ficha_id, escena_id)`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_figuras_escena ON figuras(escena_id)`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_mensajes_partida ON mensajes(partida_id)`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_historial_partida ON historial_dados(partida_id)`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_galeria_partida ON galeria(partida_id)`);
+
+  console.log('✅ Base de datos SQLite inicializada correctamente con modo WAL e índices');
 }
 
 module.exports = {

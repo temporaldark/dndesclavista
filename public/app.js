@@ -710,23 +710,21 @@
       ctx.fillRect(0, 0, mapWidth, mapHeight);
     }
 
-    // 2. Dibujar Grid de Casillas
+    // 2. Dibujar Grid de Casillas (Batch unificado en 1 solo path para máximo rendimiento)
     ctx.strokeStyle = 'rgba(201, 168, 76, 0.18)';
     ctx.lineWidth = 1;
-
+    ctx.beginPath();
     for (let c = 0; c <= cols; c++) {
-      ctx.beginPath();
-      ctx.moveTo(c * tileSize, 0);
-      ctx.lineTo(c * tileSize, mapHeight);
-      ctx.stroke();
+      const cx = c * tileSize;
+      ctx.moveTo(cx, 0);
+      ctx.lineTo(cx, mapHeight);
     }
-
     for (let r = 0; r <= rows; r++) {
-      ctx.beginPath();
-      ctx.moveTo(0, r * tileSize);
-      ctx.lineTo(mapWidth, r * tileSize);
-      ctx.stroke();
+      const ry = r * tileSize;
+      ctx.moveTo(0, ry);
+      ctx.lineTo(mapWidth, ry);
     }
+    ctx.stroke();
 
     // 3. Dibujar Trazos de Dibujo del DM
     if (state.dibujos && state.dibujos.length > 0) {
@@ -1213,7 +1211,7 @@
           // Snap al grid en números enteros más cercanos
           ficha.x = Math.round(ficha.x);
           ficha.y = Math.round(ficha.y);
-          socket?.emit('mover_ficha', {
+          socket?.emit('guardar_posicion_ficha', {
             partidaId: state.partida.id,
             escenaId: state.escenaActiva.id,
             fichaId: ficha.id,
@@ -1755,6 +1753,16 @@
     dom.mapFileInput?.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (file) {
+        // Si es GIF animado, preservar datos originales para no perder animación
+        if (file.type === 'image/gif') {
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            socket?.emit('actualizar_mapa', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, mapaBase64: evt.target.result });
+          };
+          reader.readAsDataURL(file);
+          return;
+        }
+
         const reader = new FileReader();
         reader.onload = (evt) => {
           const img = new Image();
@@ -1770,7 +1778,7 @@
             canvas.width = w; canvas.height = h;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, w, h);
-            const resizedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+            const resizedBase64 = canvas.toDataURL('image/jpeg', 0.82);
 
             socket?.emit('actualizar_mapa', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, mapaBase64: resizedBase64 });
           };
@@ -2557,12 +2565,12 @@
 
   function autoSaveGame() {
     if (state.partida?.id) {
-      socket?.emit('guardado_automatico', { partidaId: state.partida.id });
+      showSaveIndicator('Guardado');
     }
   }
 
   function setupAutoSave() {
-    setInterval(autoSaveGame, 10000);
+    // Los cambios se persisten en tiempo real en SQLite al interactuar
   }
 
   function showSaveIndicator(text) {

@@ -440,14 +440,19 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Mover ficha en el grid
-  socket.on('mover_ficha', async ({ partidaId, escenaId, fichaId, x, y }) => {
+  // Mover ficha en tiempo real (Broadcast ultrarrápido sin I/O de disco)
+  socket.on('mover_ficha', ({ partidaId, escenaId, fichaId, x, y }) => {
+    socket.to(partidaId).emit('ficha_movida', { fichaId, x, y });
+  });
+
+  // Guardar posición final de la ficha en base de datos (al soltar el ratón / touch)
+  socket.on('guardar_posicion_ficha', async ({ partidaId, escenaId, fichaId, x, y }) => {
     try {
       await dbRun(`UPDATE fichas SET x = ?, y = ? WHERE id = ?`, [x, y, fichaId]);
       await dbRun(`INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`, [fichaId, escenaId, x, y]);
       io.to(partidaId).emit('ficha_movida', { fichaId, x, y });
     } catch (err) {
-      console.error(err);
+      console.error('Error al guardar posición de ficha:', err);
     }
   });
 
