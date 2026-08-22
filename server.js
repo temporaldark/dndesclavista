@@ -312,9 +312,6 @@ io.on('connection', (socket) => {
           if (pos) {
             f.x = pos.x;
             f.y = pos.y;
-          } else {
-            f.x = 0;
-            f.y = 0;
           }
         });
       }
@@ -373,8 +370,24 @@ io.on('connection', (socket) => {
   });
 
   // Cambiar escena (DM)
-  socket.on('cambiar_escena', async ({ partidaId, escenaId }) => {
+  socket.on('cambiar_escena', async ({ partidaId, escenaId, escenaAnteriorId, posicionesActuales }) => {
     try {
+      // 1. Guardar posiciones actuales de las fichas en la escena anterior
+      const prevPartida = await dbGet(`SELECT escena_activa_id FROM partidas WHERE id = ?`, [partidaId]);
+      const prevEscenaId = escenaAnteriorId || prevPartida?.escena_activa_id;
+
+      if (prevEscenaId && Array.isArray(posicionesActuales)) {
+        for (const pos of posicionesActuales) {
+          if (pos && pos.fichaId) {
+            await dbRun(
+              `INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`,
+              [pos.fichaId, prevEscenaId, pos.x ?? 0, pos.y ?? 0]
+            );
+          }
+        }
+      }
+
+      // 2. Cambiar escena activa
       await dbRun(`UPDATE partidas SET escena_activa_id = ?, fecha_modificacion = ? WHERE id = ?`, [escenaId, new Date().toISOString(), partidaId]);
       const escenaActiva = await dbGet(`SELECT * FROM escenas WHERE id = ?`, [escenaId]);
       const figuras = await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaId]);
@@ -382,9 +395,10 @@ io.on('connection', (socket) => {
       const dibujos = dibujoRow ? JSON.parse(dibujoRow.datos || '[]') : [];
       const posiciones_fichas = await dbAll(`SELECT * FROM posiciones_fichas WHERE escena_id = ?`, [escenaId]);
 
+      // 3. Emitir a la sala
       io.to(partidaId).emit('escena_cambiada', { escenaActiva, figuras, dibujos, posiciones_fichas });
     } catch (err) {
-      console.error(err);
+      console.error('Error al cambiar de escena:', err);
     }
   });
 
@@ -449,7 +463,9 @@ io.on('connection', (socket) => {
   socket.on('guardar_posicion_ficha', async ({ partidaId, escenaId, fichaId, x, y }) => {
     try {
       await dbRun(`UPDATE fichas SET x = ?, y = ? WHERE id = ?`, [x, y, fichaId]);
-      await dbRun(`INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`, [fichaId, escenaId, x, y]);
+      if (escenaId) {
+        await dbRun(`INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`, [fichaId, escenaId, x, y]);
+      }
       io.to(partidaId).emit('ficha_movida', { fichaId, x, y });
     } catch (err) {
       console.error('Error al guardar posición de ficha:', err);
@@ -478,6 +494,13 @@ io.on('connection', (socket) => {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [id, partidaId, escenaId, nombre, tipo || 'jugador', ownerId, imagen, fuerza || 10, destreza || 10, constitucion || 10, inteligencia || 10, sabiduria || 10, carisma || 10, hpActual ?? hp_actual ?? 10, hpMaximo ?? hp_maximo ?? 10, ac ?? 10, velocidad ?? 30, iniciativa ?? 0, nivel ?? 1, altura ?? 2, tamanioBase || tamanio_base || 'mediano', color_aro || '#c9a84c', notas || '', x, y, revelado !== undefined ? revelado : defaultRevelado]
       );
+
+      if (escenaId) {
+        await dbRun(
+          `INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`,
+          [id, escenaId, x, y]
+        );
+      }
 
       const nuevaFicha = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [id]);
       io.to(partidaId).emit('ficha_creada', nuevaFicha);

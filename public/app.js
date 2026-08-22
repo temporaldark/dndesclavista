@@ -401,15 +401,19 @@
       if (dom.gridRowsInput) dom.gridRowsInput.value = escenaActiva.config_grid_y || 40;
       if (dom.gridFeetInput) dom.gridFeetInput.value = escenaActiva.config_casilla || 5;
       
+      const posMap = new Map((posiciones_fichas || []).map(p => [p.ficha_id, p]));
       state.fichas.forEach(f => {
-        const pos = (posiciones_fichas || []).find(p => p.ficha_id === f.id);
-        f.x = pos ? pos.x : 0;
-        f.y = pos ? pos.y : 0;
+        const pos = posMap.get(f.id);
+        if (pos) {
+          f.x = pos.x;
+          f.y = pos.y;
+        }
       });
 
       loadMapImage(escenaActiva.mapa);
       renderFichasList();
       renderTokenSelects();
+      renderScenesList();
       markDirty();
     });
 
@@ -2387,7 +2391,17 @@
       `;
 
       item.querySelector('.btn-load-scene').addEventListener('click', () => {
-        socket?.emit('cambiar_escena', { partidaId: state.partida.id, escenaId: sc.id });
+        const posicionesActuales = (state.fichas || []).map(f => ({
+          fichaId: f.id,
+          x: f.x,
+          y: f.y
+        }));
+        socket?.emit('cambiar_escena', {
+          partidaId: state.partida.id,
+          escenaId: sc.id,
+          escenaAnteriorId: state.escenaActiva?.id,
+          posicionesActuales
+        });
       });
 
       item.querySelector('.btn-del-scene').addEventListener('click', () => {
