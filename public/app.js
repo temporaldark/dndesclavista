@@ -122,18 +122,26 @@
     loadGamesList();
     setupAutoSave();
 
-    // Auto-reanudar sesión si se actualizó la página (F5) o se reinició el navegador
+    // Auto-reanudar sesión activa si existe
     const activeCode = localStorage.getItem('vtt_active_game_code');
-    if (activeCode && state.usuario.nombre) {
-      console.log('🔄 Reanudando automáticamente sesión activa tras recarga/actualización:', activeCode);
-      showScreen('vtt');
-      showSaveIndicator('🔄 Reanudando...');
-      if (dom.currentRoomCode) dom.currentRoomCode.textContent = activeCode;
-      window._emitWhenReady('unirse_partida', {
-        codigo: activeCode,
-        nombreUsuario: state.usuario.nombre,
-        usuarioId: state.usuario.id
-      });
+    const activeUser = state.usuario.nombre || localStorage.getItem('vtt_username');
+    if (activeCode && activeUser) {
+      console.log('🔄 Reanudando automáticamente sesión activa:', activeCode);
+      joinGameDirect(activeCode, activeUser);
+    }
+
+    // Soporte para unirse mediante parámetro URL (ej: /?codigo=ABC123 o /?code=ABC123)
+    const urlParams = new URLSearchParams(window.location.search);
+    const codeFromUrl = urlParams.get('codigo') || urlParams.get('code') || urlParams.get('partida');
+    if (codeFromUrl) {
+      const cleanUrlCode = codeFromUrl.toUpperCase().trim();
+      if (activeUser) {
+        joinGameDirect(cleanUrlCode, activeUser);
+      } else {
+        if (dom.joinCodeInput) dom.joinCodeInput.value = cleanUrlCode;
+        openModal(dom.modalJoinGame);
+        setTimeout(() => dom.joinUsernameInput?.focus(), 150);
+      }
     }
   });
 
@@ -441,8 +449,9 @@
       if (dom.reconnectBanner) dom.reconnectBanner.classList.add('hidden');
       showSaveIndicator('🟢 Conectado');
 
+      const isVttActive = dom.screenVTT && !dom.screenVTT.classList.contains('hidden');
       const activeCode = state.partida?.codigo || localStorage.getItem('vtt_active_game_code');
-      if (activeCode && state.usuario.nombre) {
+      if (isVttActive && activeCode && state.usuario.nombre) {
         socket.emit('unirse_partida', {
           codigo: activeCode,
           nombreUsuario: state.usuario.nombre,
@@ -484,6 +493,7 @@
     });
 
     socket.on('estado_inicial', (data) => {
+      hideVttLoading();
       if (data.partida) {
         data.partida.nombre = limpiarNombrePartida(data.partida.nombre);
       }
@@ -519,6 +529,9 @@
     });
 
     socket.on('error_partida', (msg) => {
+      hideVttLoading();
+      localStorage.removeItem('vtt_active_game_code');
+      showScreen('start');
       alert('❌ Error: ' + msg);
     });
 
@@ -1647,12 +1660,8 @@
         if (!data.codigo) throw new Error('No se recibió código de partida');
         closeModal(dom.modalCreateGame);
 
-        // Unirse automáticamente — espera conexión socket si hace falta
-        if (typeof window._emitWhenReady === 'function') {
-          window._emitWhenReady('unirse_partida', { codigo: data.codigo, nombreUsuario: dmName, usuarioId: state.usuario.id });
-        } else {
-          socket?.emit('unirse_partida', { codigo: data.codigo, nombreUsuario: dmName, usuarioId: state.usuario.id });
-        }
+        // Unirse automáticamente y directo sin recargar la página
+        joinGameDirect(data.codigo, dmName);
       } catch (err) {
         alert('Error al crear la partida: ' + err.message);
       }
@@ -1660,25 +1669,20 @@
 
     dom.formJoinGame?.addEventListener('submit', (e) => {
       e.preventDefault();
-      const codigo = document.getElementById('join-code-input').value;
-      const nombreUsuario = document.getElementById('join-username-input').value.trim();
+      const codigo = (dom.joinCodeInput?.value || document.getElementById('join-code-input')?.value || '').trim();
+      const nombreUsuario = (dom.joinUsernameInput?.value || document.getElementById('join-username-input')?.value || '').trim();
 
-      // Guardamos el nombre de usuario localmente para que se auto-rellene en el futuro
-      localStorage.setItem('vtt_username', nombreUsuario);
-
-      if (nombreUsuario) {
-        const deterministicId = 'usr_' + nombreUsuario.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
-        state.usuario.id = deterministicId;
-        state.usuario.nombre = nombreUsuario;
-        localStorage.setItem('vtt_user_id', deterministicId);
+      if (!codigo) {
+        alert('Por favor introduce el código de la partida.');
+        return;
+      }
+      if (!nombreUsuario) {
+        alert('Por favor introduce tu nombre de jugador.');
+        return;
       }
 
       closeModal(dom.modalJoinGame);
-      if (typeof window._emitWhenReady === 'function') {
-        window._emitWhenReady('unirse_partida', { codigo, nombreUsuario, usuarioId: state.usuario.id });
-      } else {
-        socket?.emit('unirse_partida', { codigo, nombreUsuario, usuarioId: state.usuario.id });
-      }
+      joinGameDirect(codigo, nombreUsuario);
     });
 
     // Herramientas DM (Panel Izquierdo)
@@ -3035,11 +3039,32 @@
           </div>
         `;
 
-        card.querySelector('.btn-load-game').addEventListener('click', () => {
-          document.getElementById('join-code-input').value = p.codigo;
-          document.getElementById('join-username-input').value = localStorage.getItem('vtt_username') || '';
-          openModal(dom.modalJoinGame);
-        });
+        const handleEnterGame = () => {
+          const savedUsername = localStorage.getItem('vtt_username') || state.usuario.nombre;
+          if (savedUsername && savedUsername.trim()) {
+            joinGameDirect(p.codigo, savedUsername.trim());
+          } else {
+            if (dom.joinCodeInput) dom.joinCodeInput.value = p.codigo;
+            if (dom.joinUsernameInput) {
+              dom.joinUsernameInput.value = '';
+              openModal(dom.modalJoinGame);
+              setTimeout(() => dom.joinUsernameInput.focus(), 150);
+            }
+          }
+        };
+
+        const btnLoad = card.querySelector('.btn-load-game');
+        if (btnLoad) btnLoad.addEventListener('click', handleEnterGame);
+        const cardTitle = card.querySelector('.card-title');
+        if (cardTitle) {
+          cardTitle.style.cursor = 'pointer';
+          cardTitle.addEventListener('click', handleEnterGame);
+        }
+        const cardImg = card.querySelector('img');
+        if (cardImg) {
+          cardImg.style.cursor = 'pointer';
+          cardImg.addEventListener('click', handleEnterGame);
+        }
 
         card.querySelector('.btn-export-game')?.addEventListener('click', () => {
           window.location.href = `/api/partidas/${p.id}/export`;
@@ -3086,9 +3111,9 @@
       // Si estamos en la pantalla de inicio, recargar la lista de partidas
       loadGamesList();
 
-      // Auto unirse a la partida
-      const username = localStorage.getItem('vtt_username') || 'Dungeon Master';
-      socket?.emit('unirse_partida', { codigo: data.codigo, nombreUsuario: username, usuarioId: state.usuario.id });
+      // Auto unirse directo a la partida sin recargar
+      const username = localStorage.getItem('vtt_username') || state.usuario.nombre || 'Dungeon Master';
+      joinGameDirect(data.codigo, username);
     } catch (err) {
       alert(`❌ Error al importar la sesión: ${err.message}`);
     } finally {
@@ -3346,16 +3371,103 @@
     if (modal) modal.classList.add('hidden');
   }
 
-  function showScreen(name) {
-    if (name === 'start') {
-      dom.screenStart.classList.remove('hidden');
-      dom.screenVTT.classList.add('hidden');
-    } else {
-      dom.screenStart.classList.add('hidden');
-      dom.screenVTT.classList.remove('hidden');
-      resizeCanvas();
+  let vttLoadingTimeout = null;
+  function showVttLoading(text) {
+    const overlay = document.getElementById('vtt-loading-overlay');
+    const txt = document.getElementById('vtt-loading-text');
+    if (overlay) {
+      if (txt && text) txt.textContent = text;
+      overlay.classList.remove('hidden');
+      overlay.style.opacity = '1';
+      overlay.style.visibility = 'visible';
+    }
+    if (vttLoadingTimeout) clearTimeout(vttLoadingTimeout);
+    vttLoadingTimeout = setTimeout(() => {
+      hideVttLoading();
+    }, 12000);
+  }
+
+  function hideVttLoading() {
+    if (vttLoadingTimeout) clearTimeout(vttLoadingTimeout);
+    const overlay = document.getElementById('vtt-loading-overlay');
+    if (overlay) {
+      overlay.style.opacity = '0';
+      setTimeout(() => {
+        overlay.classList.add('hidden');
+        overlay.style.visibility = 'hidden';
+      }, 250);
     }
   }
+
+  function showScreen(name) {
+    if (name === 'start') {
+      dom.screenStart?.classList.remove('hidden');
+      dom.screenVTT?.classList.add('hidden');
+    } else {
+      dom.screenStart?.classList.add('hidden');
+      dom.screenVTT?.classList.remove('hidden');
+      resizeCanvas();
+      setTimeout(resizeCanvas, 50);
+      setTimeout(resizeCanvas, 200);
+    }
+  }
+
+  function joinGameDirect(codigo, nombreUsuario) {
+    if (!codigo) return;
+    codigo = codigo.toUpperCase().trim();
+    nombreUsuario = (nombreUsuario || localStorage.getItem('vtt_username') || state.usuario?.nombre || 'Jugador').trim();
+
+    // Guardar en almacenamiento local para no perder la partida
+    localStorage.setItem('vtt_active_game_code', codigo);
+    localStorage.setItem('vtt_username', nombreUsuario);
+
+    const deterministicId = 'usr_' + nombreUsuario.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+    state.usuario.id = deterministicId;
+    state.usuario.nombre = nombreUsuario;
+    localStorage.setItem('vtt_user_id', deterministicId);
+
+    // Cerrar cualquier modal abierto
+    if (dom.modalJoinGame) closeModal(dom.modalJoinGame);
+    if (dom.modalCreateGame) closeModal(dom.modalCreateGame);
+
+    // Si entramos a una partida distinta a la actual, limpiar vista anterior para evitar parpadeos
+    if (!state.partida || state.partida.codigo !== codigo) {
+      mapImage = null;
+      mapImageLoaded = false;
+      state.partida = null;
+      state.escenaActiva = null;
+      state.fichas = [];
+      state.figuras = [];
+      state.dibujos = [];
+      if (dom.navGameTitle) dom.navGameTitle.textContent = 'Cargando sesión...';
+      if (dom.currentSceneName) dom.currentSceneName.textContent = '...';
+      markDirty();
+    }
+
+    // Llevar INMEDIATAMENTE a la pantalla VTT
+    showScreen('vtt');
+    if (dom.currentRoomCode) dom.currentRoomCode.textContent = codigo;
+    showSaveIndicator('🟢 Entrando...');
+    showVttLoading(`Entrando a la partida (${codigo})...`);
+
+    // Emitir unirse_partida garantizando socket activo
+    if (typeof window._emitWhenReady === 'function') {
+      window._emitWhenReady('unirse_partida', {
+        codigo,
+        nombreUsuario,
+        usuarioId: deterministicId
+      });
+    } else if (socket) {
+      if (socket.connected) {
+        socket.emit('unirse_partida', { codigo, nombreUsuario, usuarioId: deterministicId });
+      } else {
+        socket.once('connect', () => {
+          socket.emit('unirse_partida', { codigo, nombreUsuario, usuarioId: deterministicId });
+        });
+      }
+    }
+  }
+  window.joinGameDirect = joinGameDirect;
 
   // --- MULTISELECCIÓN EN MÓVIL Y CANVAS ---
   function updateMultiSelectBadge() {
