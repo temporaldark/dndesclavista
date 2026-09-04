@@ -168,6 +168,13 @@
 
     <!-- ÁREA CENTRAL: CANVAS TABLERO -->
     <section id="canvas-wrapper" class="canvas-wrapper">
+      <!-- Overlay de Carga Inmediata para Entrada a Sesión -->
+      <div id="vtt-loading-overlay" class="vtt-loading-overlay hidden">
+        <div class="vtt-loading-spinner"></div>
+        <div id="vtt-loading-text" class="vtt-loading-text">Entrando a la sesión...</div>
+        <div class="vtt-loading-subtext">Cargando tablero, fichas y escenas</div>
+      </div>
+
       <div id="vtt-canvas-container" class="vtt-canvas-container">
         <img id="vtt-map-bg" class="hidden" style="position: absolute; top: 0; left: 0; transform-origin: 0 0; pointer-events: none; z-index: 0;" alt="Map Background">
         <canvas id="vtt-canvas" style="position: relative; z-index: 1;"></canvas>
