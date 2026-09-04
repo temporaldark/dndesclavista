@@ -238,6 +238,18 @@ async function initDb() {
     // Ignore error if column already exists
   }
 
+  // Add nombre_ficha to historial_dados and mensajes if they don't exist
+  try {
+    await dbRun(`ALTER TABLE historial_dados ADD COLUMN nombre_ficha TEXT`);
+  } catch (err) {
+    // Ignore error if column already exists
+  }
+  try {
+    await dbRun(`ALTER TABLE mensajes ADD COLUMN nombre_ficha TEXT`);
+  } catch (err) {
+    // Ignore error if column already exists
+  }
+
   // Índices de rendimiento para consultas concurrentes rápidas
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_fichas_partida ON fichas(partida_id)`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_fichas_escena ON fichas(escena_id)`);
