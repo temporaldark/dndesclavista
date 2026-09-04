@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "fechaExport": "2026-09-04T17:58:01.835Z",
+  "partida": {
+    "id": "744bc48c-4462-4833-8000-a90c60c5c73f",
+    "nombre": "Aventura Dragon",
+    "codigo": "SKE5QQ",
+    "dm_id": "usr_test_dm",
+    "escena_activa_id": "fe17f521-df01-409e-a8e1-de4676063cf9",
+    "fecha_creacion": "2026-09-04T17:58:01.197Z",
+    "fecha_modificacion": "2026-09-04T17:58:01.197Z",
+    "config_grid_x": 40,
+    "config_grid_y": 40,
+    "config_casilla": 5,
+    "imagen_portada": null
+  },
+  "escenas": [
+    {
+      "id": "fe17f521-df01-409e-a8e1-de4676063cf9",
+      "partida_id": "744bc48c-4462-4833-8000-a90c60c5c73f",
+      "nombre": "Mazmorra Principal",
+      "mapa": null,
+      "config_grid_x": 40,
+      "config_grid_y": 40,
+      "config_casilla": 5
+    }
+  ],
+  "fichas": [],
+  "posiciones_fichas": [],
+  "figuras": [],
+  "dibujos": [],
+  "mensajes": [],
+  "historial": [],
+  "galeria": []
+}

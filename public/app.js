@@ -23,6 +23,16 @@
     usuario: { id: null, nombre: '', esDM: false, color: '#c9a84c' }
   };
 
+  // Helper para eliminar cualquier variante o repetición de '(Restaurada)'
+  function limpiarNombrePartida(nombre) {
+    if (!nombre) return 'Partida';
+    let limpio = String(nombre);
+    while (/[\(\[\{\-_]?(?:restaurada|restaurado|copia|backup)[\)\]\}]?/i.test(limpio)) {
+      limpio = limpio.replace(/\s*[\(\[\{\-_]?(?:restaurada|restaurado|copia|backup)[\)\]\}]?/gi, '');
+    }
+    return limpio.replace(/[\s\-_]+$/g, '').trim() || 'Partida';
+  }
+
   // Clasificación activa para filtrar targets
   let currentClassif = 'Normal';
 
@@ -412,7 +422,7 @@
     });
 
     socket.on('partida_restaurada', ({ mensaje }) => {
-      showToast('🔄 ' + (mensaje || 'Partida restaurada a una versión previa.'), 'warning');
+      showToast('🔄 ' + (mensaje || 'Partida cargada a una versión previa.'), 'info');
       if (state.partida?.codigo) {
         socket.emit('unirse_partida', {
           codigo: state.partida.codigo,
@@ -423,6 +433,9 @@
     });
 
     socket.on('estado_inicial', (data) => {
+      if (data.partida) {
+        data.partida.nombre = limpiarNombrePartida(data.partida.nombre);
+      }
       state.partida = data.partida;
       state.escenaActiva = data.escenaActiva;
       state.escenas = data.escenas || [];
@@ -2194,8 +2207,10 @@
 
   function updateUIForCurrentGame() {
     if (!state.partida) return;
-    const nombreLimpio = (state.partida.nombre || 'VTT D&D 5e').replace(/\s*\((?:Restaurada|restaurada)\)/gi, '').trim();
+    const nombreLimpio = limpiarNombrePartida(state.partida.nombre);
+    state.partida.nombre = nombreLimpio;
     dom.navGameTitle.textContent = nombreLimpio;
+    document.title = `${nombreLimpio} - VTT D&D 5e`;
     dom.currentRoomCode.textContent = state.partida.codigo;
     dom.currentSceneName.textContent = state.escenaActiva?.nombre || 'Escena';
 
@@ -2600,7 +2615,8 @@
         const card = document.createElement('div');
         card.className = 'game-card';
         const imagenHtml = p.imagen_portada ? `<img src="${p.imagen_portada}" alt="Portada" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;">` : '';
-        const nombreLimpio = (p.nombre || 'Partida').replace(/\s*\((?:Restaurada|restaurada)\)/gi, '').trim();
+        const nombreLimpio = limpiarNombrePartida(p.nombre);
+        p.nombre = nombreLimpio;
         card.innerHTML = `
           ${imagenHtml}
           <div class="card-title">${nombreLimpio}</div>
@@ -2664,12 +2680,12 @@
       }
 
       const data = await res.json();
-      alert(`✅ Sesión restaurada con éxito! Código de partida: ${data.codigo}`);
+      alert(`✅ Sesión cargada con éxito! Código de partida: ${data.codigo}`);
 
       // Si estamos en la pantalla de inicio, recargar la lista de partidas
       loadGamesList();
 
-      // Auto unirse a la partida restaurada
+      // Auto unirse a la partida
       const username = localStorage.getItem('vtt_username') || 'Dungeon Master';
       socket?.emit('unirse_partida', { codigo: data.codigo, nombreUsuario: username, usuarioId: state.usuario.id });
     } catch (err) {
@@ -2787,7 +2803,7 @@
                 const errJson = await r.json();
                 throw new Error(errJson.error || 'Error al restaurar');
               }
-              showToast('✅ Partida restaurada con éxito.', 'success');
+              showToast('✅ Partida cargada con éxito.', 'success');
               socket?.emit('unirse_partida', {
                 codigo: state.partida.codigo,
                 nombreUsuario: state.usuario.nombre,

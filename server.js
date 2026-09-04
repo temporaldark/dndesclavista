@@ -12,7 +12,8 @@ const {
   saveAllPartidasImmediate,
   autoRestoreFromFiles,
   listBackupsForPartida,
-  restoreSnapshotFile
+  restoreSnapshotFile,
+  limpiarNombrePartida
 } = require('./saves_manager');
 
 const app = express();
@@ -30,10 +31,16 @@ const io = new Server(server, {
 
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
-// Servir archivos estáticos con caché del navegador
+// Servir archivos estáticos deshabilitando caché para asegurar que los scripts siempre estén actualizados
 app.use(express.static(path.join(__dirname, 'public'), {
-  maxAge: '1h',
-  etag: true
+  maxAge: 0,
+  etag: false,
+  lastModified: false,
+  setHeaders: (res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+  }
 }));
 
 // Función para generar código alfanumérico único de 6 caracteres
@@ -66,6 +73,9 @@ app.get('/api/partidas', async (req, res) => {
       FROM partidas p 
       ORDER BY datetime(p.fecha_modificacion) DESC
     `);
+    partidas.forEach(p => {
+      p.nombre = limpiarNombrePartida(p.nombre);
+    });
     res.json(partidas);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -81,11 +91,12 @@ app.post('/api/partidas', async (req, res) => {
     const codigo = generarCodigoPartida();
     const ahora = new Date().toISOString();
 
-    // Insertar partida
+    // Insertar partida limpiando nombre
+    const nombreLimpio = limpiarNombrePartida(nombre || 'Nueva Partida');
     await dbRun(
       `INSERT INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla, imagen_portada)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [partidaId, nombre || 'Nueva Partida', codigo, creatorId || null, escenaId, ahora, ahora, configGridX, configGridY, configCasilla, imagenPortada]
+      [partidaId, nombreLimpio, codigo, creatorId || null, escenaId, ahora, ahora, configGridX, configGridY, configCasilla, imagenPortada]
     );
 
     // Crear escena por defecto
@@ -143,8 +154,9 @@ app.post('/api/partidas/:codigo/backups/restaurar', async (req, res) => {
     if (!filename) return res.status(400).json({ error: 'Nombre de archivo requerido.' });
 
     const partida = await restoreSnapshotFile(codigo, filename);
+    partida.nombre = limpiarNombrePartida(partida.nombre);
     // Notificar a todos los clientes en la partida para que recarguen su estado
-    io.to(partida.id).emit('partida_restaurada', { mensaje: 'La partida ha sido restaurada a una copia anterior.' });
+    io.to(partida.id).emit('partida_restaurada', { mensaje: 'Partida cargada a la versión seleccionada.' });
     res.json({ success: true, partida });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -169,6 +181,7 @@ app.get('/api/partidas/:id/export', async (req, res) => {
     const { id } = req.params;
     const partida = await dbGet(`SELECT * FROM partidas WHERE id = ?`, [id]);
     if (!partida) return res.status(404).json({ error: 'Partida no encontrada' });
+    partida.nombre = limpiarNombrePartida(partida.nombre);
 
     const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [id]);
     const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ?`, [id]);
@@ -220,8 +233,8 @@ app.post('/api/partidas/import', async (req, res) => {
     const fichaIdMap = new Map();
 
     await dbTransaction(async () => {
-      // Insertar partida
-      const nombreLimpio = (partida.nombre || 'Partida').replace(/\s*\((?:Restaurada|restaurada)\)/gi, '').trim();
+      // Insertar partida limpiando totalmente cualquier sufijo
+      const nombreLimpio = limpiarNombrePartida(partida.nombre);
       await dbRun(
         `INSERT INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla, imagen_portada)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -328,6 +341,9 @@ app.post('/api/partidas/import', async (req, res) => {
       }
     });
 
+    // Guardar inmediatamente la partida importada en archivo JSON independiente y snapshot inicial
+    await savePartidaToFile(newPartidaId, true);
+
     res.json({ success: true, id: newPartidaId, codigo: newCodigo });
   } catch (err) {
     console.error('Error al importar sesión:', err);
@@ -347,6 +363,7 @@ io.on('connection', (socket) => {
       if (!partida) {
         return socket.emit('error_partida', 'Código de partida inválido o no existe.');
       }
+      partida.nombre = limpiarNombrePartida(partida.nombre);
 
       // Determinar si es DM
       let esDM = false;
@@ -549,14 +566,15 @@ io.on('connection', (socket) => {
   });
 
   // Crear ficha (Jugador / DM)
-  socket.on('crear_ficha', async ({ partidaId, escenaId, fichaData }) => {
+  socket.on('crear_ficha', async ({ partidaId, escenaId, fichaData, ficha }) => {
     try {
       const id = uuidv4();
+      const payload = fichaData || ficha || {};
       const {
         nombre, tipo, jugadorId, jugador_id, imagen, fuerza, destreza, constitucion,
         inteligencia, sabiduria, carisma, hpActual, hp_actual, hpMaximo, hp_maximo, ac, velocidad,
         iniciativa, nivel, altura, tamanioBase, tamanio_base, color_aro, notas, x = 5, y = 5, revelado = 0
-      } = fichaData;
+      } = payload;
 
       const ownerId = jugador_id || jugadorId || socket.data?.usuarioId;
 
@@ -976,3 +994,11 @@ async function shutdownGracefully(signal) {
 
 process.on('SIGINT', () => shutdownGracefully('SIGINT'));
 process.on('SIGTERM', () => shutdownGracefully('SIGTERM'));
+
+process.on('uncaughtException', async (err) => {
+  console.error('🔥 [Servidor] Excepción no capturada:', err);
+  await shutdownGracefully('UNCAUGHT_EXCEPTION');
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('🔥 [Servidor] Promesa rechazada no manejada:', reason);
+});

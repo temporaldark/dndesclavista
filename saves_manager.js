@@ -26,10 +26,21 @@ function writeJsonAtomic(filePath, data) {
   fs.renameSync(tempPath, filePath);
 }
 
+// Limpiar cualquier sufijo de restauración o copia (repetitivo o variante)
+function limpiarNombrePartida(nombre) {
+  if (!nombre) return 'Partida';
+  let limpio = String(nombre);
+  while (/[\(\[\{\-_]?(?:restaurada|restaurado|copia|backup)[\)\]\}]?/i.test(limpio)) {
+    limpio = limpio.replace(/\s*[\(\[\{\-_]?(?:restaurada|restaurado|copia|backup)[\)\]\}]?/gi, '');
+  }
+  return limpio.replace(/[\s\-_]+$/g, '').trim() || 'Partida';
+}
+
 // Extraer todos los datos de una partida desde SQLite
 async function exportPartidaData(partidaId) {
   const partida = await dbGet(`SELECT * FROM partidas WHERE id = ?`, [partidaId]);
   if (!partida) return null;
+  partida.nombre = limpiarNombrePartida(partida.nombre);
 
   const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [partidaId]);
   const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ?`, [partidaId]);
@@ -61,6 +72,7 @@ async function savePartidaToFile(partidaId, createSnapshot = false) {
     ensureDirectories();
     const backupData = await exportPartidaData(partidaId);
     if (!backupData || !backupData.partida) return false;
+    backupData.partida.nombre = limpiarNombrePartida(backupData.partida.nombre);
 
     const codigo = (backupData.partida.codigo || 'UNKNOWN').toUpperCase();
     const safeName = (backupData.partida.nombre || 'partida').replace(/[^a-zA-Z0-9_\-]/g, '_');
@@ -158,7 +170,8 @@ async function importPartidaDataIntoDb(data, overrideExisting = false) {
     }
 
     // Insertar partida limpiando sufijos como '(Restaurada)'
-    const nombreLimpio = (partida.nombre || 'Partida').replace(/\s*\((?:Restaurada|restaurada)\)/gi, '').trim();
+    const nombreLimpio = limpiarNombrePartida(partida.nombre);
+    partida.nombre = nombreLimpio;
     await dbRun(
       `INSERT OR REPLACE INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla, imagen_portada)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -340,6 +353,7 @@ async function restoreSnapshotFile(codigo, filename) {
     throw new Error('El archivo de copia de seguridad está dañado o tiene un formato no reconocido.');
   }
 
+  data.partida.nombre = limpiarNombrePartida(data.partida.nombre);
   await importPartidaDataIntoDb(data, true);
   return data.partida;
 }
@@ -352,5 +366,6 @@ module.exports = {
   saveAllPartidasImmediate,
   autoRestoreFromFiles,
   listBackupsForPartida,
-  restoreSnapshotFile
+  restoreSnapshotFile,
+  limpiarNombrePartida
 };
