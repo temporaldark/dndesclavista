@@ -1217,7 +1217,13 @@
           }
           
           updateMultiSelectBadge();
-          if (dom.diceTokenSelect) dom.diceTokenSelect.value = selectedFichasIds[0] || '';
+          if (dom.diceTokenSelect) {
+            dom.diceTokenSelect.value = selectedFichasIds[0] || '';
+            if (selectedFichasIds[0] && dom.diceTokenSelect.selectedIndex <= 0) {
+              renderTokenSelects();
+              dom.diceTokenSelect.value = selectedFichasIds[0];
+            }
+          }
           isDraggingToken = selectedFichasIds.length > 0;
           
           dragOffsets = {};
@@ -1870,6 +1876,17 @@
     });
 
     dom.btnRollDice?.addEventListener('click', rollDice);
+    dom.diceTokenSelect?.addEventListener('change', () => {
+      const fichaId = dom.diceTokenSelect.value;
+      if (fichaId) {
+        selectedFichasIds = [fichaId];
+      } else {
+        selectedFichasIds = [];
+      }
+      updateMultiSelectBadge();
+      renderFichasList();
+      markDirty();
+    });
 
     // Chat
     dom.btnSendChat?.addEventListener('click', sendChatMessage);
@@ -2180,6 +2197,8 @@
 
       // Determinar la ficha objetivo para animación y asignaciones (Iniciativa / Daño / Curación)
       const targetTokenId = fichaId || (selectedFichasIds && selectedFichasIds[0]) || dom.diceTokenSelect?.value || '';
+      const targetFicha = targetTokenId ? (state.fichas || []).find(f => f.id === targetTokenId) : null;
+      const targetNombre = targetFicha ? targetFicha.nombre : '';
 
       socket?.emit('lanzar_dados', {
         partidaId: state.partida.id,
@@ -2189,6 +2208,7 @@
         tipo: classif,
         resultado: finalResult,
         fichaId: targetTokenId || fichaId,
+        fichaNombre: targetNombre,
         icono: icon
       });
 
@@ -2330,10 +2350,17 @@
     const senderSpan = document.createElement('span');
     senderSpan.className = 'sender';
     senderSpan.style.color = msg.color_usuario || '#c9a84c';
-    senderSpan.innerHTML = `${msg.nombre_usuario}: `;
+    const fichaBadge = msg.nombre_ficha ? ` <span class="chat-token-badge" title="Tirada asociada a ${msg.nombre_ficha}">[🎯 ${msg.nombre_ficha}]</span>` : '';
+    senderSpan.innerHTML = `${msg.nombre_usuario}${fichaBadge}: `;
     senderSpan.style.cursor = 'pointer';
-    senderSpan.title = 'Haz clic para centrar mapa en ficha de este jugador';
-    senderSpan.addEventListener('click', () => centerOnPlayerToken(msg.nombre_usuario));
+    senderSpan.title = msg.nombre_ficha ? `Haz clic para centrar mapa en ficha ${msg.nombre_ficha}` : 'Haz clic para centrar mapa en ficha de este jugador';
+    senderSpan.addEventListener('click', () => {
+      if (msg.nombre_ficha) {
+        centerOnPlayerToken(msg.nombre_ficha);
+      } else {
+        centerOnPlayerToken(msg.nombre_usuario);
+      }
+    });
 
     div.appendChild(senderSpan);
 
@@ -2597,7 +2624,13 @@
         }
         
         updateMultiSelectBadge();
-        if (dom.diceTokenSelect) dom.diceTokenSelect.value = selectedFichasIds[0] || '';
+        if (dom.diceTokenSelect) {
+          dom.diceTokenSelect.value = selectedFichasIds[0] || '';
+          if (selectedFichasIds[0] && dom.diceTokenSelect.selectedIndex <= 0) {
+            renderTokenSelects();
+            dom.diceTokenSelect.value = selectedFichasIds[0];
+          }
+        }
         if (dom.selectFichaToTemplate) dom.selectFichaToTemplate.value = selectedFichasIds[0] || '';
         renderFichasList();
         markDirty();
@@ -2609,19 +2642,39 @@
 
   function renderTokenSelects() {
     if (!dom.diceTokenSelect) return;
-    dom.diceTokenSelect.innerHTML = '<option value="">-- Sin ficha (Jugador) --</option>';
+    const currentVal = dom.diceTokenSelect.value || (selectedFichasIds && selectedFichasIds[0]) || '';
+    dom.diceTokenSelect.innerHTML = '<option value="">-- Sin ficha (Tirada general) --</option>';
 
-    (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id).forEach(f => {
-      const esPropia = esDuenioDeFicha(f);
+    // Obtener fichas elegibles para asociar tiradas:
+    // El DM puede tirar por cualquier ficha de la partida (jugadores, NPCs, monstruos).
+    // Los jugadores pueden tirar por sus fichas asignadas/propias.
+    // Si una ficha está seleccionada en el tablero, siempre se incluye en la lista.
+    const fichasDisponibles = (state.fichas || []).filter(f => {
+      if (state.usuario?.esDM) return true;
+      if (esDuenioDeFicha(f)) return true;
+      if (selectedFichasIds && selectedFichasIds.includes(f.id)) return true;
+      return false;
+    });
 
+    fichasDisponibles.forEach(f => {
       const opt = document.createElement('option');
       opt.value = f.id;
-      opt.textContent = f.nombre;
-
-      if (esPropia || state.usuario.esDM) {
-        dom.diceTokenSelect.appendChild(opt.cloneNode(true));
+      const tipoBadge = f.tipo ? ` [${f.tipo.toUpperCase()}]` : '';
+      opt.textContent = `${f.nombre}${tipoBadge}`;
+      if (f.id === currentVal) {
+        opt.selected = true;
       }
+      dom.diceTokenSelect.appendChild(opt);
     });
+
+    if (currentVal) {
+      dom.diceTokenSelect.value = currentVal;
+    }
+    // Si no coincide con ninguna opción, restablecer al primer elemento (-- Sin ficha --)
+    // para evitar que el navegador deje selectedIndex en -1 y el desplegable se vea totalmente en blanco
+    if (dom.diceTokenSelect.selectedIndex === -1) {
+      dom.diceTokenSelect.selectedIndex = 0;
+    }
 
     updateFichaToTemplateSelect();
   }
@@ -2994,15 +3047,16 @@
   function renderHistoryTable() {
     dom.historyTableBody.innerHTML = '';
     const q = dom.searchHistoryInput.value.toLowerCase();
-    const filtered = (state.historial || []).filter(h => h.nombre_usuario.toLowerCase().includes(q));
+    const filtered = (state.historial || []).filter(h => (h.nombre_usuario || '').toLowerCase().includes(q) || (h.nombre_ficha || '').toLowerCase().includes(q));
 
     const startIdx = (historyPage - 1) * historyPerPage;
     const pageItems = filtered.slice(startIdx, startIdx + historyPerPage);
 
     pageItems.forEach(item => {
       const tr = document.createElement('tr');
+      const fichaTag = item.nombre_ficha ? `<br><small style="color:#38bdf8; font-weight:normal;">🎯 ${item.nombre_ficha}</small>` : '';
       tr.innerHTML = `
-        <td style="color:${item.color_usuario || '#c9a84c'}; font-weight:bold;">${item.nombre_usuario}</td>
+        <td style="color:${item.color_usuario || '#c9a84c'}; font-weight:bold;">${item.nombre_usuario}${fichaTag}</td>
         <td><code>${item.formula}</code></td>
         <td>${item.tipo}</td>
         <td style="font-weight:bold; color:#f0d060;">${item.resultado}</td>
@@ -3020,7 +3074,8 @@
     const last5 = (state.historial || []).slice(0, 5);
     last5.forEach(h => {
       const div = document.createElement('div');
-      div.innerHTML = `<strong>${h.nombre_usuario}</strong>: ${h.formula} = <strong class="gold-text">${h.resultado}</strong> (${h.tipo})`;
+      const fichaTag = h.nombre_ficha ? ` <span style="color:#38bdf8; font-size:0.85em;">[${h.nombre_ficha}]</span>` : '';
+      div.innerHTML = `<strong>${h.nombre_usuario}</strong>${fichaTag}: ${h.formula} = <strong class="gold-text">${h.resultado}</strong> (${h.tipo})`;
       dom.quickDiceHistory.appendChild(div);
     });
   }
