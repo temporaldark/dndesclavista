@@ -1377,4 +1377,160 @@ input:focus, select:focus, textarea:focus, button:focus {
   box-shadow: 0 2px 6px rgba(0,0,0,0.5);
 }
 
+/* ==========================================================================
+   BANNER DE RECONEXIÓN Y RESILIENCIA ANTE CAÍDAS
+   ========================================================================== */
+.reconnect-banner {
+  position: fixed;
+  top: 48px;
+  left: 0;
+  right: 0;
+  background: linear-gradient(90deg, #b91c1c, #9a3412);
+  color: #ffffff;
+  padding: 8px 16px;
+  z-index: 9999;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+  border-bottom: 1px solid rgba(254, 202, 202, 0.3);
+  animation: slideDown 0.3s ease-out;
+}
+
+.reconnect-banner.hidden {
+  display: none !important;
+}
+
+.reconnect-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.reconnect-icon {
+  font-size: 1.1rem;
+  color: #fef08a;
+  animation: pulse 1.5s infinite;
+}
+
+#reconnect-msg {
+  flex: 1;
+}
+
+/* ==========================================================================
+   GESTOR DE BACKUPS Y SNAPSHOTS (PANEL DM)
+   ========================================================================== */
+.backup-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.8rem;
+  transition: background 0.2s;
+}
+
+.backup-item:hover {
+  background: rgba(201, 168, 76, 0.1);
+}
+
+.backup-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-right: 8px;
+}
+
+.backup-name {
+  font-weight: bold;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+
+.backup-date {
+  font-size: 0.7rem;
+  color: #94a3b8;
+}
+
+.btn-restore-snapshot {
+  padding: 3px 7px !important;
+  font-size: 0.72rem !important;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   TOAST NOTIFICATIONS
+   ========================================================================== */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10001;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  background: rgba(18, 18, 32, 0.95);
+  color: #f8fafc;
+  border: 1px solid rgba(201, 168, 76, 0.5);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 250px;
+  max-width: 380px;
+  animation: toastSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.toast.success {
+  border-color: #22c55e;
+}
+
+.toast.warning {
+  border-color: #f59e0b;
+}
+
+.toast.error {
+  border-color: #ef4444;
+}
+
+@keyframes toastSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.1); }
+}
+
 

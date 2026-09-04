@@ -58,6 +58,17 @@
     </div>
   </header>
 
+  <!-- BANNER DE RECONEXIÓN Y ESTADO DEL SERVIDOR -->
+  <div id="reconnect-banner" class="reconnect-banner hidden">
+    <div class="reconnect-content">
+      <span class="reconnect-icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
+      <span id="reconnect-msg">Conexión con el servidor interrumpida. Intentando reconectar automáticamente... Tu partida está segura en este navegador.</span>
+      <button id="btn-emergency-export" class="btn btn-sm btn-gold" title="Descargar copia de seguridad local ahora">
+        <i class="fa-solid fa-floppy-disk"></i> Descarga de Emergencia
+      </button>
+    </div>
+  </div>
+
   <!-- PANTALLA DE INICIO (GESTIÓN DE PARTIDAS) -->
   <main id="screen-start" class="screen-container">
     <div class="hero-header">
@@ -377,16 +388,31 @@
             </div>
           </div>
 
-          <!-- Respaldar / Restaurar Sesión en Escritorio -->
+          <!-- Respaldar / Restaurar Sesión en Archivos Separados -->
           <div class="dm-section">
-            <h4>💾 Respaldar / Restaurar Sesión</h4>
-            <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px;">Guarda una copia de respaldo de la
-              partida en tu disco duro/Escritorio o restaura una sesión anterior.</p>
+            <h4>💾 Copias de Seguridad Automáticas</h4>
+            <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px;">
+              Tu partida se guarda sola en archivos independientes cada pocos segundos. Aquí puedes forzar un respaldo o restaurar versiones anteriores.
+            </p>
+            <button id="btn-dm-save-now" class="btn btn-gold btn-block mb-10" style="margin-bottom: 10px;">
+              <i class="fa-solid fa-cloud-arrow-up"></i> Guardar Copia Ahora (Ctrl+S)
+            </button>
+            <div style="margin-bottom: 10px;">
+              <label style="font-size: 0.8rem; color: #c9a84c; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+                <span><i class="fa-solid fa-clock-rotate-left"></i> Snapshots en Servidor:</span>
+                <button id="btn-refresh-backups" class="btn btn-sm btn-secondary" style="padding: 2px 6px; font-size: 0.75rem;" title="Actualizar lista">
+                  <i class="fa-solid fa-rotate-right"></i>
+                </button>
+              </label>
+              <div id="dm-backups-list" class="backups-list-container" style="max-height: 140px; overflow-y: auto; margin-top: 5px; border: 1px solid rgba(201,168,76,0.2); border-radius: 4px; padding: 4px; background: rgba(0,0,0,0.3);">
+                <div style="font-size: 0.8rem; color: #64748b; padding: 4px;">Cargando copias...</div>
+              </div>
+            </div>
             <div class="modal-actions-row">
               <button id="btn-dm-export-session" class="btn btn-primary btn-sm flex-1"><i
-                  class="fa-solid fa-download"></i> Guardar Sesión</button>
+                  class="fa-solid fa-download"></i> Descargar .json</button>
               <button id="btn-dm-import-session" class="btn btn-secondary btn-sm flex-1"><i
-                  class="fa-solid fa-upload"></i> Cargar Archivo (.json)</button>
+                  class="fa-solid fa-upload"></i> Cargar .json</button>
             </div>
             <input type="file" id="input-dm-import-file" accept=".json" class="hidden">
           </div>
@@ -622,6 +648,9 @@
       </form>
     </div>
   </div>
+
+  <!-- Toast Notifications -->
+  <div id="toast-container" class="toast-container"></div>
 
   <!-- Cargar Socket.io -->
   <script src="/socket.io/socket.io.js"></script>

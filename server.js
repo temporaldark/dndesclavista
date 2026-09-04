@@ -4,7 +4,16 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const { dbRun, dbAll, dbGet, initDb } = require('./database');
+const { dbRun, dbAll, dbGet, dbTransaction, initDb, checkpointDb } = require('./database');
+const {
+  ensureDirectories,
+  savePartidaToFile,
+  scheduleAutoSave,
+  saveAllPartidasImmediate,
+  autoRestoreFromFiles,
+  listBackupsForPartida,
+  restoreSnapshotFile
+} = require('./saves_manager');
 
 const app = express();
 const server = http.createServer(app);
@@ -21,7 +30,11 @@ const io = new Server(server, {
 
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+// Servir archivos estáticos con caché del navegador
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '1h',
+  etag: true
+}));
 
 // Función para generar código alfanumérico único de 6 caracteres
 function generarCodigoPartida() {
@@ -81,6 +94,9 @@ app.post('/api/partidas', async (req, res) => {
       [escenaId, partidaId, 'Mazmorra Principal', null, configGridX, configGridY, configCasilla]
     );
 
+    // Guardar inmediatamente en archivo JSON independiente y snapshot inicial
+    await savePartidaToFile(partidaId, true);
+
     res.json({ id: partidaId, codigo, escenaId });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -91,8 +107,57 @@ app.post('/api/partidas', async (req, res) => {
 app.delete('/api/partidas/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const partida = await dbGet(`SELECT codigo FROM partidas WHERE id = ?`, [id]);
     await dbRun(`DELETE FROM partidas WHERE id = ?`, [id]);
+
+    if (partida && partida.codigo) {
+      const fs = require('fs');
+      const saveFile = path.join(__dirname, 'data', 'saves', `partida_${partida.codigo.toUpperCase()}.json`);
+      if (fs.existsSync(saveFile)) {
+        try { fs.unlinkSync(saveFile); } catch (_) {}
+      }
+    }
+
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Listar copias de seguridad de una partida
+app.get('/api/partidas/:codigo/backups', (req, res) => {
+  try {
+    const { codigo } = req.params;
+    const backups = listBackupsForPartida(codigo);
+    res.json(backups);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Restaurar copia de seguridad específica
+app.post('/api/partidas/:codigo/backups/restaurar', async (req, res) => {
+  try {
+    const { codigo } = req.params;
+    const { filename } = req.body;
+    if (!filename) return res.status(400).json({ error: 'Nombre de archivo requerido.' });
+
+    const partida = await restoreSnapshotFile(codigo, filename);
+    // Notificar a todos los clientes en la partida para que recarguen su estado
+    io.to(partida.id).emit('partida_restaurada', { mensaje: 'La partida ha sido restaurada a una copia anterior.' });
+    res.json({ success: true, partida });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Forzar guardado inmediato en archivo JSON y snapshot
+app.post('/api/partidas/:id/guardar_ahora', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const ok = await savePartidaToFile(id, true);
+    if (!ok) return res.status(404).json({ error: 'Partida no encontrada o error al guardar.' });
+    res.json({ success: true, timestamp: new Date().toISOString() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -154,111 +219,114 @@ app.post('/api/partidas/import', async (req, res) => {
     const escenaIdMap = new Map();
     const fichaIdMap = new Map();
 
-    // Insertar partida
-    await dbRun(
-      `INSERT INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla, imagen_portada)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [newPartidaId, (partida.nombre || 'Partida Restaurada') + ' (Restaurada)', newCodigo, partida.dm_id || null, null, ahora, ahora, partida.config_grid_x || 40, partida.config_grid_y || 40, partida.config_casilla || 5, partida.imagen_portada || null]
-    );
-
-    let firstNewEscenaId = null;
-
-    // Insertar escenas
-    for (const esc of escenas) {
-      const newEscenaId = uuidv4();
-      escenaIdMap.set(esc.id, newEscenaId);
-      if (!firstNewEscenaId || esc.id === partida.escena_activa_id) {
-        firstNewEscenaId = newEscenaId;
-      }
+    await dbTransaction(async () => {
+      // Insertar partida
+      const nombreLimpio = (partida.nombre || 'Partida').replace(/\s*\((?:Restaurada|restaurada)\)/gi, '').trim();
       await dbRun(
-        `INSERT INTO escenas (id, partida_id, nombre, mapa, config_grid_x, config_grid_y, config_casilla) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [newEscenaId, newPartidaId, esc.nombre, esc.mapa || null, esc.config_grid_x || partida.config_grid_x || 40, esc.config_grid_y || partida.config_grid_y || 40, esc.config_casilla || partida.config_casilla || 5]
+        `INSERT INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla, imagen_portada)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [newPartidaId, nombreLimpio, newCodigo, partida.dm_id || null, null, ahora, ahora, partida.config_grid_x || 40, partida.config_grid_y || 40, partida.config_casilla || 5, partida.imagen_portada || null]
       );
-    }
 
-    // Actualizar escena activa id
-    if (firstNewEscenaId) {
-      await dbRun(`UPDATE partidas SET escena_activa_id = ? WHERE id = ?`, [firstNewEscenaId, newPartidaId]);
-    }
+      let firstNewEscenaId = null;
 
-    // Insertar fichas
-    for (const f of fichas) {
-      const newFichaId = uuidv4();
-      fichaIdMap.set(f.id, newFichaId);
-      const newEscenaId = escenaIdMap.get(f.escena_id) || firstNewEscenaId;
-      const hpAct = f.hp_actual !== undefined && f.hp_actual !== null ? f.hp_actual : 10;
-      const hpMax = f.hp_maximo !== undefined && f.hp_maximo !== null ? f.hp_maximo : 10;
-      const posX = f.x !== undefined && f.x !== null ? f.x : 0;
-      const posY = f.y !== undefined && f.y !== null ? f.y : 0;
-
-      await dbRun(
-        `INSERT INTO fichas (id, partida_id, escena_id, nombre, tipo, jugador_id, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro, gigante, notas, x, y, revelado)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [newFichaId, newPartidaId, newEscenaId, f.nombre, f.tipo || 'jugador', f.jugador_id || null, f.imagen, f.fuerza ?? 10, f.destreza ?? 10, f.constitucion ?? 10, f.inteligencia ?? 10, f.sabiduria ?? 10, f.carisma ?? 10, hpAct, hpMax, f.ac ?? 10, f.velocidad ?? 30, f.iniciativa ?? 0, f.nivel ?? 1, f.altura ?? 2, f.tamanio_base || 'mediano', f.color_aro || '#c9a84c', f.gigante ? 1 : 0, f.notas || '', posX, posY, typeof f.revelado === 'object' ? JSON.stringify(f.revelado) : (f.revelado || 0)]
-      );
-    }
-
-    // Insertar posiciones_fichas guardadas
-    for (const pf of posiciones_fichas) {
-      const mappedFichaId = fichaIdMap.get(pf.ficha_id);
-      const mappedEscenaId = escenaIdMap.get(pf.escena_id);
-      if (mappedFichaId && mappedEscenaId) {
+      // Insertar escenas
+      for (const esc of escenas) {
+        const newEscenaId = uuidv4();
+        escenaIdMap.set(esc.id, newEscenaId);
+        if (!firstNewEscenaId || esc.id === partida.escena_activa_id) {
+          firstNewEscenaId = newEscenaId;
+        }
         await dbRun(
-          `INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`,
-          [mappedFichaId, mappedEscenaId, pf.x ?? 0, pf.y ?? 0]
+          `INSERT INTO escenas (id, partida_id, nombre, mapa, config_grid_x, config_grid_y, config_casilla) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [newEscenaId, newPartidaId, esc.nombre, esc.mapa || null, esc.config_grid_x || partida.config_grid_x || 40, esc.config_grid_y || partida.config_grid_y || 40, esc.config_casilla || partida.config_casilla || 5]
         );
       }
-    }
 
-    // Insertar figuras
-    for (const fig of figuras) {
-      const newFigId = uuidv4();
-      const newEscenaId = escenaIdMap.get(fig.escena_id) || firstNewEscenaId;
-      await dbRun(
-        `INSERT INTO figuras (id, escena_id, tipo, x, y, tamanio, rotacion, color, transparencia, etiqueta, creador_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [newFigId, newEscenaId, fig.tipo, fig.x, fig.y, fig.tamanio, fig.rotacion || 0, fig.color, fig.transparencia, fig.etiqueta, fig.creador_id]
-      );
-    }
+      // Actualizar escena activa id
+      if (firstNewEscenaId) {
+        await dbRun(`UPDATE partidas SET escena_activa_id = ? WHERE id = ?`, [firstNewEscenaId, newPartidaId]);
+      }
 
-    // Insertar dibujos
-    for (const d of dibujos) {
-      const newDibId = uuidv4();
-      const newEscenaId = escenaIdMap.get(d.escena_id) || firstNewEscenaId;
-      await dbRun(
-        `INSERT INTO dibujos (id, escena_id, datos) VALUES (?, ?, ?)`,
-        [newDibId, newEscenaId, typeof d.datos === 'object' ? JSON.stringify(d.datos) : (d.datos || '[]')]
-      );
-    }
+      // Insertar fichas
+      for (const f of fichas) {
+        const newFichaId = uuidv4();
+        fichaIdMap.set(f.id, newFichaId);
+        const newEscenaId = escenaIdMap.get(f.escena_id) || firstNewEscenaId;
+        const hpAct = f.hp_actual !== undefined && f.hp_actual !== null ? f.hp_actual : 10;
+        const hpMax = f.hp_maximo !== undefined && f.hp_maximo !== null ? f.hp_maximo : 10;
+        const posX = f.x !== undefined && f.x !== null ? f.x : 0;
+        const posY = f.y !== undefined && f.y !== null ? f.y : 0;
 
-    // Insertar mensajes
-    for (const m of mensajes) {
-      const newMsgId = uuidv4();
-      await dbRun(
-        `INSERT INTO mensajes (id, partida_id, usuario_id, nombre_usuario, color_usuario, mensaje, es_gif, fecha)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [newMsgId, newPartidaId, m.usuario_id, m.nombre_usuario, m.color_usuario, m.mensaje, m.es_gif || 0, m.fecha || ahora]
-      );
-    }
+        await dbRun(
+          `INSERT INTO fichas (id, partida_id, escena_id, nombre, tipo, jugador_id, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro, gigante, notas, x, y, revelado)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [newFichaId, newPartidaId, newEscenaId, f.nombre, f.tipo || 'jugador', f.jugador_id || null, f.imagen, f.fuerza ?? 10, f.destreza ?? 10, f.constitucion ?? 10, f.inteligencia ?? 10, f.sabiduria ?? 10, f.carisma ?? 10, hpAct, hpMax, f.ac ?? 10, f.velocidad ?? 30, f.iniciativa ?? 0, f.nivel ?? 1, f.altura ?? 2, f.tamanio_base || 'mediano', f.color_aro || '#c9a84c', f.gigante ? 1 : 0, f.notas || '', posX, posY, typeof f.revelado === 'object' ? JSON.stringify(f.revelado) : (f.revelado || 0)]
+        );
+      }
 
-    // Insertar historial dados
-    for (const h of historial) {
-      const newHistId = uuidv4();
-      await dbRun(
-        `INSERT INTO historial_dados (id, partida_id, usuario_id, nombre_usuario, formula, tipo, resultado, fecha)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [newHistId, newPartidaId, h.usuario_id, h.nombre_usuario, h.formula, h.tipo, h.resultado, h.fecha || ahora]
-      );
-    }
+      // Insertar posiciones_fichas guardadas
+      for (const pf of posiciones_fichas) {
+        const mappedFichaId = fichaIdMap.get(pf.ficha_id);
+        const mappedEscenaId = escenaIdMap.get(pf.escena_id);
+        if (mappedFichaId && mappedEscenaId) {
+          await dbRun(
+            `INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`,
+            [mappedFichaId, mappedEscenaId, pf.x ?? 0, pf.y ?? 0]
+          );
+        }
+      }
 
-    // Insertar galeria
-    for (const g of galeria) {
-      const newGalId = uuidv4();
-      await dbRun(
-        `INSERT INTO galeria (id, partida_id, nombre, datos) VALUES (?, ?, ?, ?)`,
-        [newGalId, newPartidaId, g.nombre, typeof g.datos === 'object' ? JSON.stringify(g.datos) : g.datos]
-      );
-    }
+      // Insertar figuras
+      for (const fig of figuras) {
+        const newFigId = uuidv4();
+        const newEscenaId = escenaIdMap.get(fig.escena_id) || firstNewEscenaId;
+        await dbRun(
+          `INSERT INTO figuras (id, escena_id, tipo, x, y, tamanio, rotacion, color, transparencia, etiqueta, creador_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [newFigId, newEscenaId, fig.tipo, fig.x, fig.y, fig.tamanio, fig.rotacion || 0, fig.color, fig.transparencia, fig.etiqueta, fig.creador_id]
+        );
+      }
+
+      // Insertar dibujos
+      for (const d of dibujos) {
+        const newDibId = uuidv4();
+        const newEscenaId = escenaIdMap.get(d.escena_id) || firstNewEscenaId;
+        await dbRun(
+          `INSERT INTO dibujos (id, escena_id, datos) VALUES (?, ?, ?)`,
+          [newDibId, newEscenaId, typeof d.datos === 'object' ? JSON.stringify(d.datos) : (d.datos || '[]')]
+        );
+      }
+
+      // Insertar mensajes
+      for (const m of mensajes) {
+        const newMsgId = uuidv4();
+        await dbRun(
+          `INSERT INTO mensajes (id, partida_id, usuario_id, nombre_usuario, color_usuario, mensaje, es_gif, fecha)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [newMsgId, newPartidaId, m.usuario_id, m.nombre_usuario, m.color_usuario, m.mensaje, m.es_gif || 0, m.fecha || ahora]
+        );
+      }
+
+      // Insertar historial dados
+      for (const h of historial) {
+        const newHistId = uuidv4();
+        await dbRun(
+          `INSERT INTO historial_dados (id, partida_id, usuario_id, nombre_usuario, formula, tipo, resultado, fecha)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [newHistId, newPartidaId, h.usuario_id, h.nombre_usuario, h.formula, h.tipo, h.resultado, h.fecha || ahora]
+        );
+      }
+
+      // Insertar galeria
+      for (const g of galeria) {
+        const newGalId = uuidv4();
+        await dbRun(
+          `INSERT INTO galeria (id, partida_id, nombre, datos) VALUES (?, ?, ?, ?)`,
+          [newGalId, newPartidaId, g.nombre, typeof g.datos === 'object' ? JSON.stringify(g.datos) : g.datos]
+        );
+      }
+    });
 
     res.json({ success: true, id: newPartidaId, codigo: newCodigo });
   } catch (err) {
@@ -372,19 +440,21 @@ io.on('connection', (socket) => {
   // Cambiar escena (DM)
   socket.on('cambiar_escena', async ({ partidaId, escenaId, escenaAnteriorId, posicionesActuales }) => {
     try {
-      // 1. Guardar posiciones actuales de las fichas en la escena anterior
       const prevPartida = await dbGet(`SELECT escena_activa_id FROM partidas WHERE id = ?`, [partidaId]);
       const prevEscenaId = escenaAnteriorId || prevPartida?.escena_activa_id;
 
-      if (prevEscenaId && Array.isArray(posicionesActuales)) {
-        for (const pos of posicionesActuales) {
-          if (pos && pos.fichaId) {
-            await dbRun(
-              `INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`,
-              [pos.fichaId, prevEscenaId, pos.x ?? 0, pos.y ?? 0]
-            );
+      // 1. Guardar posiciones actuales de las fichas en la escena anterior de forma atómica y ultrarrápida
+      if (prevEscenaId && Array.isArray(posicionesActuales) && posicionesActuales.length > 0) {
+        await dbTransaction(async () => {
+          for (const pos of posicionesActuales) {
+            if (pos && pos.fichaId) {
+              await dbRun(
+                `INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`,
+                [pos.fichaId, prevEscenaId, pos.x ?? 0, pos.y ?? 0]
+              );
+            }
           }
-        }
+        });
       }
 
       // 2. Cambiar escena activa
@@ -397,6 +467,7 @@ io.on('connection', (socket) => {
 
       // 3. Emitir a la sala
       io.to(partidaId).emit('escena_cambiada', { escenaActiva, figuras, dibujos, posiciones_fichas });
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error('Error al cambiar de escena:', err);
     }
@@ -410,6 +481,7 @@ io.on('connection', (socket) => {
       await dbRun(`INSERT INTO escenas (id, partida_id, nombre, mapa, config_grid_x, config_grid_y, config_casilla) VALUES (?, ?, ?, ?, ?, ?, ?)`, [escenaId, partidaId, nombre, null, p.config_grid_x, p.config_grid_y, p.config_casilla]);
       const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [partidaId]);
       io.to(partidaId).emit('escenas_actualizadas', escenas);
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -421,6 +493,7 @@ io.on('connection', (socket) => {
       await dbRun(`DELETE FROM escenas WHERE id = ?`, [escenaId]);
       const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [partidaId]);
       io.to(partidaId).emit('escenas_actualizadas', escenas);
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -432,6 +505,7 @@ io.on('connection', (socket) => {
       await dbRun(`UPDATE escenas SET mapa = ? WHERE id = ?`, [mapaBase64, escenaId]);
       await dbRun(`UPDATE partidas SET fecha_modificacion = ? WHERE id = ?`, [new Date().toISOString(), partidaId]);
       io.to(partidaId).emit('mapa_actualizado', { escenaId, mapa: mapaBase64 });
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -449,6 +523,7 @@ io.on('connection', (socket) => {
         [gridX, gridY, casilla, new Date().toISOString(), partidaId]
       );
       io.to(partidaId).emit('grid_actualizado', { escenaId, gridX, gridY, casilla });
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -467,6 +542,7 @@ io.on('connection', (socket) => {
         await dbRun(`INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`, [fichaId, escenaId, x, y]);
       }
       io.to(partidaId).emit('ficha_movida', { fichaId, x, y });
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error('Error al guardar posición de ficha:', err);
     }
@@ -504,6 +580,7 @@ io.on('connection', (socket) => {
 
       const nuevaFicha = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [id]);
       io.to(partidaId).emit('ficha_creada', nuevaFicha);
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -525,6 +602,7 @@ io.on('connection', (socket) => {
 
       const fichaActualizada = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [id]);
       io.to(partidaId).emit('ficha_actualizada', fichaActualizada);
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -538,6 +616,7 @@ io.on('connection', (socket) => {
         const nuevoEstado = ficha.gigante ? 0 : 1;
         await dbRun(`UPDATE fichas SET gigante = ? WHERE id = ?`, [nuevoEstado, fichaId]);
         io.to(partidaId).emit('gigante_toggled', { fichaId, gigante: nuevoEstado });
+        scheduleAutoSave(partidaId);
       }
     } catch (err) {
       console.error(err);
@@ -552,6 +631,7 @@ io.on('connection', (socket) => {
         const nuevoEstado = ficha.oculto ? 0 : 1;
         await dbRun(`UPDATE fichas SET oculto = ? WHERE id = ?`, [nuevoEstado, fichaId]);
         io.to(partidaId).emit('oculto_toggled', { fichaId, oculto: nuevoEstado });
+        scheduleAutoSave(partidaId);
       }
     } catch (err) {
       console.error(err);
@@ -565,6 +645,7 @@ io.on('connection', (socket) => {
       if (ficha) {
         await dbRun(`UPDATE fichas SET revelado = ? WHERE id = ?`, [JSON.stringify(config), fichaId]);
         io.to(partidaId).emit('revelado_toggled', { fichaId, revelado: JSON.stringify(config) });
+        scheduleAutoSave(partidaId);
       }
     } catch (err) {
       console.error(err);
@@ -576,6 +657,7 @@ io.on('connection', (socket) => {
     try {
       await dbRun(`DELETE FROM fichas WHERE id = ?`, [fichaId]);
       io.to(partidaId).emit('ficha_eliminada', fichaId);
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -592,6 +674,7 @@ io.on('connection', (socket) => {
 
         await dbRun(`UPDATE fichas SET hp_actual = ? WHERE id = ?`, [nuevoHp, fichaId]);
         io.to(partidaId).emit('hp_actualizado', { fichaId, hp_actual: nuevoHp, hp_maximo: ficha.hp_maximo, cambio: cantidad, esCuracion });
+        scheduleAutoSave(partidaId);
       }
     } catch (err) {
       console.error(err);
@@ -613,6 +696,7 @@ io.on('connection', (socket) => {
 
       const figuras = await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaId]);
       io.to(partidaId).emit('figuras_actualizadas', figuras);
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -624,6 +708,7 @@ io.on('connection', (socket) => {
       await dbRun(`DELETE FROM figuras WHERE id = ?`, [figuraId]);
       const figuras = await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaId]);
       io.to(partidaId).emit('figuras_actualizadas', figuras);
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -641,6 +726,7 @@ io.on('connection', (socket) => {
       }
       const figuras = await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaId]);
       io.to(partidaId).emit('figuras_actualizadas', figuras);
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -652,6 +738,7 @@ io.on('connection', (socket) => {
       await dbRun(`DELETE FROM figuras WHERE escena_id = ? AND creador_id = ?`, [escenaId, usuarioId]);
       const figuras = await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaId]);
       io.to(partidaId).emit('figuras_actualizadas', figuras);
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -668,6 +755,7 @@ io.on('connection', (socket) => {
         [id, escenaId, datosJson]
       );
       io.to(partidaId).emit('dibujos_actualizados', datos);
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -678,6 +766,7 @@ io.on('connection', (socket) => {
     try {
       await dbRun(`DELETE FROM dibujos WHERE escena_id = ?`, [escenaId]);
       io.to(partidaId).emit('dibujos_actualizados', []);
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -697,6 +786,7 @@ io.on('connection', (socket) => {
 
       const nuevoMensaje = { id, partida_id: partidaId, usuario_id: usuarioId, nombre_usuario: nombreUsuario, color_usuario: colorUsuario, mensaje, es_gif: esGif ? 1 : 0, fecha };
       io.to(partidaId).emit('nuevo_mensaje', nuevoMensaje);
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -741,6 +831,7 @@ io.on('connection', (socket) => {
       if (fichaId) {
         io.to(partidaId).emit('animacion_dado_ficha', { fichaId, icono: icono || '🎲', resultado });
       }
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -751,6 +842,7 @@ io.on('connection', (socket) => {
     try {
       await dbRun(`DELETE FROM historial_dados WHERE partida_id = ?`, [partidaId]);
       io.to(partidaId).emit('historial_limpiado');
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -764,6 +856,7 @@ io.on('connection', (socket) => {
       await dbRun(`INSERT INTO galeria (id, partida_id, nombre, datos) VALUES (?, ?, ?, ?)`, [id, partidaId, nombre, datosJson]);
       const galeria = await dbAll(`SELECT * FROM galeria WHERE partida_id = ?`, [partidaId]);
       socket.emit('galeria_actualizada', galeria);
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
@@ -775,16 +868,29 @@ io.on('connection', (socket) => {
       await dbRun(`DELETE FROM galeria WHERE id = ?`, [galeriaId]);
       const galeria = await dbAll(`SELECT * FROM galeria WHERE partida_id = ?`, [partidaId]);
       socket.emit('galeria_actualizada', galeria);
+      scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
     }
   });
 
-  // Guardado automático periódico
+  // Guardado automático periódico (guarda en DB y en archivo independiente)
   socket.on('guardado_automatico', async ({ partidaId }) => {
     try {
       await dbRun(`UPDATE partidas SET fecha_modificacion = ? WHERE id = ?`, [new Date().toISOString(), partidaId]);
-      socket.emit('guardado_confirmado');
+      await savePartidaToFile(partidaId, false);
+      socket.emit('guardado_confirmado', { exito: true, fecha: new Date().toISOString() });
+    } catch (err) {
+      console.error(err);
+    }
+  });
+
+  // Guardado forzado manual (ej: Ctrl+S o botón de guardar ahora)
+  socket.on('forzar_guardado', async ({ partidaId }) => {
+    try {
+      await dbRun(`UPDATE partidas SET fecha_modificacion = ? WHERE id = ?`, [new Date().toISOString(), partidaId]);
+      const ok = await savePartidaToFile(partidaId, true); // true = crea snapshot
+      socket.emit('guardado_confirmado', { exito: ok, fecha: new Date().toISOString(), snapshot: true });
     } catch (err) {
       console.error(err);
     }
@@ -830,19 +936,43 @@ io.on('connection', (socket) => {
   });
 });
 
-// Inicializar DB y Arrancar Servidor
+// Inicializar DB, Auto-Restaurar Partidas y Arrancar Servidor
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
 
-initDb().then(() => {
+initDb().then(async () => {
+  ensureDirectories();
+  // Auto-restaurar partidas desde /data/saves/ si faltan en la base de datos (por caída o reinicio de contenedor)
+  await autoRestoreFromFiles();
+
   server.listen(PORT, HOST, () => {
     console.log(`
 ═════════════════════════════════════════════════════════════════
 ⚔️  VTT D&D 5e SERVER LISTENING ON http://${HOST}:${PORT}
-🔮 Railway & Mobile Ready! 🎲
+🔮 Auto-Guardado en /data/saves Activo! 🎲
+🛡️  Protección contra caídas y reinicios habilitada!
 ═════════════════════════════════════════════════════════════════
     `);
   });
 }).catch(err => {
   console.error('Error fatal al iniciar la base de datos:', err);
 });
+
+// Manejo de apagado seguro para evitar corrupción o pérdida de datos
+let isShuttingDown = false;
+async function shutdownGracefully(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`\n🛑 [Servidor] Recibida señal ${signal}. Guardando partidas activas y cerrando limpiamente...`);
+  try {
+    await saveAllPartidasImmediate();
+    await checkpointDb();
+    console.log('✅ [Servidor] Todas las partidas guardadas en disco y SQLite sincronizado.');
+  } catch (err) {
+    console.error('Error al guardar durante apagado:', err);
+  }
+  process.exit(0);
+}
+
+process.on('SIGINT', () => shutdownGracefully('SIGINT'));
+process.on('SIGTERM', () => shutdownGracefully('SIGTERM'));

@@ -107,6 +107,20 @@
     initSocket();
     loadGamesList();
     setupAutoSave();
+
+    // Auto-reanudar sesión si se actualizó la página (F5) o se reinició el navegador
+    const activeCode = localStorage.getItem('vtt_active_game_code');
+    if (activeCode && state.usuario.nombre) {
+      console.log('🔄 Reanudando automáticamente sesión activa tras recarga/actualización:', activeCode);
+      showScreen('vtt');
+      showSaveIndicator('🔄 Reanudando...');
+      if (dom.currentRoomCode) dom.currentRoomCode.textContent = activeCode;
+      window._emitWhenReady('unirse_partida', {
+        codigo: activeCode,
+        nombreUsuario: state.usuario.nombre,
+        usuarioId: state.usuario.id
+      });
+    }
   });
 
   // --- ELEMENTOS DOM ---
@@ -142,6 +156,13 @@
       btnDmExportSession: document.getElementById('btn-dm-export-session'),
       btnDmImportSession: document.getElementById('btn-dm-import-session'),
       inputDmImportFile: document.getElementById('input-dm-import-file'),
+      reconnectBanner: document.getElementById('reconnect-banner'),
+      reconnectMsg: document.getElementById('reconnect-msg'),
+      btnEmergencyExport: document.getElementById('btn-emergency-export'),
+      btnDmSaveNow: document.getElementById('btn-dm-save-now'),
+      btnRefreshBackups: document.getElementById('btn-refresh-backups'),
+      dmBackupsList: document.getElementById('dm-backups-list'),
+      toastContainer: document.getElementById('toast-container'),
 
       // Canvas
       canvasWrapper: document.getElementById('canvas-wrapper'),
@@ -364,6 +385,43 @@
       }
     };
 
+    // Reconexión y Estado de Conexión
+    socket.on('connect', () => {
+      if (dom.reconnectBanner) dom.reconnectBanner.classList.add('hidden');
+      showSaveIndicator('🟢 Conectado');
+
+      const activeCode = state.partida?.codigo || localStorage.getItem('vtt_active_game_code');
+      if (activeCode && state.usuario.nombre) {
+        socket.emit('unirse_partida', {
+          codigo: activeCode,
+          nombreUsuario: state.usuario.nombre,
+          usuarioId: state.usuario.id
+        });
+      }
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.warn('⚠️ Desconectado del host:', reason);
+      if (dom.reconnectBanner) dom.reconnectBanner.classList.remove('hidden');
+      showSaveIndicator('🔴 Desconectado');
+    });
+
+    socket.on('connect_error', () => {
+      if (dom.reconnectBanner) dom.reconnectBanner.classList.remove('hidden');
+      showSaveIndicator('🔴 Reconectando...');
+    });
+
+    socket.on('partida_restaurada', ({ mensaje }) => {
+      showToast('🔄 ' + (mensaje || 'Partida restaurada a una versión previa.'), 'warning');
+      if (state.partida?.codigo) {
+        socket.emit('unirse_partida', {
+          codigo: state.partida.codigo,
+          nombreUsuario: state.usuario.nombre,
+          usuarioId: state.usuario.id
+        });
+      }
+    });
+
     socket.on('estado_inicial', (data) => {
       state.partida = data.partida;
       state.escenaActiva = data.escenaActiva;
@@ -377,7 +435,15 @@
       state.jugadoresConectados = data.jugadoresConectados || [];
       state.usuario = data.usuario;
 
-      // ID del usuario ya se generó en DOMContentLoaded
+      // Guardar partida activa en almacenamiento local para no perder contexto ante F5 o recargas
+      if (state.partida && state.partida.codigo) {
+        localStorage.setItem('vtt_active_game_code', state.partida.codigo);
+        localStorage.setItem('vtt_active_game_id', state.partida.id);
+      }
+      saveLocalMirrorBackup();
+      if (state.usuario.esDM) {
+        loadDmBackupsList();
+      }
 
       updateUIForCurrentGame();
       showScreen('vtt');
@@ -459,6 +525,7 @@
         ficha.x = x;
         ficha.y = y;
         markDirty();
+        debounceLocalMirrorSave();
       }
     });
 
@@ -467,6 +534,7 @@
       renderFichasList();
       renderTokenSelects();
       markDirty();
+      debounceLocalMirrorSave();
     });
 
     socket.on('ficha_actualizada', (fichaActualizada) => {
@@ -476,6 +544,7 @@
         renderFichasList();
         renderTokenSelects();
         markDirty();
+        debounceLocalMirrorSave();
       }
     });
 
@@ -485,6 +554,7 @@
         ficha.gigante = !!gigante;
         markDirty();
         renderFichasList();
+        debounceLocalMirrorSave();
       }
     });
 
@@ -494,6 +564,7 @@
         ficha.revelado = revelado;
         markDirty();
         renderFichasList();
+        debounceLocalMirrorSave();
       }
     });
 
@@ -502,6 +573,7 @@
       renderFichasList();
       renderTokenSelects();
       markDirty();
+      debounceLocalMirrorSave();
     });
 
     socket.on('hp_actualizado', ({ fichaId, hp_actual }) => {
@@ -510,12 +582,14 @@
         ficha.hp_actual = hp_actual;
         renderFichasList();
         markDirty();
+        debounceLocalMirrorSave();
       }
     });
 
     socket.on('figuras_actualizadas', (figuras) => {
       state.figuras = figuras || [];
       markDirty();
+      debounceLocalMirrorSave();
     });
 
     socket.on('update_dm_status', ({ esDM }) => {
@@ -532,6 +606,7 @@
     socket.on('dibujos_actualizadas', (dibujos) => {
       state.dibujos = dibujos || [];
       markDirty();
+      debounceLocalMirrorSave();
     });
 
     socket.on('nuevo_mensaje', (msg) => {
@@ -567,8 +642,13 @@
       renderGalleryChips();
     });
 
-    socket.on('guardado_confirmado', () => {
+    socket.on('guardado_confirmado', (data) => {
       showSaveIndicator('✅ Guardado');
+      saveLocalMirrorBackup();
+      if (data && data.snapshot) {
+        showToast('💾 Copia de seguridad guardada con éxito en el servidor y localmente.', 'success');
+        if (state.usuario.esDM) loadDmBackupsList();
+      }
     });
 
     socket.on('oculto_toggled', ({ fichaId, oculto }) => {
@@ -1383,9 +1463,29 @@
 
     // Menús y Navegación & Botones Inicio
     dom.btnNavInicio?.addEventListener('click', () => {
+      if (state.partida && state.partida.codigo) {
+        const salir = confirm('¿Deseas volver a la pantalla de inicio? Tu partida sigue guardada de forma segura.');
+        if (!salir) return;
+        localStorage.removeItem('vtt_active_game_code');
+      }
       autoSaveGame();
       loadGamesList();
       showScreen('start');
+    });
+
+    // Guardado de emergencia y acciones de respaldo
+    dom.btnEmergencyExport?.addEventListener('click', handleEmergencyExport);
+    dom.btnDmSaveNow?.addEventListener('click', forzarGuardadoManual);
+    dom.btnRefreshBackups?.addEventListener('click', loadDmBackupsList);
+
+    // Atajo de teclado Ctrl+S para guardado forzado manual
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (state.partida && state.partida.id) {
+          forzarGuardadoManual();
+        }
+      }
     });
 
     if (dom.codeBadge) {
@@ -2094,7 +2194,8 @@
 
   function updateUIForCurrentGame() {
     if (!state.partida) return;
-    dom.navGameTitle.textContent = state.partida.nombre;
+    const nombreLimpio = (state.partida.nombre || 'VTT D&D 5e').replace(/\s*\((?:Restaurada|restaurada)\)/gi, '').trim();
+    dom.navGameTitle.textContent = nombreLimpio;
     dom.currentRoomCode.textContent = state.partida.codigo;
     dom.currentSceneName.textContent = state.escenaActiva?.nombre || 'Escena';
 
@@ -2499,9 +2600,10 @@
         const card = document.createElement('div');
         card.className = 'game-card';
         const imagenHtml = p.imagen_portada ? `<img src="${p.imagen_portada}" alt="Portada" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;">` : '';
+        const nombreLimpio = (p.nombre || 'Partida').replace(/\s*\((?:Restaurada|restaurada)\)/gi, '').trim();
         card.innerHTML = `
           ${imagenHtml}
-          <div class="card-title">${p.nombre}</div>
+          <div class="card-title">${nombreLimpio}</div>
           <div class="card-meta">
             <span>Code: <strong>${p.codigo}</strong></span>
             <span>Jugadores: ${p.total_jugadores || 1}</span>
@@ -2577,14 +2679,168 @@
     }
   }
 
+  // --- GESTIÓN DE AUTO-GUARDADO Y RESILIENCIA ANTE CAÍDAS ---
+  function saveLocalMirrorBackup() {
+    if (!state.partida || !state.partida.codigo) return;
+    try {
+      const mirrorData = {
+        version: '2.0.0-local',
+        fecha: new Date().toISOString(),
+        partida: state.partida,
+        escenaActiva: state.escenaActiva,
+        escenas: state.escenas,
+        fichas: state.fichas,
+        figuras: state.figuras,
+        dibujos: state.dibujos,
+        mensajes: (state.mensajes || []).slice(-50),
+        historial: (state.historial || []).slice(-50),
+        galeria: state.galeria
+      };
+      localStorage.setItem('vtt_local_mirror_' + state.partida.codigo, JSON.stringify(mirrorData));
+    } catch (e) {
+      console.warn('[VTT] Aviso: No se pudo escribir snapshot en localStorage:', e);
+    }
+  }
+
+  let localMirrorTimer = null;
+  function debounceLocalMirrorSave() {
+    if (localMirrorTimer) clearTimeout(localMirrorTimer);
+    localMirrorTimer = setTimeout(saveLocalMirrorBackup, 2000);
+  }
+
+  function forzarGuardadoManual() {
+    if (!state.partida?.id) return;
+    showSaveIndicator('💾 Guardando...');
+    saveLocalMirrorBackup();
+    socket?.emit('forzar_guardado', { partidaId: state.partida.id });
+    showToast('💾 Guardado manual ejecutado (Servidor y Navegador).', 'success');
+  }
+
+  function handleEmergencyExport() {
+    if (!state.partida) {
+      alert('No hay partida activa para exportar.');
+      return;
+    }
+    const data = {
+      version: '2.0.0-emergencia',
+      fechaExport: new Date().toISOString(),
+      partida: state.partida,
+      escenas: state.escenas,
+      fichas: state.fichas,
+      figuras: state.figuras,
+      dibujos: state.dibujos,
+      mensajes: state.mensajes,
+      historial: state.historial,
+      galeria: state.galeria
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const safeTitle = (state.partida.nombre || 'partida').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    a.download = `emergencia_${safeTitle}_${state.partida.codigo}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('💾 Copia de seguridad de emergencia descargada.', 'success');
+  }
+
+  async function loadDmBackupsList() {
+    if (!dom.dmBackupsList || !state.partida?.codigo) return;
+    try {
+      dom.dmBackupsList.innerHTML = '<div style="font-size:0.8rem; color:#94a3b8; padding:4px;">Cargando snapshots...</div>';
+      const res = await fetch(`/api/partidas/${state.partida.codigo}/backups`);
+      if (!res.ok) throw new Error('Error al cargar backups');
+      const backups = await res.json();
+
+      dom.dmBackupsList.innerHTML = '';
+      if (!Array.isArray(backups) || backups.length === 0) {
+        dom.dmBackupsList.innerHTML = '<div style="font-size:0.8rem; color:#64748b; padding:4px;">No hay snapshots aún. Se crean automáticamente.</div>';
+        return;
+      }
+
+      backups.forEach(b => {
+        const item = document.createElement('div');
+        item.className = 'backup-item';
+        const dateFormatted = new Date(b.fecha).toLocaleTimeString() + ' (' + new Date(b.fecha).toLocaleDateString() + ')';
+        const isMain = b.tipo === 'principal';
+        item.innerHTML = `
+          <div class="backup-info">
+            <span class="backup-name">${isMain ? '⭐ Guardado Principal' : '🕒 Snapshot'} (${b.tamanoKb} KB)</span>
+            <span class="backup-date">${dateFormatted}</span>
+          </div>
+          <button class="btn btn-sm btn-gold btn-restore-snapshot" title="Restaurar esta versión">
+            <i class="fa-solid fa-rotate-left"></i> Restaurar
+          </button>
+        `;
+
+        item.querySelector('.btn-restore-snapshot').addEventListener('click', async () => {
+          if (confirm(`¿Restaurar la partida al punto del ${dateFormatted}? Se sobrescribirá el estado con este respaldo.`)) {
+            try {
+              const r = await fetch(`/api/partidas/${state.partida.codigo}/backups/restaurar`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: b.nombreArchivo })
+              });
+              if (!r.ok) {
+                const errJson = await r.json();
+                throw new Error(errJson.error || 'Error al restaurar');
+              }
+              showToast('✅ Partida restaurada con éxito.', 'success');
+              socket?.emit('unirse_partida', {
+                codigo: state.partida.codigo,
+                nombreUsuario: state.usuario.nombre,
+                usuarioId: state.usuario.id
+              });
+            } catch (err) {
+              alert('❌ Error al restaurar: ' + err.message);
+            }
+          }
+        });
+
+        dom.dmBackupsList.appendChild(item);
+      });
+    } catch (err) {
+      dom.dmBackupsList.innerHTML = '<div style="font-size:0.8rem; color:#ef4444; padding:4px;">Error al obtener snapshots.</div>';
+    }
+  }
+
+  function showToast(message, type = 'success', duration = 3500) {
+    if (!dom.toastContainer) dom.toastContainer = document.getElementById('toast-container');
+    if (!dom.toastContainer) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    let icon = 'fa-circle-check';
+    if (type === 'warning') icon = 'fa-triangle-exclamation';
+    if (type === 'error') icon = 'fa-circle-xmark';
+
+    toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
+    dom.toastContainer.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(10px)';
+      setTimeout(() => toast.remove(), 300);
+    }, duration);
+  }
+
   function autoSaveGame() {
     if (state.partida?.id) {
+      saveLocalMirrorBackup();
+      socket?.emit('guardado_automatico', { partidaId: state.partida.id });
       showSaveIndicator('Guardado');
     }
   }
 
   function setupAutoSave() {
-    // Los cambios se persisten en tiempo real en SQLite al interactuar
+    // Guardado automático periódico cada 30 segundos si hay partida activa
+    setInterval(() => {
+      if (state.partida?.id && socket?.connected) {
+        autoSaveGame();
+      }
+    }, 30000);
   }
 
   function showSaveIndicator(text) {

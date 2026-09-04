@@ -39,6 +39,19 @@ function dbGet(sql, params = []) {
   });
 }
 
+// Helper para transacciones atómicas por lotes
+async function dbTransaction(fn) {
+  await dbRun('BEGIN TRANSACTION');
+  try {
+    const result = await fn();
+    await dbRun('COMMIT');
+    return result;
+  } catch (err) {
+    await dbRun('ROLLBACK');
+    throw err;
+  }
+}
+
 // Inicialización de Tablas y Optimizaciones SQLite
 async function initDb() {
   // Optimizaciones de alto rendimiento para SQLite
@@ -46,6 +59,9 @@ async function initDb() {
   await dbRun(`PRAGMA synchronous = NORMAL;`);
   await dbRun(`PRAGMA cache_size = 10000;`);
   await dbRun(`PRAGMA temp_store = MEMORY;`);
+  await dbRun(`PRAGMA foreign_keys = ON;`);
+  await dbRun(`PRAGMA busy_timeout = 5000;`);
+  await dbRun(`PRAGMA mmap_size = 268435456;`); // 256MB memory-mapped I/O
 
   await dbRun(`
     CREATE TABLE IF NOT EXISTS partidas (
@@ -235,10 +251,21 @@ async function initDb() {
   console.log('✅ Base de datos SQLite inicializada correctamente con modo WAL e índices');
 }
 
+// Checkpoint manual para vaciar WAL y garantizar que el archivo .db esté al día
+async function checkpointDb() {
+  try {
+    await dbRun(`PRAGMA wal_checkpoint(TRUNCATE)`);
+  } catch (err) {
+    console.error('Error al hacer checkpoint de WAL:', err);
+  }
+}
+
 module.exports = {
   db,
   dbRun,
   dbAll,
   dbGet,
-  initDb
+  dbTransaction,
+  initDb,
+  checkpointDb
 };
