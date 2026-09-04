@@ -168,6 +168,7 @@
       inputDmImportFile: document.getElementById('input-dm-import-file'),
       reconnectBanner: document.getElementById('reconnect-banner'),
       reconnectMsg: document.getElementById('reconnect-msg'),
+      btnReconnectNow: document.getElementById('btn-reconnect-now'),
       btnEmergencyExport: document.getElementById('btn-emergency-export'),
       btnDmSaveNow: document.getElementById('btn-dm-save-now'),
       btnRefreshBackups: document.getElementById('btn-refresh-backups'),
@@ -378,11 +379,12 @@
     }
 
     socket = io({
+      transports: ['websocket', 'polling'], // Priorizar WebSocket directo para conexión ultrarrápida
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      timeout: 20000
+      timeout: 10000
     });
 
     // Helper: emite cuando el socket esté conectado
@@ -412,12 +414,22 @@
 
     socket.on('disconnect', (reason) => {
       console.warn('⚠️ Desconectado del host:', reason);
-      if (dom.reconnectBanner) dom.reconnectBanner.classList.remove('hidden');
+      if (dom.reconnectBanner) {
+        dom.reconnectBanner.classList.remove('hidden');
+        if (dom.reconnectMsg) {
+          dom.reconnectMsg.textContent = 'Conexión interrumpida (' + reason + '). Reconectando automáticamente...';
+        }
+      }
       showSaveIndicator('🔴 Desconectado');
     });
 
     socket.on('connect_error', () => {
-      if (dom.reconnectBanner) dom.reconnectBanner.classList.remove('hidden');
+      if (dom.reconnectBanner) {
+        dom.reconnectBanner.classList.remove('hidden');
+        if (dom.reconnectMsg) {
+          dom.reconnectMsg.textContent = 'Problema de red o servidor no disponible. Reintentando...';
+        }
+      }
       showSaveIndicator('🔴 Reconectando...');
     });
 
@@ -1488,8 +1500,34 @@
 
     // Guardado de emergencia y acciones de respaldo
     dom.btnEmergencyExport?.addEventListener('click', handleEmergencyExport);
+    dom.btnReconnectNow?.addEventListener('click', () => {
+      showToast('🔄 Forzando reconexión...', 'info');
+      if (socket) {
+        socket.disconnect();
+        socket.connect();
+      } else {
+        initSocket();
+      }
+    });
     dom.btnDmSaveNow?.addEventListener('click', forzarGuardadoManual);
     dom.btnRefreshBackups?.addEventListener('click', loadDmBackupsList);
+
+    // Watchdog de red: si la conexión vuelve o la pestaña recupera foco tras suspensión
+    window.addEventListener('online', () => {
+      console.log('🌐 Red detectada de nuevo. Verificando estado del socket...');
+      if (socket && !socket.connected) {
+        socket.connect();
+      }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        if (socket && !socket.connected) {
+          console.log('👁️ Pestaña reactivada. Reconectando socket...');
+          socket.connect();
+        }
+      }
+    });
 
     // Atajo de teclado Ctrl+S para guardado forzado manual
     window.addEventListener('keydown', (e) => {
@@ -2699,18 +2737,34 @@
   function saveLocalMirrorBackup() {
     if (!state.partida || !state.partida.codigo) return;
     try {
+      // Snapshot ligero para localStorage: omitir mapas base64 pesados e imágenes de galería
+      // para evitar bloqueos en el hilo UI del navegador y excepciones de cuota
       const mirrorData = {
         version: '2.0.0-local',
         fecha: new Date().toISOString(),
         partida: state.partida,
-        escenaActiva: state.escenaActiva,
-        escenas: state.escenas,
+        escenaActiva: state.escenaActiva ? {
+          id: state.escenaActiva.id,
+          partida_id: state.escenaActiva.partida_id,
+          nombre: state.escenaActiva.nombre,
+          config_grid_x: state.escenaActiva.config_grid_x,
+          config_grid_y: state.escenaActiva.config_grid_y,
+          config_casilla: state.escenaActiva.config_casilla
+        } : null,
+        escenas: (state.escenas || []).map(sc => ({
+          id: sc.id,
+          partida_id: sc.partida_id,
+          nombre: sc.nombre,
+          config_grid_x: sc.config_grid_x,
+          config_grid_y: sc.config_grid_y,
+          config_casilla: sc.config_casilla
+        })),
         fichas: state.fichas,
         figuras: state.figuras,
         dibujos: state.dibujos,
-        mensajes: (state.mensajes || []).slice(-50),
-        historial: (state.historial || []).slice(-50),
-        galeria: state.galeria
+        mensajes: (state.mensajes || []).slice(-30),
+        historial: (state.historial || []).slice(-30),
+        galeria: []
       };
       localStorage.setItem('vtt_local_mirror_' + state.partida.codigo, JSON.stringify(mirrorData));
     } catch (e) {
@@ -2721,7 +2775,7 @@
   let localMirrorTimer = null;
   function debounceLocalMirrorSave() {
     if (localMirrorTimer) clearTimeout(localMirrorTimer);
-    localMirrorTimer = setTimeout(saveLocalMirrorBackup, 2000);
+    localMirrorTimer = setTimeout(saveLocalMirrorBackup, 3500);
   }
 
   function forzarGuardadoManual() {
@@ -2863,7 +2917,9 @@
     if (dom.saveStatusIndicator) {
       dom.saveStatusIndicator.querySelector('span').textContent = text;
       dom.saveStatusIndicator.classList.add('saving');
-      setTimeout(() => dom.saveStatusIndicator.classList.remove('saving'), 2000);
+      if (!text.includes('🔴')) {
+        setTimeout(() => dom.saveStatusIndicator.classList.remove('saving'), 2000);
+      }
     }
   }
 

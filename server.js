@@ -21,8 +21,9 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
   maxHttpBufferSize: 1e8, // 100MB para imágenes de mapa base64 de alta resolución
-  pingTimeout: 60000,
-  pingInterval: 25000,
+  pingTimeout: 10000, // Detección rápida de desconexión (10s en vez de 60s)
+  pingInterval: 10000, // Heartbeat cada 10s (en vez de 25s)
+  transports: ['websocket', 'polling'], // Priorizar WebSocket directo de inmediato
   connectionStateRecovery: {
     maxDisconnectionDuration: 2 * 60 * 1000,
     skipMiddlewares: true
@@ -387,8 +388,8 @@ io.on('connection', (socket) => {
         escenaActiva = await dbGet(`SELECT * FROM escenas WHERE partida_id = ? ORDER BY rowid ASC LIMIT 1`, [partida.id]);
       }
 
-      // Obtener listas completas
-      const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [partida.id]);
+      // Obtener listas completas (optimizadas: escenas sin mapa base64 para evitar payloads de 30MB+)
+      const escenas = await dbAll(`SELECT id, partida_id, nombre, config_grid_x, config_grid_y, config_casilla FROM escenas WHERE partida_id = ?`, [partida.id]);
       const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ?`, [partida.id]);
       if (escenaActiva) {
         const posiciones = await dbAll(`SELECT * FROM posiciones_fichas WHERE escena_id = ?`, [escenaActiva.id]);
@@ -496,7 +497,7 @@ io.on('connection', (socket) => {
       const escenaId = uuidv4();
       const p = await dbGet(`SELECT config_grid_x, config_grid_y, config_casilla FROM partidas WHERE id = ?`, [partidaId]);
       await dbRun(`INSERT INTO escenas (id, partida_id, nombre, mapa, config_grid_x, config_grid_y, config_casilla) VALUES (?, ?, ?, ?, ?, ?, ?)`, [escenaId, partidaId, nombre, null, p.config_grid_x, p.config_grid_y, p.config_casilla]);
-      const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [partidaId]);
+      const escenas = await dbAll(`SELECT id, partida_id, nombre, config_grid_x, config_grid_y, config_casilla FROM escenas WHERE partida_id = ?`, [partidaId]);
       io.to(partidaId).emit('escenas_actualizadas', escenas);
       scheduleAutoSave(partidaId);
     } catch (err) {
@@ -508,7 +509,7 @@ io.on('connection', (socket) => {
   socket.on('eliminar_escena', async ({ partidaId, escenaId }) => {
     try {
       await dbRun(`DELETE FROM escenas WHERE id = ?`, [escenaId]);
-      const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [partidaId]);
+      const escenas = await dbAll(`SELECT id, partida_id, nombre, config_grid_x, config_grid_y, config_casilla FROM escenas WHERE partida_id = ?`, [partidaId]);
       io.to(partidaId).emit('escenas_actualizadas', escenas);
       scheduleAutoSave(partidaId);
     } catch (err) {
