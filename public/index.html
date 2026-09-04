@@ -395,43 +395,22 @@
             </div>
           </div>
 
-          <!-- Galería de Fichas Plantilla -->
+          <!-- Galería de Fichas Plantilla (Botón de Acceso a Pantalla Completa) -->
           <div class="dm-section dm-gallery-section">
-            <div class="dm-section-header">
-              <h4>📚 Galería de Plantillas <span id="dm-gallery-count" class="badge-count">0</span></h4>
-              <button id="btn-open-gallery-modal" class="btn btn-xs btn-gold" title="Abrir catálogo expandido en pantalla completa">
-                <i class="fa-solid fa-expand"></i> Pantalla Completa
-              </button>
-            </div>
+            <button type="button" id="btn-open-gallery-modal" class="btn btn-gold btn-block btn-gallery-launcher" title="Abrir Catálogo y Bestiario en Pantalla Completa">
+              <i class="fa-solid fa-dragon"></i>
+              <span>Galería de Plantillas</span>
+              <span id="dm-gallery-count" class="badge-count">0</span>
+            </button>
 
-            <!-- Selector para guardar ficha activa -->
-            <div class="gallery-save-box">
+            <!-- Selector para guardar ficha activa en la galería -->
+            <div class="gallery-save-box" style="margin-top: 10px;">
               <select id="select-ficha-to-template" class="form-control" title="Selecciona una ficha del mapa o lista">
-                <option value="">-- Seleccionar ficha para guardar --</option>
+                <option value="">-- Guardar ficha activa como plantilla --</option>
               </select>
-              <button id="btn-save-current-template" class="btn btn-secondary btn-sm" title="Guardar ficha como plantilla reutilizable">
+              <button type="button" id="btn-save-current-template" class="btn btn-secondary btn-sm" title="Guardar ficha seleccionada como plantilla reutilizable">
                 <i class="fa-solid fa-bookmark"></i> Guardar
               </button>
-            </div>
-
-            <!-- Buscador y Filtros -->
-            <div class="gallery-controls">
-              <div class="gallery-search-wrap">
-                <i class="fa-solid fa-magnifying-glass search-icon"></i>
-                <input type="text" id="input-gallery-search" placeholder="Buscar plantilla..." class="form-control form-control-sm">
-                <button id="btn-clear-gallery-search" class="btn-clear-search hidden" title="Borrar búsqueda"><i class="fa-solid fa-xmark"></i></button>
-              </div>
-              <div class="gallery-filter-chips">
-                <button class="filter-chip active" data-filter="all">Todos</button>
-                <button class="filter-chip" data-filter="monstruo">Monstruos</button>
-                <button class="filter-chip" data-filter="npc">NPCs</button>
-                <button class="filter-chip" data-filter="jugador">Jugadores</button>
-              </div>
-            </div>
-
-            <!-- Lista de tarjetas de plantilla -->
-            <div id="dm-gallery-list" class="gallery-cards-container">
-              <!-- Renderizado dinámico de tarjetas -->
             </div>
           </div>
 
@@ -721,11 +700,18 @@
             <button class="catalog-filter-btn" data-filter="jugador"><i class="fa-solid fa-person"></i> Jugadores</button>
           </div>
           <div class="catalog-spawn-multiplier">
-            <span class="label-multi"><i class="fa-solid fa-clone"></i> Cantidad:</span>
-            <div class="multiplier-buttons">
-              <button class="btn-multi active" data-qty="1">x1</button>
-              <button class="btn-multi" data-qty="2">x2</button>
-              <button class="btn-multi" data-qty="3">x3</button>
+            <span class="label-multi"><i class="fa-solid fa-clone"></i> Cantidad a invocar:</span>
+            <div class="quantity-input-wrapper">
+              <button type="button" id="btn-qty-minus" class="btn-qty-step" title="Restar 1"><i class="fa-solid fa-minus"></i></button>
+              <input type="number" id="input-modal-spawn-qty" class="input-spawn-qty" min="1" max="50" value="1" title="Escribe la cantidad que deseas invocar">
+              <button type="button" id="btn-qty-plus" class="btn-qty-step" title="Sumar 1"><i class="fa-solid fa-plus"></i></button>
+            </div>
+            <div class="quick-qty-chips">
+              <button type="button" class="btn-quick-qty active" data-qty="1">1</button>
+              <button type="button" class="btn-quick-qty" data-qty="2">2</button>
+              <button type="button" class="btn-quick-qty" data-qty="4">4</button>
+              <button type="button" class="btn-quick-qty" data-qty="6">6</button>
+              <button type="button" class="btn-quick-qty" data-qty="10">10</button>
             </div>
           </div>
         </div>
@@ -785,8 +771,14 @@
         </div>
       </div>
       <div class="modal-footer template-detail-footer">
+        <div class="detail-spawn-qty-wrap" style="display: flex; align-items: center; gap: 8px; margin-right: auto;">
+          <span style="font-size: 0.85rem; color: #cbd5e1;"><i class="fa-solid fa-clone"></i> Cantidad:</span>
+          <div class="quantity-input-wrapper" style="height: 32px;">
+            <input type="number" id="input-detail-spawn-qty" class="input-spawn-qty" min="1" max="50" value="1" title="Escribe la cantidad a invocar">
+          </div>
+        </div>
         <button type="button" class="btn btn-secondary btn-close-modal">Cerrar</button>
-        <button type="button" id="btn-spawn-from-detail" class="btn btn-gold"><i class="fa-solid fa-wand-magic-sparkles"></i> Invocar al Mapa</button>
+        <button type="button" id="btn-spawn-from-detail" class="btn btn-gold"><i class="fa-solid fa-wand-magic-sparkles"></i> Invocar al Mapa (x1)</button>
       </div>
     </div>
   </div>
