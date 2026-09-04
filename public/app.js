@@ -265,15 +265,16 @@
       btnOpenGalleryModal: document.getElementById('btn-open-gallery-modal'),
       modalDmGallery: document.getElementById('modal-dm-gallery'),
       dmGalleryCount: document.getElementById('dm-gallery-count'),
-      modalGalleryCount: document.getElementById('modal-gallery-count'),
       selectFichaToTemplate: document.getElementById('select-ficha-to-template'),
       btnSaveCurrentTemplate: document.getElementById('btn-save-current-template'),
       dmGalleryList: document.getElementById('dm-gallery-list'),
-      inputGallerySearch: document.getElementById('input-gallery-search'),
-      btnClearGallerySearch: document.getElementById('btn-clear-gallery-search'),
       inputModalGallerySearch: document.getElementById('input-modal-gallery-search'),
       btnModalClearSearch: document.getElementById('btn-modal-clear-search'),
       dmGalleryModalGrid: document.getElementById('dm-gallery-modal-grid'),
+      inputModalSpawnQty: document.getElementById('input-modal-spawn-qty'),
+      inputDetailSpawnQty: document.getElementById('input-detail-spawn-qty'),
+      btnQtyMinus: document.getElementById('btn-qty-minus'),
+      btnQtyPlus: document.getElementById('btn-qty-plus'),
 
       modalTemplateDetail: document.getElementById('modal-template-detail'),
       btnSpawnFromDetail: document.getElementById('btn-spawn-from-detail'),
@@ -2015,7 +2016,7 @@
       }
     });
 
-    // Abrir Modal de Catálogo Expandido / Bestiario
+    // Apertura del Modal Catálogo Bestiario
     dom.btnQuickGallery?.addEventListener('click', () => {
       openModal(dom.modalDmGallery);
       renderGalleryChips();
@@ -2025,53 +2026,69 @@
       renderGalleryChips();
     });
 
-    // Buscador en Sidebar
-    dom.inputGallerySearch?.addEventListener('input', (e) => {
-      galleryFilterText = e.target.value.trim();
-      if (dom.btnClearGallerySearch) dom.btnClearGallerySearch.classList.toggle('hidden', !galleryFilterText);
-      if (dom.inputModalGallerySearch) dom.inputModalGallerySearch.value = galleryFilterText;
-      renderGalleryChips();
-    });
-    dom.btnClearGallerySearch?.addEventListener('click', () => {
-      galleryFilterText = '';
-      dom.inputGallerySearch.value = '';
-      dom.btnClearGallerySearch.classList.add('hidden');
-      if (dom.inputModalGallerySearch) dom.inputModalGallerySearch.value = '';
-      renderGalleryChips();
-    });
-
     // Buscador en Modal
     dom.inputModalGallerySearch?.addEventListener('input', (e) => {
       galleryFilterText = e.target.value.trim();
       if (dom.btnModalClearSearch) dom.btnModalClearSearch.classList.toggle('hidden', !galleryFilterText);
-      if (dom.inputGallerySearch) dom.inputGallerySearch.value = galleryFilterText;
       renderGalleryChips();
     });
     dom.btnModalClearSearch?.addEventListener('click', () => {
       galleryFilterText = '';
-      dom.inputModalGallerySearch.value = '';
+      if (dom.inputModalGallerySearch) dom.inputModalGallerySearch.value = '';
       dom.btnModalClearSearch.classList.add('hidden');
-      if (dom.inputGallerySearch) dom.inputGallerySearch.value = '';
       renderGalleryChips();
     });
 
-    // Chips de Filtro (Sidebar y Modal)
-    document.querySelectorAll('.filter-chip, .catalog-filter-btn').forEach(btn => {
+    // Chips de Filtro en Modal
+    document.querySelectorAll('.catalog-filter-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         galleryFilterType = btn.dataset.filter || 'all';
-        document.querySelectorAll('.filter-chip, .catalog-filter-btn').forEach(b => {
+        document.querySelectorAll('.catalog-filter-btn').forEach(b => {
           b.classList.toggle('active', (b.dataset.filter || 'all') === galleryFilterType);
         });
         renderGalleryChips();
       });
     });
 
-    // Multiplicador de Invocación en Modal
-    document.querySelectorAll('.btn-multi').forEach(btn => {
+    // Cantidad escrita en Modal
+    dom.inputModalSpawnQty?.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      if (!isNaN(val) && val > 0) {
+        gallerySpawnQuantity = Math.max(1, Math.min(50, val));
+        updateSpawnQuantityUI();
+      }
+    });
+    dom.inputModalSpawnQty?.addEventListener('blur', (e) => {
+      e.target.value = gallerySpawnQuantity;
+    });
+
+    // Cantidad escrita en Modal Inspector Detalle
+    dom.inputDetailSpawnQty?.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      if (!isNaN(val) && val > 0) {
+        gallerySpawnQuantity = Math.max(1, Math.min(50, val));
+        updateSpawnQuantityUI();
+      }
+    });
+    dom.inputDetailSpawnQty?.addEventListener('blur', (e) => {
+      e.target.value = gallerySpawnQuantity;
+    });
+
+    // Botones Stepper + y -
+    dom.btnQtyMinus?.addEventListener('click', () => {
+      gallerySpawnQuantity = Math.max(1, gallerySpawnQuantity - 1);
+      updateSpawnQuantityUI();
+    });
+    dom.btnQtyPlus?.addEventListener('click', () => {
+      gallerySpawnQuantity = Math.min(50, gallerySpawnQuantity + 1);
+      updateSpawnQuantityUI();
+    });
+
+    // Chips de cantidad rápida (1, 2, 4, 6, 10)
+    document.querySelectorAll('.btn-quick-qty').forEach(btn => {
       btn.addEventListener('click', () => {
         gallerySpawnQuantity = parseInt(btn.dataset.qty, 10) || 1;
-        document.querySelectorAll('.btn-multi').forEach(b => b.classList.toggle('active', b === btn));
-        renderGalleryChips();
+        updateSpawnQuantityUI();
       });
     });
 
@@ -2818,13 +2835,27 @@
       dom.templateDetailNotes.textContent = d.notas && d.notas.trim() !== '' ? d.notas : 'Sin notas ni habilidades registradas.';
     }
 
+    updateSpawnQuantityUI();
     openModal(dom.modalTemplateDetail);
   }
 
-  // Renderizar la Galería de Plantillas (Sidebar y Modal de Bestiario)
+  function updateSpawnQuantityUI() {
+    if (dom.inputModalSpawnQty) dom.inputModalSpawnQty.value = gallerySpawnQuantity;
+    if (dom.inputDetailSpawnQty) dom.inputDetailSpawnQty.value = gallerySpawnQuantity;
+    document.querySelectorAll('.btn-quick-qty').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.qty, 10) === gallerySpawnQuantity);
+    });
+    document.querySelectorAll('.btn-spawn-template').forEach(btn => {
+      btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Invocar ${gallerySpawnQuantity > 1 ? `(x${gallerySpawnQuantity})` : ''}`;
+    });
+    if (dom.btnSpawnFromDetail) {
+      dom.btnSpawnFromDetail.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Invocar al Mapa ${gallerySpawnQuantity > 1 ? `(x${gallerySpawnQuantity})` : ''}`;
+    }
+  }
+
+  // Renderizar la Galería de Plantillas en Modal de Bestiario
   function renderGalleryChips() {
-    if (!dom.dmGalleryList) return;
-    dom.dmGalleryList.innerHTML = '';
+    if (dom.dmGalleryList) dom.dmGalleryList.innerHTML = '';
     if (dom.dmGalleryModalGrid) dom.dmGalleryModalGrid.innerHTML = '';
 
     const allTemplates = state.galeria || [];
@@ -2867,13 +2898,12 @@
           <span style="font-size:0.75rem; color:#64748b;">${totalCount === 0 ? 'Guarda monstruos o NPCs para invocarlos rápidamente.' : 'Intenta cambiar la búsqueda o el filtro.'}</span>
         </div>
       `;
-      dom.dmGalleryList.innerHTML = emptyHtml;
       if (dom.dmGalleryModalGrid) dom.dmGalleryModalGrid.innerHTML = emptyHtml;
       return;
     }
 
     // Helper para construir una tarjeta visual de plantilla
-    function buildTemplateCard(g, isModal = false) {
+    function buildTemplateCard(g) {
       let d;
       try {
         d = typeof g.datos === 'string' ? JSON.parse(g.datos) : g.datos;
@@ -2917,7 +2947,7 @@
         </div>
         <div class="template-card-actions">
           <button class="btn btn-sm btn-gold btn-spawn-template" title="Invocar criatura al mapa">
-            <i class="fa-solid fa-wand-magic-sparkles"></i> Invocar ${isModal && gallerySpawnQuantity > 1 ? `x${gallerySpawnQuantity}` : ''}
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Invocar ${gallerySpawnQuantity > 1 ? `(x${gallerySpawnQuantity})` : ''}
           </button>
           <button class="btn btn-sm btn-secondary btn-inspect-template" title="Ver ficha y notas completas">
             <i class="fa-solid fa-eye"></i>
@@ -2929,8 +2959,7 @@
       `;
 
       card.querySelector('.btn-spawn-template').addEventListener('click', () => {
-        const qty = isModal ? gallerySpawnQuantity : 1;
-        spawnFromTemplate(d, qty);
+        spawnFromTemplate(d, gallerySpawnQuantity || 1);
       });
 
       card.querySelector('.btn-inspect-template').addEventListener('click', () => {
@@ -2947,15 +2976,13 @@
       return card;
     }
 
-    filtered.forEach(g => {
-      dom.dmGalleryList.appendChild(buildTemplateCard(g, false));
-    });
-
     if (dom.dmGalleryModalGrid) {
       filtered.forEach(g => {
-        dom.dmGalleryModalGrid.appendChild(buildTemplateCard(g, true));
+        dom.dmGalleryModalGrid.appendChild(buildTemplateCard(g));
       });
     }
+
+    updateSpawnQuantityUI();
   }
 
   function renderChatMessages() {
