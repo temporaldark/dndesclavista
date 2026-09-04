@@ -136,6 +136,51 @@ app.delete('/api/partidas/:id', async (req, res) => {
   }
 });
 
+// Modificar datos de la partida (nombre e imagen de portada) - Solo creador / DM
+app.put('/api/partidas/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, imagenPortada, usuarioId } = req.body;
+
+    const partida = await dbGet(`SELECT * FROM partidas WHERE id = ?`, [id]);
+    if (!partida) {
+      return res.status(404).json({ error: 'Partida no encontrada' });
+    }
+
+    // Verificar si es el creador de la partida
+    const effectiveUserId = (usuarioId || '').toLowerCase().trim();
+    const dmId = (partida.dm_id || '').toLowerCase().trim();
+    const esCreador = !dmId || dmId === effectiveUserId || (effectiveUserId && dmId.includes(effectiveUserId));
+
+    if (!esCreador) {
+      return res.status(403).json({ error: 'Solo el creador de la sesión puede modificarla.' });
+    }
+
+    const nombreLimpio = limpiarNombrePartida(nombre || partida.nombre);
+    const nuevaImagen = imagenPortada !== undefined ? imagenPortada : partida.imagen_portada;
+    const ahora = new Date().toISOString();
+
+    await dbRun(
+      `UPDATE partidas SET nombre = ?, imagen_portada = ?, fecha_modificacion = ? WHERE id = ?`,
+      [nombreLimpio, nuevaImagen, ahora, id]
+    );
+
+    await savePartidaToFile(id, false);
+
+    // Notificar en tiempo real a clientes conectados en la sala
+    io.to(id).emit('partida_actualizada', {
+      id,
+      nombre: nombreLimpio,
+      imagen_portada: nuevaImagen
+    });
+
+    res.json({ success: true, id, nombre: nombreLimpio, imagen_portada: nuevaImagen });
+  } catch (err) {
+    console.error('Error al actualizar partida:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Listar copias de seguridad de una partida
 app.get('/api/partidas/:codigo/backups', (req, res) => {
   try {
@@ -454,6 +499,32 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('Error al unirse a la partida:', err);
       socket.emit('error_partida', 'Error en el servidor al cargar la partida.');
+    }
+  });
+
+  // Modificar datos de la sesión en tiempo real (DM / Creador)
+  socket.on('actualizar_partida_info', async ({ partidaId, nombre, imagenPortada }) => {
+    try {
+      if (!socket.data?.esDM) {
+        return socket.emit('error_partida', 'Solo el creador o DM puede modificar la sesión.');
+      }
+
+      const nombreLimpio = limpiarNombrePartida(nombre);
+      const ahora = new Date().toISOString();
+      await dbRun(
+        `UPDATE partidas SET nombre = ?, imagen_portada = ?, fecha_modificacion = ? WHERE id = ?`,
+        [nombreLimpio, imagenPortada || null, ahora, partidaId]
+      );
+
+      await savePartidaToFile(partidaId, false);
+
+      io.to(partidaId).emit('partida_actualizada', {
+        id: partidaId,
+        nombre: nombreLimpio,
+        imagen_portada: imagenPortada || null
+      });
+    } catch (err) {
+      console.error('Error en actualizar_partida_info:', err);
     }
   });
 

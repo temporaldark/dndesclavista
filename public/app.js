@@ -336,6 +336,14 @@
       joinCodeInput: document.getElementById('join-code-input'),
       joinUsernameInput: document.getElementById('join-username-input'),
       joinAvailableGamesList: document.getElementById('join-available-games-list'),
+      modalEditGame: document.getElementById('modal-edit-game'),
+      formEditGame: document.getElementById('form-edit-game'),
+      editGameId: document.getElementById('edit-game-id'),
+      editGameTitle: document.getElementById('edit-game-title'),
+      editGameImgFile: document.getElementById('edit-game-img-file'),
+      editGameImgUrl: document.getElementById('edit-game-img-url'),
+      editGamePreviewImg: document.getElementById('edit-game-preview-img'),
+      btnDmEditSession: document.getElementById('btn-dm-edit-session'),
       codeBadge: document.getElementById('code-badge')
     };
 
@@ -560,6 +568,16 @@
       renderTokenSelects();
       renderScenesList();
       markDirty();
+    });
+
+    socket.on('partida_actualizada', ({ id, nombre, imagen_portada }) => {
+      if (state.partida && state.partida.id === id) {
+        state.partida.nombre = nombre;
+        state.partida.imagen_portada = imagen_portada;
+        if (dom.navGameTitle) dom.navGameTitle.textContent = nombre;
+        document.title = `${nombre} - VTT D&D 5e`;
+      }
+      loadGamesList();
     });
 
     socket.on('escenas_actualizadas', (escenas) => {
@@ -1700,6 +1718,95 @@
 
       closeModal(dom.modalJoinGame);
       joinGameDirect(codigo, nombreUsuario);
+    });
+
+    // Modificar datos de la sesión (DM en partida)
+    dom.btnDmEditSession?.addEventListener('click', () => {
+      if (state.partida) {
+        openEditGameModal(state.partida);
+      }
+    });
+
+    // Vista previa al escribir URL de portada en el modal de edición
+    dom.editGameImgUrl?.addEventListener('input', () => {
+      const url = dom.editGameImgUrl.value.trim();
+      if (dom.editGamePreviewImg) {
+        if (url) {
+          dom.editGamePreviewImg.src = url;
+          dom.editGamePreviewImg.style.display = 'block';
+        } else {
+          dom.editGamePreviewImg.style.display = 'none';
+        }
+      }
+    });
+
+    // Vista previa al seleccionar archivo local de portada
+    dom.editGameImgFile?.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          if (dom.editGamePreviewImg) {
+            dom.editGamePreviewImg.src = evt.target.result;
+            dom.editGamePreviewImg.style.display = 'block';
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Envío del formulario de modificación de partida
+    dom.formEditGame?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const partidaId = dom.editGameId.value;
+      const nuevoNombre = dom.editGameTitle.value.trim();
+      if (!partidaId || !nuevoNombre) return;
+
+      let nuevaImagen = dom.editGameImgUrl ? dom.editGameImgUrl.value.trim() : '';
+      if (dom.editGameImgFile && dom.editGameImgFile.files && dom.editGameImgFile.files[0]) {
+        try {
+          nuevaImagen = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(dom.editGameImgFile.files[0]);
+          });
+        } catch (_) {}
+      }
+
+      const usuarioId = localStorage.getItem('vtt_user_id') || state.usuario?.id || '';
+
+      try {
+        const res = await fetch(`/api/partidas/${partidaId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nombre: nuevoNombre,
+            imagenPortada: nuevaImagen,
+            usuarioId
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Error al modificar');
+        }
+
+        const data = await res.json();
+
+        // Si estamos dentro de esta partida, actualizar títulos y estado
+        if (state.partida && state.partida.id === partidaId) {
+          state.partida.nombre = data.nombre;
+          state.partida.imagen_portada = data.imagen_portada;
+          if (dom.navGameTitle) dom.navGameTitle.textContent = data.nombre;
+          document.title = `${data.nombre} - VTT D&D 5e`;
+        }
+
+        closeModal(dom.modalEditGame);
+        showToast('✅ Sesión modificada con éxito', 'success');
+        loadGamesList();
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
     });
 
     // Herramientas DM (Panel Izquierdo)
@@ -3093,6 +3200,30 @@
     });
   }
 
+  function openEditGameModal(partidaData) {
+    if (!dom.modalEditGame) return;
+    if (dom.editGameId) dom.editGameId.value = partidaData.id || '';
+    if (dom.editGameTitle) dom.editGameTitle.value = partidaData.nombre || '';
+    if (dom.editGameImgUrl) dom.editGameImgUrl.value = partidaData.imagen_portada || '';
+    if (dom.editGameImgFile) dom.editGameImgFile.value = '';
+
+    const previewImg = dom.editGamePreviewImg;
+    if (previewImg) {
+      if (partidaData.imagen_portada) {
+        previewImg.src = partidaData.imagen_portada;
+        previewImg.style.display = 'block';
+      } else {
+        previewImg.src = '';
+        previewImg.style.display = 'none';
+      }
+    }
+
+    openModal(dom.modalEditGame);
+    setTimeout(() => {
+      if (dom.editGameTitle) dom.editGameTitle.focus();
+    }, 150);
+  }
+
   // --- GESTIÓN DE PARTIDAS GUARDADAS EN PANTALLA INICIO ---
   async function loadGamesList() {
     if (!dom.gamesList) return;
@@ -3111,12 +3242,20 @@
         return;
       }
 
+      const currentUserId = (localStorage.getItem('vtt_user_id') || '').toLowerCase().trim();
+      const currentUsername = (localStorage.getItem('vtt_username') || '').toLowerCase().trim();
+
       partidas.forEach(p => {
         const card = document.createElement('div');
         card.className = 'game-card';
         const imagenHtml = p.imagen_portada ? `<img src="${p.imagen_portada}" alt="Portada" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 8px;">` : '';
         const nombreLimpio = limpiarNombrePartida(p.nombre);
         p.nombre = nombreLimpio;
+
+        const pDmId = (p.dm_id || '').toLowerCase().trim();
+        const isCreator = !pDmId || (currentUserId && pDmId === currentUserId) || (currentUsername && pDmId.includes(currentUsername)) || (currentUserId && currentUserId.includes(pDmId));
+        const editBtnHtml = isCreator ? `<button class="btn btn-secondary btn-sm btn-edit-game" title="Modificar Nombre e Imagen"><i class="fa-solid fa-pen-to-square"></i></button>` : '';
+
         card.innerHTML = `
           ${imagenHtml}
           <div class="card-title">${nombreLimpio}</div>
@@ -3129,6 +3268,7 @@
           </div>
           <div class="card-actions">
             <button class="btn btn-primary btn-sm btn-load-game flex-1">Cargar Partida</button>
+            ${editBtnHtml}
             <button class="btn btn-secondary btn-sm btn-export-game" title="Guardar Sesión en Escritorio"><i class="fa-solid fa-download"></i></button>
             <button class="btn btn-danger btn-sm btn-del-game"><i class="fa-solid fa-trash"></i></button>
           </div>
@@ -3159,6 +3299,14 @@
         if (cardImg) {
           cardImg.style.cursor = 'pointer';
           cardImg.addEventListener('click', handleEnterGame);
+        }
+
+        const btnEdit = card.querySelector('.btn-edit-game');
+        if (btnEdit) {
+          btnEdit.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openEditGameModal(p);
+          });
         }
 
         card.querySelector('.btn-export-game')?.addEventListener('click', () => {
