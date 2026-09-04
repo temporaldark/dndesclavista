@@ -335,6 +335,7 @@
       formJoinGame: document.getElementById('form-join-game'),
       joinCodeInput: document.getElementById('join-code-input'),
       joinUsernameInput: document.getElementById('join-username-input'),
+      joinAvailableGamesList: document.getElementById('join-available-games-list'),
       codeBadge: document.getElementById('code-badge')
     };
 
@@ -1609,7 +1610,16 @@
 
     // Modal Crear / Unirse / Importar Partida
     dom.btnCreateGameModal?.addEventListener('click', () => openModal(dom.modalCreateGame));
-    dom.btnJoinGameModal?.addEventListener('click', () => openModal(dom.modalJoinGame));
+    dom.btnJoinGameModal?.addEventListener('click', () => {
+      loadJoinModalSessionsList();
+      openModal(dom.modalJoinGame);
+      setTimeout(() => {
+        if (dom.joinUsernameInput && !dom.joinUsernameInput.value.trim()) {
+          const savedName = localStorage.getItem('vtt_username');
+          if (savedName) dom.joinUsernameInput.value = savedName;
+        }
+      }, 100);
+    });
 
     if (dom.btnImportGame && dom.inputImportGameFile) {
       dom.btnImportGame.addEventListener('click', () => dom.inputImportGameFile.click());
@@ -2524,7 +2534,7 @@
           ${state.usuario.esDM ? `<button class="btn btn-sm ${ficha.oculto ? 'btn-warning' : 'btn-secondary'} btn-toggle-oculto" title="${ficha.oculto ? 'Mostrar en mapa a jugadores' : 'Ocultar en mapa a jugadores'}"><i class="fa-solid ${ficha.oculto ? 'fa-eye' : 'fa-eye-slash'}"></i> ${ficha.oculto ? 'Mostrar' : 'Ocultar'}</button>` : ''}
           ${state.usuario.esDM && isMonster ? `<button class="btn btn-sm btn-primary btn-revelar-menu" title="Configurar visibilidad de datos para jugadores"><i class="fa-solid fa-eye"></i> Visibilidad</button>` : ''}
           ${esPropietario ? '<button class="btn btn-sm btn-primary btn-edit-ficha" title="Editar ficha"><i class="fa-solid fa-pen"></i> Editar</button>' : ''}
-          ${state.usuario.esDM ? '<button class="btn btn-sm btn-danger btn-del-ficha" title="Eliminar ficha"><i class="fa-solid fa-trash"></i></button>' : ''}
+          ${(state.usuario.esDM || esPropietario) ? '<button class="btn btn-sm btn-danger btn-del-ficha" title="Eliminar ficha"><i class="fa-solid fa-trash"></i></button>' : ''}
         </div>
       `;
 
@@ -2601,7 +2611,7 @@
         });
       }
 
-      if (state.usuario.esDM) {
+      if (state.usuario.esDM || esPropietario) {
         card.querySelector('.btn-del-ficha')?.addEventListener('click', () => {
           if (confirm(`¿Eliminar la ficha de ${ficha.nombre}?`)) {
             socket?.emit('eliminar_ficha', { partidaId: state.partida.id, fichaId: ficha.id });
@@ -2646,14 +2656,17 @@
     dom.diceTokenSelect.innerHTML = '<option value="">-- Sin ficha (Tirada general) --</option>';
 
     // Obtener fichas elegibles para asociar tiradas:
-    // El DM puede tirar por cualquier ficha de la partida (jugadores, NPCs, monstruos).
-    // Los jugadores pueden tirar por sus fichas asignadas/propias.
-    // Si una ficha está seleccionada en el tablero, siempre se incluye en la lista.
+    // Que SOLO se vean las fichas presentes en la escena actual.
+    // El DM ve todas las fichas de la escena activa (monstruos, NPCs, jugadores).
+    // Los jugadores ven únicamente sus fichas propias presentes en la escena actual.
+    const escenaActualId = state.escenaActiva?.id;
     const fichasDisponibles = (state.fichas || []).filter(f => {
+      // Validar pertenencia a la escena actual
+      const enEscena = (!escenaActualId || (f.escena_id && String(f.escena_id) === String(escenaActualId)) || (!f.escena_id && f.tipo === 'jugador'));
+      if (!enEscena) return false;
+
       if (state.usuario?.esDM) return true;
-      if (esDuenioDeFicha(f)) return true;
-      if (selectedFichasIds && selectedFichasIds.includes(f.id)) return true;
-      return false;
+      return esDuenioDeFicha(f);
     });
 
     fichasDisponibles.forEach(f => {
@@ -3165,6 +3178,56 @@
     } catch (err) {
       console.warn('Servidor no disponible o modo offline');
       dom.gamesList.innerHTML = '<div class="empty-state">Conéctate al servidor ejecutando `npm start` para cargar partidas.</div>';
+    }
+  }
+
+  // --- CARGAR LISTA DE SESIONES EN EL MODAL 'UNIRSE CON CÓDIGO' ---
+  async function loadJoinModalSessionsList() {
+    if (!dom.joinAvailableGamesList) return;
+    try {
+      dom.joinAvailableGamesList.innerHTML = '<div style="color: #64748b; font-size: 0.8rem; padding: 8px; text-align: center;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando sesiones...</div>';
+      const res = await fetch('/api/partidas');
+      if (!res.ok) throw new Error('Error al obtener partidas');
+      const partidas = await res.json();
+
+      dom.joinAvailableGamesList.innerHTML = '';
+      if (!partidas || partidas.length === 0) {
+        dom.joinAvailableGamesList.innerHTML = '<div style="color: #64748b; font-size: 0.8rem; padding: 8px; text-align: center;">No hay partidas activas en este momento.</div>';
+        return;
+      }
+
+      partidas.forEach(p => {
+        const item = document.createElement('div');
+        item.className = 'join-session-item';
+        const nombreLimpio = limpiarNombrePartida(p.nombre);
+        item.innerHTML = `
+          <div class="join-session-title" title="${nombreLimpio}">${nombreLimpio}</div>
+          <span class="join-session-code">${p.codigo}</span>
+        `;
+
+        item.addEventListener('click', () => {
+          dom.joinAvailableGamesList.querySelectorAll('.join-session-item').forEach(el => el.classList.remove('selected'));
+          item.classList.add('selected');
+
+          if (dom.joinCodeInput) {
+            dom.joinCodeInput.value = p.codigo;
+          }
+
+          const savedName = localStorage.getItem('vtt_username');
+          if (savedName && dom.joinUsernameInput && !dom.joinUsernameInput.value.trim()) {
+            dom.joinUsernameInput.value = savedName;
+          }
+
+          if (dom.joinUsernameInput) {
+            dom.joinUsernameInput.focus();
+          }
+        });
+
+        dom.joinAvailableGamesList.appendChild(item);
+      });
+    } catch (err) {
+      console.warn('Error al cargar lista de partidas para modal:', err);
+      dom.joinAvailableGamesList.innerHTML = '<div style="color: #ef4444; font-size: 0.8rem; padding: 6px; text-align: center;">Error al cargar sesiones.</div>';
     }
   }
 

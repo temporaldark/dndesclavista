@@ -366,13 +366,15 @@ io.on('connection', (socket) => {
       }
       partida.nombre = limpiarNombrePartida(partida.nombre);
 
+      const effectiveUserId = usuarioId || ('usr_' + (nombreUsuario || 'jugador').toLowerCase().trim().replace(/[^a-z0-9]/g, '_'));
+
       // Determinar si es DM
       let esDM = false;
       if (!partida.dm_id) {
         // Fallback por si hay partidas antiguas sin dm_id
-        await dbRun(`UPDATE partidas SET dm_id = ? WHERE id = ?`, [usuarioId, partida.id]);
+        await dbRun(`UPDATE partidas SET dm_id = ? WHERE id = ?`, [effectiveUserId, partida.id]);
         esDM = true;
-      } else if (partida.dm_id === usuarioId) {
+      } else if (partida.dm_id === effectiveUserId) {
         esDM = true;
       }
 
@@ -380,7 +382,7 @@ io.on('connection', (socket) => {
       const colorUsuario = COLORES_USUARIOS[Math.floor(Math.random() * COLORES_USUARIOS.length)];
 
       socket.join(partida.id);
-      socket.data = { partidaId: partida.id, usuarioId, nombreUsuario, esDM, colorUsuario };
+      socket.data = { partidaId: partida.id, usuarioId: effectiveUserId, nombreUsuario, esDM, colorUsuario };
 
       // Obtener escena activa
       let escenaActiva = await dbGet(`SELECT * FROM escenas WHERE id = ?`, [partida.escena_activa_id]);
@@ -671,10 +673,29 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Eliminar ficha
+  // Eliminar ficha (DM o dueño legítimo de la ficha)
   socket.on('eliminar_ficha', async ({ partidaId, fichaId }) => {
     try {
+      const ficha = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [fichaId]);
+      if (!ficha) return;
+
+      const esDM = socket.data?.esDM;
+      const usuarioId = (socket.data?.usuarioId || '').toLowerCase().trim();
+      const nombreUsuario = (socket.data?.nombreUsuario || '').toLowerCase().trim();
+      const fJugadorId = (ficha.jugador_id || '').toLowerCase().trim();
+
+      // Permitir eliminación si el usuario es DM o dueño asignado de la ficha
+      const esDuenio = esDM ||
+        (fJugadorId && (fJugadorId === usuarioId || fJugadorId === nombreUsuario || fJugadorId === 'usr_' + nombreUsuario.replace(/[^a-z0-9]/g, '_'))) ||
+        (ficha.tipo === 'jugador' && (!ficha.jugador_id || ficha.jugador_id === ''));
+
+      if (!esDuenio) {
+        console.warn(`[Seguridad] Usuario '${socket.data?.nombreUsuario}' no autorizado para eliminar ficha '${ficha.nombre}'`);
+        return;
+      }
+
       await dbRun(`DELETE FROM fichas WHERE id = ?`, [fichaId]);
+      await dbRun(`DELETE FROM posiciones_fichas WHERE ficha_id = ?`, [fichaId]);
       io.to(partidaId).emit('ficha_eliminada', fichaId);
       scheduleAutoSave(partidaId);
     } catch (err) {
