@@ -251,18 +251,18 @@ async function importPartidaDataIntoDb(data, overrideExisting = false) {
     // Insertar mensajes
     for (const m of mensajes) {
       await dbRun(
-        `INSERT OR REPLACE INTO mensajes (id, partida_id, usuario_id, nombre_usuario, color_usuario, mensaje, es_gif, fecha)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [m.id, partida.id, m.usuario_id, m.nombre_usuario, m.color_usuario, m.mensaje, m.es_gif ? 1 : 0, m.fecha]
+        `INSERT OR REPLACE INTO mensajes (id, partida_id, usuario_id, nombre_usuario, color_usuario, mensaje, es_gif, fecha, nombre_ficha)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [m.id, partida.id, m.usuario_id, m.nombre_usuario, m.color_usuario, m.mensaje, m.es_gif ? 1 : 0, m.fecha, m.nombre_ficha || null]
       );
     }
 
     // Insertar historial dados
     for (const h of historial) {
       await dbRun(
-        `INSERT OR REPLACE INTO historial_dados (id, partida_id, usuario_id, nombre_usuario, formula, tipo, resultado, fecha)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [h.id, partida.id, h.usuario_id, h.nombre_usuario, h.formula, h.tipo, h.resultado, h.fecha]
+        `INSERT OR REPLACE INTO historial_dados (id, partida_id, usuario_id, nombre_usuario, formula, tipo, resultado, fecha, nombre_ficha)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [h.id, partida.id, h.usuario_id, h.nombre_usuario, h.formula, h.tipo, h.resultado, h.fecha, h.nombre_ficha || null]
       );
     }
 

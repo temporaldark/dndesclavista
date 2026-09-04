@@ -812,27 +812,34 @@ io.on('connection', (socket) => {
   });
 
   // Lanzar dados e insertar en historial
-  socket.on('lanzar_dados', async ({ partidaId, usuarioId, nombreUsuario, formula, tipo, resultado, fichaId, icono }) => {
+  socket.on('lanzar_dados', async ({ partidaId, usuarioId, nombreUsuario, formula, tipo, resultado, fichaId, fichaNombre, icono }) => {
     try {
       const id = uuidv4();
       const fecha = new Date().toISOString();
 
+      let nombreFichaFinal = (fichaNombre || '').trim() || null;
+      if (!nombreFichaFinal && fichaId) {
+        const fRow = await dbGet(`SELECT nombre FROM fichas WHERE id = ?`, [fichaId]);
+        if (fRow && fRow.nombre) nombreFichaFinal = fRow.nombre;
+      }
+
       await dbRun(
-        `INSERT INTO historial_dados (id, partida_id, usuario_id, nombre_usuario, formula, tipo, resultado, fecha)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, partidaId, usuarioId, nombreUsuario, formula, tipo, resultado, fecha]
+        `INSERT INTO historial_dados (id, partida_id, usuario_id, nombre_usuario, formula, tipo, resultado, fecha, nombre_ficha)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, partidaId, usuarioId, nombreUsuario, formula, tipo, resultado, fecha, nombreFichaFinal]
       );
 
-      const nuevoRegistro = { id, partida_id: partidaId, usuario_id: usuarioId, nombre_usuario: nombreUsuario, formula, tipo, resultado, fecha };
+      const nuevoRegistro = { id, partida_id: partidaId, usuario_id: usuarioId, nombre_usuario: nombreUsuario, formula, tipo, resultado, fecha, nombre_ficha: nombreFichaFinal };
       io.to(partidaId).emit('nueva_tirada', nuevoRegistro);
 
       // Emitir mensaje en chat
       const msgId = uuidv4();
-      const mensajeTexto = `🎲 ha lanzado ${formula} para [${tipo}] y ha sacado **${resultado}**`;
+      const fichaTag = nombreFichaFinal ? ` [🎯 ${nombreFichaFinal}]` : '';
+      const mensajeTexto = `🎲 ha lanzado ${formula} para [${tipo}] y ha sacado **${resultado}**${fichaTag}`;
       await dbRun(
-        `INSERT INTO mensajes (id, partida_id, usuario_id, nombre_usuario, color_usuario, mensaje, es_gif, fecha)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
-        [msgId, partidaId, usuarioId, nombreUsuario, socket.data?.colorUsuario || '#c9a84c', mensajeTexto, fecha]
+        `INSERT INTO mensajes (id, partida_id, usuario_id, nombre_usuario, color_usuario, mensaje, es_gif, fecha, nombre_ficha)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+        [msgId, partidaId, usuarioId, nombreUsuario, socket.data?.colorUsuario || '#c9a84c', mensajeTexto, fecha, nombreFichaFinal]
       );
 
       io.to(partidaId).emit('nuevo_mensaje', {
@@ -843,7 +850,8 @@ io.on('connection', (socket) => {
         color_usuario: socket.data?.colorUsuario || '#c9a84c',
         mensaje: mensajeTexto,
         es_gif: 0,
-        fecha
+        fecha,
+        nombre_ficha: nombreFichaFinal
       });
 
       // Si se especificó una ficha, emitir animación sobre la ficha en el mapa
