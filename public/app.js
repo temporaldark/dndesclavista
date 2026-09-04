@@ -2493,11 +2493,11 @@
           </div>
         </div>
         <div class="ficha-actions">
-          ${esPropietario ? '<button class="btn btn-sm btn-secondary btn-gigante"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> Gigante</button>' : ''}
-          ${state.usuario.esDM ? `<button class="btn btn-sm btn-secondary btn-toggle-oculto" title="${ficha.oculto ? 'Mostrar en mapa a jugadores' : 'Ocultar en mapa a jugadores'}"><i class="fa-solid ${ficha.oculto ? 'fa-eye' : 'fa-eye-slash'}"></i> ${ficha.oculto ? 'Mostrar' : 'Ocultar'}</button>` : ''}
-          ${state.usuario.esDM && isMonster ? `<button class="btn btn-sm btn-primary btn-revelar-menu"><i class="fa-solid fa-eye"></i> Visibilidad</button>` : ''}
-          ${esPropietario ? '<button class="btn btn-sm btn-primary btn-edit-ficha"><i class="fa-solid fa-pen"></i> Editar</button>' : ''}
-          ${state.usuario.esDM ? '<button class="btn btn-sm btn-danger btn-del-ficha"><i class="fa-solid fa-trash"></i></button>' : ''}
+          ${esPropietario ? `<button class="btn btn-sm ${ficha.gigante ? 'btn-gold' : 'btn-secondary'} btn-gigante" title="${ficha.gigante ? 'Volver a tamaño normal' : 'Aumentar a tamaño gigante'}"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> ${ficha.gigante ? 'Normal' : 'Gigante'}</button>` : ''}
+          ${state.usuario.esDM ? `<button class="btn btn-sm ${ficha.oculto ? 'btn-warning' : 'btn-secondary'} btn-toggle-oculto" title="${ficha.oculto ? 'Mostrar en mapa a jugadores' : 'Ocultar en mapa a jugadores'}"><i class="fa-solid ${ficha.oculto ? 'fa-eye' : 'fa-eye-slash'}"></i> ${ficha.oculto ? 'Mostrar' : 'Ocultar'}</button>` : ''}
+          ${state.usuario.esDM && isMonster ? `<button class="btn btn-sm btn-primary btn-revelar-menu" title="Configurar visibilidad de datos para jugadores"><i class="fa-solid fa-eye"></i> Visibilidad</button>` : ''}
+          ${esPropietario ? '<button class="btn btn-sm btn-primary btn-edit-ficha" title="Editar ficha"><i class="fa-solid fa-pen"></i> Editar</button>' : ''}
+          ${state.usuario.esDM ? '<button class="btn btn-sm btn-danger btn-del-ficha" title="Eliminar ficha"><i class="fa-solid fa-trash"></i></button>' : ''}
         </div>
       `;
 
