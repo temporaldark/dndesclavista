@@ -935,24 +935,30 @@ input:focus, select:focus, textarea:focus, button:focus {
   display: flex;
   gap: 6px;
   align-items: center;
+  width: 100%;
 }
 
 .gallery-save-box select {
   flex: 1;
+  min-width: 0;
   font-size: 0.8rem;
-  padding: 6px 10px;
+  padding: 6px 8px;
   background: var(--bg-input);
   color: var(--text-main);
   border: 1px solid rgba(201, 168, 76, 0.3);
   border-radius: 6px;
-  height: 38px;
+  height: 36px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .gallery-save-box .btn {
   flex-shrink: 0;
-  height: 38px;
-  min-height: 38px;
-  padding: 0 12px;
+  white-space: nowrap;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 0.8rem;
 }
 
 .gallery-controls {

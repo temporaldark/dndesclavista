@@ -2716,7 +2716,7 @@
   function updateFichaToTemplateSelect() {
     if (!dom.selectFichaToTemplate) return;
     const currentVal = dom.selectFichaToTemplate.value;
-    dom.selectFichaToTemplate.innerHTML = '<option value="">-- Guardar ficha como plantilla --</option>';
+    dom.selectFichaToTemplate.innerHTML = '<option value="">-- Ficha --</option>';
 
     (state.fichas || []).forEach(f => {
       const opt = document.createElement('option');
