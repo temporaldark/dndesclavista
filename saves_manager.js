@@ -18,12 +18,16 @@ function ensureDirectories() {
 const pendingSaveTimers = new Map();
 const lastSnapshotTimers = new Map();
 
-// Helper para escritura atómica (evita archivos corruptos si el host cae en medio de la escritura)
-function writeJsonAtomic(filePath, data) {
+// Set para evitar escrituras concurrentes superpuestas sobre la misma partida
+const isSavingPartida = new Set();
+
+// Helper para escritura atómica asíncrona (no bloquea el Event Loop de Node.js)
+async function writeJsonAtomic(filePath, data) {
   const tempPath = `${filePath}.tmp_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-  const jsonString = JSON.stringify(data, null, 2);
-  fs.writeFileSync(tempPath, jsonString, 'utf8');
-  fs.renameSync(tempPath, filePath);
+  // Serialización sin indentación para máxima velocidad y menor consumo de CPU
+  const jsonString = JSON.stringify(data);
+  await fs.promises.writeFile(tempPath, jsonString, 'utf8');
+  await fs.promises.rename(tempPath, filePath);
 }
 
 // Limpiar cualquier sufijo de restauración o copia (repetitivo o variante)
@@ -66,8 +70,16 @@ async function exportPartidaData(partidaId) {
   };
 }
 
-// Guardar partida en archivo JSON independiente
+// Guardar partida en archivo JSON independiente (100% asíncrono, cero bloqueos)
 async function savePartidaToFile(partidaId, createSnapshot = false) {
+  if (!partidaId) return false;
+  if (isSavingPartida.has(partidaId)) {
+    // Si ya está en curso una operación de guardado para esta partida, re-programar
+    scheduleAutoSave(partidaId, 1000);
+    return false;
+  }
+  isSavingPartida.add(partidaId);
+
   try {
     ensureDirectories();
     const backupData = await exportPartidaData(partidaId);
@@ -79,7 +91,7 @@ async function savePartidaToFile(partidaId, createSnapshot = false) {
 
     // 1. Archivo principal independiente de la partida
     const mainFilePath = path.join(savesDir, `partida_${codigo}.json`);
-    writeJsonAtomic(mainFilePath, backupData);
+    await writeJsonAtomic(mainFilePath, backupData);
 
     // 2. Snapshot periódico o manual (máximo 5 por partida)
     const now = Date.now();
@@ -91,7 +103,12 @@ async function savePartidaToFile(partidaId, createSnapshot = false) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const snapshotFilename = `${codigo}_${safeName}_${timestamp}.json`;
       const snapshotPath = path.join(backupsDir, snapshotFilename);
-      writeJsonAtomic(snapshotPath, backupData);
+
+      try {
+        await fs.promises.copyFile(mainFilePath, snapshotPath);
+      } catch (_) {
+        await writeJsonAtomic(snapshotPath, backupData);
+      }
 
       // Rotación: mantener sólo los 5 snapshots más recientes de este código
       cleanOldSnapshots(codigo, 5);
@@ -101,6 +118,8 @@ async function savePartidaToFile(partidaId, createSnapshot = false) {
   } catch (err) {
     console.error(`[SavesManager] Error al guardar partida ${partidaId} en archivo:`, err);
     return false;
+  } finally {
+    isSavingPartida.delete(partidaId);
   }
 }
 
@@ -128,8 +147,8 @@ function cleanOldSnapshots(codigo, maxKeep = 5) {
   }
 }
 
-// Programar auto-guardado con debounce (ej. 3 segundos tras el último cambio)
-function scheduleAutoSave(partidaId, delayMs = 3000) {
+// Programar auto-guardado con debounce (ej. 3.5 segundos tras el último cambio)
+function scheduleAutoSave(partidaId, delayMs = 3500) {
   if (!partidaId) return;
   if (pendingSaveTimers.has(partidaId)) {
     clearTimeout(pendingSaveTimers.get(partidaId));
