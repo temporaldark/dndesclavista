@@ -1706,6 +1706,64 @@ input:focus, select:focus, textarea:focus, button:focus {
   color: var(--text-muted);
 }
 
+.join-games-list-box {
+  max-height: 160px;
+  overflow-y: auto;
+  background: var(--bg-card, #1a1a2e);
+  border: 1px solid var(--border-subtle, rgba(201, 168, 76, 0.25));
+  border-radius: 6px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.join-session-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--bg-input, #131722);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.join-session-item:hover {
+  background: rgba(201, 168, 76, 0.15);
+  border-color: var(--gold-primary);
+  transform: translateY(-1px);
+}
+
+.join-session-item.selected {
+  background: rgba(201, 168, 76, 0.25);
+  border-color: var(--gold-primary);
+  box-shadow: 0 0 8px rgba(201, 168, 76, 0.35);
+}
+
+.join-session-title {
+  font-size: 0.88rem;
+  font-weight: bold;
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 190px;
+}
+
+.join-session-code {
+  background: rgba(201, 168, 76, 0.2);
+  color: var(--gold-light);
+  font-weight: bold;
+  font-size: 0.8rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 1.5px;
+  border: 1px solid rgba(201, 168, 76, 0.3);
+}
+
 .form-row {
   display: flex;
   gap: 12px;
