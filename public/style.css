@@ -620,8 +620,25 @@ input:focus, select:focus, textarea:focus, button:focus {
 
 .ficha-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: flex-start;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.ficha-actions .btn {
+  font-size: 0.78rem;
+  padding: 5px 9px;
+  height: 28px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border-radius: 4px;
 }
 
 /* LANZADOR DE DADOS */
