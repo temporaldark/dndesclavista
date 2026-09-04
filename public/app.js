@@ -59,6 +59,10 @@
   let activeTool = 'move'; // 'move', 'measure', 'draw', 'erase', 'figures', 'healdamage'
   let selectedFichasIds = [];
   let isMultiSelectMode = false;
+  let galleryFilterText = '';
+  let galleryFilterType = 'all';
+  let gallerySpawnQuantity = 1;
+  let inspectingTemplateData = null;
   let isDraggingToken = false;
   let dragOffsets = {};
   let isDraggingFigure = false;
@@ -248,10 +252,45 @@
       btnClearMapBg: document.getElementById('btn-clear-map-bg'),
       gridColsInput: document.getElementById('grid-cols-input'),
       gridRowsInput: document.getElementById('grid-rows-input'),
-      gridFeetInput: document.getElementById('grid-feet-input'),
       btnApplyGrid: document.getElementById('btn-apply-grid'),
+      btnQuickGallery: document.getElementById('btn-quick-gallery'),
+      btnOpenGalleryModal: document.getElementById('btn-open-gallery-modal'),
+      modalDmGallery: document.getElementById('modal-dm-gallery'),
+      dmGalleryCount: document.getElementById('dm-gallery-count'),
+      modalGalleryCount: document.getElementById('modal-gallery-count'),
+      selectFichaToTemplate: document.getElementById('select-ficha-to-template'),
       btnSaveCurrentTemplate: document.getElementById('btn-save-current-template'),
       dmGalleryList: document.getElementById('dm-gallery-list'),
+      inputGallerySearch: document.getElementById('input-gallery-search'),
+      btnClearGallerySearch: document.getElementById('btn-clear-gallery-search'),
+      inputModalGallerySearch: document.getElementById('input-modal-gallery-search'),
+      btnModalClearSearch: document.getElementById('btn-modal-clear-search'),
+      dmGalleryModalGrid: document.getElementById('dm-gallery-modal-grid'),
+
+      modalTemplateDetail: document.getElementById('modal-template-detail'),
+      btnSpawnFromDetail: document.getElementById('btn-spawn-from-detail'),
+      templateDetailAvatar: document.getElementById('template-detail-avatar'),
+      templateDetailName: document.getElementById('template-detail-name'),
+      templateDetailType: document.getElementById('template-detail-type'),
+      templateDetailSize: document.getElementById('template-detail-size'),
+      templateDetailLevel: document.getElementById('template-detail-level'),
+      templateDetailHp: document.getElementById('template-detail-hp'),
+      templateDetailAc: document.getElementById('template-detail-ac'),
+      templateDetailSpeed: document.getElementById('template-detail-speed'),
+      templateDetailIni: document.getElementById('template-detail-ini'),
+      templateDetailStr: document.getElementById('template-detail-str'),
+      templateModStr: document.getElementById('template-mod-str'),
+      templateDetailDex: document.getElementById('template-detail-dex'),
+      templateModDex: document.getElementById('template-mod-dex'),
+      templateDetailCon: document.getElementById('template-detail-con'),
+      templateModCon: document.getElementById('template-mod-con'),
+      templateDetailInt: document.getElementById('template-detail-int'),
+      templateModInt: document.getElementById('template-mod-int'),
+      templateDetailWis: document.getElementById('template-detail-wis'),
+      templateModWis: document.getElementById('template-mod-wis'),
+      templateDetailCha: document.getElementById('template-detail-cha'),
+      templateModCha: document.getElementById('template-mod-cha'),
+      templateDetailNotes: document.getElementById('template-detail-notes'),
 
       // Modales
       modalFicha: document.getElementById('modal-ficha'),
@@ -1955,14 +1994,88 @@
       socket?.emit('actualizar_grid', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, gridX, gridY, casilla });
     });
 
+    // Guardar Ficha Actual en Galería de Plantillas
     dom.btnSaveCurrentTemplate?.addEventListener('click', () => {
-      if (selectedFichasIds.length === 0) {
-        alert('Por favor selecciona una ficha primero en la pestaña Fichas.');
+      let fichaId = dom.selectFichaToTemplate ? dom.selectFichaToTemplate.value : null;
+      if (!fichaId && selectedFichasIds.length > 0) {
+        fichaId = selectedFichasIds[0];
+      }
+      if (!fichaId) {
+        showToast('Selecciona una ficha en el desplegable o mapa para guardarla como plantilla.', 'warning');
         return;
       }
-      const ficha = state.fichas.find(f => f.id === selectedFichasIds[0]);
+      const ficha = state.fichas.find(f => f.id === fichaId);
       if (ficha) {
         socket?.emit('guardar_galeria', { partidaId: state.partida.id, nombre: ficha.nombre, datos: ficha });
+        showToast(`📚 "${ficha.nombre}" guardada en la galería de plantillas!`, 'success');
+      }
+    });
+
+    // Abrir Modal de Catálogo Expandido / Bestiario
+    dom.btnQuickGallery?.addEventListener('click', () => {
+      openModal(dom.modalDmGallery);
+      renderGalleryChips();
+    });
+    dom.btnOpenGalleryModal?.addEventListener('click', () => {
+      openModal(dom.modalDmGallery);
+      renderGalleryChips();
+    });
+
+    // Buscador en Sidebar
+    dom.inputGallerySearch?.addEventListener('input', (e) => {
+      galleryFilterText = e.target.value.trim();
+      if (dom.btnClearGallerySearch) dom.btnClearGallerySearch.classList.toggle('hidden', !galleryFilterText);
+      if (dom.inputModalGallerySearch) dom.inputModalGallerySearch.value = galleryFilterText;
+      renderGalleryChips();
+    });
+    dom.btnClearGallerySearch?.addEventListener('click', () => {
+      galleryFilterText = '';
+      dom.inputGallerySearch.value = '';
+      dom.btnClearGallerySearch.classList.add('hidden');
+      if (dom.inputModalGallerySearch) dom.inputModalGallerySearch.value = '';
+      renderGalleryChips();
+    });
+
+    // Buscador en Modal
+    dom.inputModalGallerySearch?.addEventListener('input', (e) => {
+      galleryFilterText = e.target.value.trim();
+      if (dom.btnModalClearSearch) dom.btnModalClearSearch.classList.toggle('hidden', !galleryFilterText);
+      if (dom.inputGallerySearch) dom.inputGallerySearch.value = galleryFilterText;
+      renderGalleryChips();
+    });
+    dom.btnModalClearSearch?.addEventListener('click', () => {
+      galleryFilterText = '';
+      dom.inputModalGallerySearch.value = '';
+      dom.btnModalClearSearch.classList.add('hidden');
+      if (dom.inputGallerySearch) dom.inputGallerySearch.value = '';
+      renderGalleryChips();
+    });
+
+    // Chips de Filtro (Sidebar y Modal)
+    document.querySelectorAll('.filter-chip, .catalog-filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        galleryFilterType = btn.dataset.filter || 'all';
+        document.querySelectorAll('.filter-chip, .catalog-filter-btn').forEach(b => {
+          b.classList.toggle('active', (b.dataset.filter || 'all') === galleryFilterType);
+        });
+        renderGalleryChips();
+      });
+    });
+
+    // Multiplicador de Invocación en Modal
+    document.querySelectorAll('.btn-multi').forEach(btn => {
+      btn.addEventListener('click', () => {
+        gallerySpawnQuantity = parseInt(btn.dataset.qty, 10) || 1;
+        document.querySelectorAll('.btn-multi').forEach(b => b.classList.toggle('active', b === btn));
+        renderGalleryChips();
+      });
+    });
+
+    // Invocar desde el Inspector de Detalle
+    dom.btnSpawnFromDetail?.addEventListener('click', () => {
+      if (inspectingTemplateData) {
+        spawnFromTemplate(inspectingTemplateData, gallerySpawnQuantity || 1);
+        closeModal(dom.modalTemplateDetail);
       }
     });
 
@@ -2464,6 +2577,7 @@
         
         updateMultiSelectBadge();
         if (dom.diceTokenSelect) dom.diceTokenSelect.value = selectedFichasIds[0] || '';
+        if (dom.selectFichaToTemplate) dom.selectFichaToTemplate.value = selectedFichasIds[0] || '';
         renderFichasList();
         markDirty();
       });
@@ -2487,6 +2601,8 @@
         dom.diceTokenSelect.appendChild(opt.cloneNode(true));
       }
     });
+
+    updateFichaToTemplateSelect();
   }
 
   // Modal post-lanzamiento para elegir objetivo de iniciativa
@@ -2568,27 +2684,274 @@
     });
   }
 
-  function renderGalleryChips() {
-    dom.dmGalleryList.innerHTML = '';
-    (state.galeria || []).forEach(g => {
-      const chip = document.createElement('div');
-      chip.className = 'chip';
-      chip.innerHTML = `🐲 ${g.nombre} <i class="fa-solid fa-xmark btn-del-gal"></i>`;
+  // Helper para calcular modificador de habilidad D&D (+2, -1, etc.)
+  function getDndModifier(score) {
+    const num = Number(score) || 10;
+    const mod = Math.floor((num - 10) / 2);
+    return mod >= 0 ? `+${mod}` : `${mod}`;
+  }
 
-      chip.addEventListener('click', (e) => {
-        if (e.target.classList.contains('btn-del-gal')) {
+  // Actualizar selector desplegable de fichas para guardar como plantilla
+  function updateFichaToTemplateSelect() {
+    if (!dom.selectFichaToTemplate) return;
+    const currentVal = dom.selectFichaToTemplate.value;
+    dom.selectFichaToTemplate.innerHTML = '<option value="">-- Guardar ficha como plantilla --</option>';
+
+    (state.fichas || []).forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.id;
+      opt.textContent = `${f.nombre} (${(f.tipo || 'ficha').toUpperCase()})`;
+      if (selectedFichasIds.includes(f.id)) {
+        opt.selected = true;
+      }
+      dom.selectFichaToTemplate.appendChild(opt);
+    });
+
+    if (currentVal && !selectedFichasIds.length) {
+      dom.selectFichaToTemplate.value = currentVal;
+    }
+  }
+
+  // Invocación inteligente de plantilla en el centro de la vista del mapa
+  function spawnFromTemplate(templateData, quantity = 1) {
+    if (!state.escenaActiva?.id) {
+      showToast('No hay escena activa para invocar criaturas.', 'warning');
+      return;
+    }
+    const d = typeof templateData === 'string' ? JSON.parse(templateData) : templateData;
+
+    // Calcular centro del lienzo actual según pan y zoom
+    let baseX = 5;
+    let baseY = 5;
+    if (canvas && viewport) {
+      const visibleTileX = Math.floor((-viewport.panX + canvas.width / 2) / (viewport.tileSize * viewport.zoom));
+      const visibleTileY = Math.floor((-viewport.panY + canvas.height / 2) / (viewport.tileSize * viewport.zoom));
+      if (!isNaN(visibleTileX) && !isNaN(visibleTileY)) {
+        baseX = Math.max(0, visibleTileX);
+        baseY = Math.max(0, visibleTileY);
+      }
+    }
+
+    const defaultRevelado = JSON.stringify({
+      global: { imagen: false, nombre: false, hp: false, ac: false, notas: false },
+      jugadores: {}
+    });
+
+    for (let i = 0; i < quantity; i++) {
+      const clone = JSON.parse(JSON.stringify(d));
+      delete clone.id; // Asignar nuevo ID único en el servidor
+      
+      // Dispersión espacial para que no queden superpuestas en el mismo píxel
+      const offsetX = quantity > 1 ? (i % 2 === 0 ? Math.floor(i / 2) : -Math.ceil(i / 2)) : 0;
+      const offsetY = quantity > 1 ? Math.floor(i / 2) : 0;
+      clone.x = Math.max(0, baseX + offsetX);
+      clone.y = Math.max(0, baseY + offsetY);
+
+      if (quantity > 1) {
+        clone.nombre = `${clone.nombre} #${i + 1}`;
+      }
+
+      socket?.emit('crear_ficha', {
+        partidaId: state.partida.id,
+        escenaId: state.escenaActiva.id,
+        fichaData: clone
+      });
+    }
+
+    showToast(`✨ ${quantity > 1 ? quantity + 'x ' : ''}${d.nombre} invocado(s) en el mapa`, 'success');
+  }
+
+  // Abrir inspector modal con ficha y notas completas de la plantilla
+  function abrirDetallePlantilla(g) {
+    let d;
+    try {
+      d = typeof g.datos === 'string' ? JSON.parse(g.datos) : g.datos;
+    } catch (_) {
+      d = { nombre: g.nombre, tipo: 'monstruo' };
+    }
+    inspectingTemplateData = d;
+
+    if (dom.templateDetailAvatar) {
+      dom.templateDetailAvatar.src = d.imagen || 'https://via.placeholder.com/64?text=🐲';
+      dom.templateDetailAvatar.style.borderColor = d.color_aro || 'var(--gold-primary)';
+    }
+    if (dom.templateDetailName) dom.templateDetailName.textContent = g.nombre;
+    if (dom.templateDetailType) {
+      const tipo = (d.tipo || 'monstruo').toLowerCase();
+      dom.templateDetailType.textContent = tipo.toUpperCase();
+      dom.templateDetailType.className = `badge-tag tag-${tipo === 'monstruo' ? 'monster' : tipo === 'npc' ? 'npc' : 'player'}`;
+    }
+    if (dom.templateDetailSize) dom.templateDetailSize.textContent = (d.tamanio_base || 'mediano').toUpperCase();
+    if (dom.templateDetailLevel) dom.templateDetailLevel.textContent = `Nivel ${d.nivel || 1}`;
+
+    if (dom.templateDetailHp) dom.templateDetailHp.textContent = `${d.hp_actual || d.hp_maximo || 10}/${d.hp_maximo || 10}`;
+    if (dom.templateDetailAc) dom.templateDetailAc.textContent = d.ac ?? 10;
+    if (dom.templateDetailSpeed) dom.templateDetailSpeed.textContent = `${d.velocidad ?? 30}ft`;
+    if (dom.templateDetailIni) dom.templateDetailIni.textContent = d.iniciativa ?? 0;
+
+    // Atributos D&D y modificadores
+    const str = d.fuerza ?? 10;
+    const dex = d.destreza ?? 10;
+    const con = d.constitucion ?? 10;
+    const intVal = d.inteligencia ?? 10;
+    const wis = d.sabiduria ?? 10;
+    const cha = d.carisma ?? 10;
+
+    if (dom.templateDetailStr) dom.templateDetailStr.textContent = str;
+    if (dom.templateModStr) dom.templateModStr.textContent = getDndModifier(str);
+    if (dom.templateDetailDex) dom.templateDetailDex.textContent = dex;
+    if (dom.templateModDex) dom.templateModDex.textContent = getDndModifier(dex);
+    if (dom.templateDetailCon) dom.templateDetailCon.textContent = con;
+    if (dom.templateModCon) dom.templateModCon.textContent = getDndModifier(con);
+    if (dom.templateDetailInt) dom.templateDetailInt.textContent = intVal;
+    if (dom.templateModInt) dom.templateModInt.textContent = getDndModifier(intVal);
+    if (dom.templateDetailWis) dom.templateDetailWis.textContent = wis;
+    if (dom.templateModWis) dom.templateModWis.textContent = getDndModifier(wis);
+    if (dom.templateDetailCha) dom.templateDetailCha.textContent = cha;
+    if (dom.templateModCha) dom.templateModCha.textContent = getDndModifier(cha);
+
+    if (dom.templateDetailNotes) {
+      dom.templateDetailNotes.textContent = d.notas && d.notas.trim() !== '' ? d.notas : 'Sin notas ni habilidades registradas.';
+    }
+
+    openModal(dom.modalTemplateDetail);
+  }
+
+  // Renderizar la Galería de Plantillas (Sidebar y Modal de Bestiario)
+  function renderGalleryChips() {
+    if (!dom.dmGalleryList) return;
+    dom.dmGalleryList.innerHTML = '';
+    if (dom.dmGalleryModalGrid) dom.dmGalleryModalGrid.innerHTML = '';
+
+    const allTemplates = state.galeria || [];
+    const totalCount = allTemplates.length;
+
+    if (dom.dmGalleryCount) dom.dmGalleryCount.textContent = totalCount;
+    if (dom.modalGalleryCount) dom.modalGalleryCount.textContent = `${totalCount} plantilla${totalCount === 1 ? '' : 's'}`;
+
+    // Filtrar plantillas según texto de búsqueda y tipo activo
+    const filtered = allTemplates.filter(g => {
+      let d;
+      try {
+        d = typeof g.datos === 'string' ? JSON.parse(g.datos) : g.datos;
+      } catch (_) {
+        d = { nombre: g.nombre, tipo: 'monstruo' };
+      }
+
+      // Filtro de texto (nombre o notas)
+      if (galleryFilterText) {
+        const q = galleryFilterText.toLowerCase();
+        const matchesName = (g.nombre || '').toLowerCase().includes(q);
+        const matchesNotes = (d.notas || '').toLowerCase().includes(q);
+        if (!matchesName && !matchesNotes) return false;
+      }
+
+      // Filtro de tipo (monstruo, npc, jugador)
+      if (galleryFilterType !== 'all') {
+        const itemType = (d.tipo || 'monstruo').toLowerCase();
+        if (itemType !== galleryFilterType) return false;
+      }
+
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      const emptyHtml = `
+        <div class="gallery-empty-state">
+          <i class="fa-solid fa-dragon"></i>
+          <p>${totalCount === 0 ? 'No hay plantillas guardadas aún.' : 'No se encontraron plantillas con ese filtro.'}</p>
+          <span style="font-size:0.75rem; color:#64748b;">${totalCount === 0 ? 'Guarda monstruos o NPCs para invocarlos rápidamente.' : 'Intenta cambiar la búsqueda o el filtro.'}</span>
+        </div>
+      `;
+      dom.dmGalleryList.innerHTML = emptyHtml;
+      if (dom.dmGalleryModalGrid) dom.dmGalleryModalGrid.innerHTML = emptyHtml;
+      return;
+    }
+
+    // Helper para construir una tarjeta visual de plantilla
+    function buildTemplateCard(g, isModal = false) {
+      let d;
+      try {
+        d = typeof g.datos === 'string' ? JSON.parse(g.datos) : g.datos;
+      } catch (_) {
+        d = { nombre: g.nombre, tipo: 'monstruo' };
+      }
+
+      const card = document.createElement('div');
+      card.className = 'template-card';
+      card.dataset.id = g.id;
+
+      const avatarSrc = d.imagen || 'https://via.placeholder.com/48?text=🐲';
+      const aroColor = d.color_aro || 'var(--gold-primary)';
+      const tipo = (d.tipo || 'monstruo').toLowerCase();
+      const tipoTag = tipo === 'monstruo' ? 'tag-monster' : tipo === 'npc' ? 'tag-npc' : 'tag-player';
+      const hp = d.hp_maximo || d.hp_actual || 10;
+      const ac = d.ac ?? 10;
+      const vel = d.velocidad ?? 30;
+      const tamanio = (d.tamanio_base || 'Mediano').toUpperCase();
+
+      card.innerHTML = `
+        <div class="template-card-header">
+          <div class="template-avatar-wrap">
+            <img src="${avatarSrc}" class="template-avatar" style="border-color: ${aroColor};" alt="${g.nombre}">
+          </div>
+          <div class="template-main-info">
+            <div class="template-name-row">
+              <h5 class="template-name" title="${g.nombre}">${g.nombre}</h5>
+              <span class="badge-tag ${tipoTag}">${tipo.toUpperCase()}</span>
+            </div>
+            <div class="template-stat-pills">
+              <span class="stat-pill hp" title="Puntos de Golpe"><i class="fa-solid fa-heart"></i> ${hp} HP</span>
+              <span class="stat-pill ac" title="Clase de Armadura"><i class="fa-solid fa-shield-halved"></i> CA ${ac}</span>
+              <span class="stat-pill spd" title="Velocidad"><i class="fa-solid fa-person-running"></i> ${vel}ft</span>
+            </div>
+            <div style="font-size:0.7rem; color:#94a3b8; display:flex; gap:8px; align-items:center; margin-top:2px;">
+              <span><i class="fa-solid fa-up-right-and-down-left-from-center"></i> ${tamanio}</span>
+              ${d.notas && d.notas.trim() ? '<span style="color:var(--gold-light);"><i class="fa-solid fa-scroll"></i> Con notas</span>' : ''}
+            </div>
+          </div>
+        </div>
+        <div class="template-card-actions">
+          <button class="btn btn-sm btn-gold btn-spawn-template" title="Invocar criatura al mapa">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Invocar ${isModal && gallerySpawnQuantity > 1 ? `x${gallerySpawnQuantity}` : ''}
+          </button>
+          <button class="btn btn-sm btn-secondary btn-inspect-template" title="Ver ficha y notas completas">
+            <i class="fa-solid fa-eye"></i>
+          </button>
+          <button class="btn btn-sm btn-danger btn-del-template" title="Eliminar de la galería">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </div>
+      `;
+
+      card.querySelector('.btn-spawn-template').addEventListener('click', () => {
+        const qty = isModal ? gallerySpawnQuantity : 1;
+        spawnFromTemplate(d, qty);
+      });
+
+      card.querySelector('.btn-inspect-template').addEventListener('click', () => {
+        abrirDetallePlantilla(g);
+      });
+
+      card.querySelector('.btn-del-template').addEventListener('click', () => {
+        if (confirm(`¿Eliminar la plantilla "${g.nombre}" de la galería?`)) {
           socket?.emit('eliminar_galeria', { partidaId: state.partida.id, galeriaId: g.id });
-        } else {
-          // Instanciar nueva ficha desde plantilla
-          const datosFicha = JSON.parse(g.datos);
-          datosFicha.x = 5;
-          datosFicha.y = 5;
-          socket?.emit('crear_ficha', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, fichaData: datosFicha });
+          showToast(`🗑️ Plantilla "${g.nombre}" eliminada.`, 'info');
         }
       });
 
-      dom.dmGalleryList.appendChild(chip);
+      return card;
+    }
+
+    filtered.forEach(g => {
+      dom.dmGalleryList.appendChild(buildTemplateCard(g, false));
     });
+
+    if (dom.dmGalleryModalGrid) {
+      filtered.forEach(g => {
+        dom.dmGalleryModalGrid.appendChild(buildTemplateCard(g, true));
+      });
+    }
   }
 
   function renderChatMessages() {

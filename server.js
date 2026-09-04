@@ -871,10 +871,10 @@ io.on('connection', (socket) => {
   socket.on('guardar_galeria', async ({ partidaId, nombre, datos }) => {
     try {
       const id = uuidv4();
-      const datosJson = JSON.stringify(datos);
+      const datosJson = typeof datos === 'object' ? JSON.stringify(datos) : datos;
       await dbRun(`INSERT INTO galeria (id, partida_id, nombre, datos) VALUES (?, ?, ?, ?)`, [id, partidaId, nombre, datosJson]);
       const galeria = await dbAll(`SELECT * FROM galeria WHERE partida_id = ?`, [partidaId]);
-      socket.emit('galeria_actualizada', galeria);
+      io.to(partidaId).emit('galeria_actualizada', galeria);
       scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
@@ -886,7 +886,7 @@ io.on('connection', (socket) => {
     try {
       await dbRun(`DELETE FROM galeria WHERE id = ?`, [galeriaId]);
       const galeria = await dbAll(`SELECT * FROM galeria WHERE partida_id = ?`, [partidaId]);
-      socket.emit('galeria_actualizada', galeria);
+      io.to(partidaId).emit('galeria_actualizada', galeria);
       scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);

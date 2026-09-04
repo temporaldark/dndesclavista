@@ -53,6 +53,9 @@
       <span id="save-status-indicator" class="save-status" title="Estado de Guardado">
         <i class="fa-solid fa-cloud-arrow-up"></i> <span>Listo</span>
       </span>
+      <button id="btn-quick-gallery" class="btn-nav dm-only" title="Galería de Plantillas del DM">
+        <i class="fa-solid fa-dragon gold-text"></i> <span class="desktop-only">Plantillas</span>
+      </button>
       <button id="btn-mobile-dm-tools" class="btn-nav mobile-only" title="Herramientas">
         <i class="fa-solid fa-toolbox"></i>
       </button>
@@ -386,12 +389,42 @@
           </div>
 
           <!-- Galería de Fichas Plantilla -->
-          <div class="dm-section">
-            <h4>📚 Galería de Plantillas (Monstruos/NPCs)</h4>
-            <button id="btn-save-current-template" class="btn btn-secondary btn-block"><i
-                class="fa-solid fa-bookmark"></i> Guardar Ficha Actual en Galería</button>
-            <div id="dm-gallery-list" class="gallery-chips">
-              <!-- Plantillas guardadas como chips -->
+          <div class="dm-section dm-gallery-section">
+            <div class="dm-section-header">
+              <h4>📚 Galería de Plantillas <span id="dm-gallery-count" class="badge-count">0</span></h4>
+              <button id="btn-open-gallery-modal" class="btn btn-xs btn-gold" title="Abrir catálogo expandido en pantalla completa">
+                <i class="fa-solid fa-expand"></i> Pantalla Completa
+              </button>
+            </div>
+
+            <!-- Selector para guardar ficha activa -->
+            <div class="gallery-save-box">
+              <select id="select-ficha-to-template" class="form-control" title="Selecciona una ficha del mapa o lista">
+                <option value="">-- Seleccionar ficha para guardar --</option>
+              </select>
+              <button id="btn-save-current-template" class="btn btn-secondary btn-sm" title="Guardar ficha como plantilla reutilizable">
+                <i class="fa-solid fa-bookmark"></i> Guardar
+              </button>
+            </div>
+
+            <!-- Buscador y Filtros -->
+            <div class="gallery-controls">
+              <div class="gallery-search-wrap">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input type="text" id="input-gallery-search" placeholder="Buscar plantilla..." class="form-control form-control-sm">
+                <button id="btn-clear-gallery-search" class="btn-clear-search hidden" title="Borrar búsqueda"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+              <div class="gallery-filter-chips">
+                <button class="filter-chip active" data-filter="all">Todos</button>
+                <button class="filter-chip" data-filter="monstruo">Monstruos</button>
+                <button class="filter-chip" data-filter="npc">NPCs</button>
+                <button class="filter-chip" data-filter="jugador">Jugadores</button>
+              </div>
+            </div>
+
+            <!-- Lista de tarjetas de plantilla -->
+            <div id="dm-gallery-list" class="gallery-cards-container">
+              <!-- Renderizado dinámico de tarjetas -->
             </div>
           </div>
 
@@ -653,6 +686,101 @@
           <button type="submit" class="btn btn-gold">Unirse a Partida</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: CATÁLOGO EXPANDIDO DE PLANTILLAS DEL DM (PC Y MÓVIL) -->
+  <div id="modal-dm-gallery" class="modal-overlay hidden">
+    <div class="modal-content modal-xl modal-gallery-catalog">
+      <div class="modal-header">
+        <div class="header-title-wrap">
+          <h3><i class="fa-solid fa-dragon gold-text"></i> Catálogo y Bestiario de Plantillas</h3>
+          <span id="modal-gallery-count" class="badge-count">0 plantillas</span>
+        </div>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body modal-gallery-body">
+        <!-- Barra de herramientas del catálogo -->
+        <div class="catalog-toolbar">
+          <div class="catalog-search-box">
+            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+            <input type="text" id="input-modal-gallery-search" placeholder="Buscar por nombre o rasgos..." class="form-control">
+            <button id="btn-modal-clear-search" class="btn-clear-search hidden" title="Limpiar"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="catalog-filters">
+            <button class="catalog-filter-btn active" data-filter="all">Todos</button>
+            <button class="catalog-filter-btn" data-filter="monstruo"><i class="fa-solid fa-skull"></i> Monstruos</button>
+            <button class="catalog-filter-btn" data-filter="npc"><i class="fa-solid fa-user-shield"></i> NPCs</button>
+            <button class="catalog-filter-btn" data-filter="jugador"><i class="fa-solid fa-person"></i> Jugadores</button>
+          </div>
+          <div class="catalog-spawn-multiplier">
+            <span class="label-multi"><i class="fa-solid fa-clone"></i> Cantidad:</span>
+            <div class="multiplier-buttons">
+              <button class="btn-multi active" data-qty="1">x1</button>
+              <button class="btn-multi" data-qty="2">x2</button>
+              <button class="btn-multi" data-qty="3">x3</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cuadrícula de tarjetas de plantillas -->
+        <div id="dm-gallery-modal-grid" class="gallery-modal-grid">
+          <!-- Renderizado dinámico -->
+        </div>
+      </div>
+      <div class="modal-footer modal-gallery-footer">
+        <span class="catalog-hint"><i class="fa-solid fa-lightbulb gold-text"></i> Toca "Invocar" para crear la criatura en el centro de tu pantalla actual.</span>
+        <button type="button" class="btn btn-secondary btn-close-modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: DETALLES E INSPECTOR DE PLANTILLA -->
+  <div id="modal-template-detail" class="modal-overlay hidden">
+    <div class="modal-content modal-md modal-template-inspector">
+      <div class="modal-header">
+        <h3 id="template-detail-title"><i class="fa-solid fa-scroll gold-text"></i> Detalles de Plantilla</h3>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body template-detail-body">
+        <div class="template-detail-hero">
+          <img id="template-detail-avatar" src="https://via.placeholder.com/64" alt="Avatar" class="template-detail-img">
+          <div class="template-detail-meta">
+            <h4 id="template-detail-name">Nombre</h4>
+            <div class="template-badges-row">
+              <span id="template-detail-type" class="badge-tag tag-monster">Monstruo</span>
+              <span id="template-detail-size" class="badge-tag tag-size">Mediano</span>
+              <span id="template-detail-level" class="badge-tag tag-level">Nivel 1</span>
+            </div>
+            <div class="template-vital-stats">
+              <span class="vital-item hp"><i class="fa-solid fa-heart"></i> HP: <strong id="template-detail-hp">10</strong></span>
+              <span class="vital-item ac"><i class="fa-solid fa-shield-halved"></i> CA: <strong id="template-detail-ac">10</strong></span>
+              <span class="vital-item speed"><i class="fa-solid fa-person-running"></i> Vel: <strong id="template-detail-speed">30ft</strong></span>
+              <span class="vital-item ini"><i class="fa-solid fa-dice-d20"></i> Ini: <strong id="template-detail-ini">0</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla de Atributos D&D -->
+        <div class="ability-scores-summary">
+          <div class="ability-box"><span class="ab-name">FUE</span><strong id="template-detail-str">10</strong><span id="template-mod-str" class="ab-mod">+0</span></div>
+          <div class="ability-box"><span class="ab-name">DES</span><strong id="template-detail-dex">10</strong><span id="template-mod-dex" class="ab-mod">+0</span></div>
+          <div class="ability-box"><span class="ab-name">CON</span><strong id="template-detail-con">10</strong><span id="template-mod-con" class="ab-mod">+0</span></div>
+          <div class="ability-box"><span class="ab-name">INT</span><strong id="template-detail-int">10</strong><span id="template-mod-int" class="ab-mod">+0</span></div>
+          <div class="ability-box"><span class="ab-name">SAB</span><strong id="template-detail-wis">10</strong><span id="template-mod-wis" class="ab-mod">+0</span></div>
+          <div class="ability-box"><span class="ab-name">CAR</span><strong id="template-detail-cha">10</strong><span id="template-mod-cha" class="ab-mod">+0</span></div>
+        </div>
+
+        <!-- Notas / Rasgos / Habilidades -->
+        <div class="template-notes-section">
+          <label><i class="fa-solid fa-book-open"></i> Rasgos, Ataques y Notas:</label>
+          <div id="template-detail-notes" class="template-notes-box">Sin notas adicionales.</div>
+        </div>
+      </div>
+      <div class="modal-footer template-detail-footer">
+        <button type="button" class="btn btn-secondary btn-close-modal">Cerrar</button>
+        <button type="button" id="btn-spawn-from-detail" class="btn btn-gold"><i class="fa-solid fa-wand-magic-sparkles"></i> Invocar al Mapa</button>
+      </div>
     </div>
   </div>
 
