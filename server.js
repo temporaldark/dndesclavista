@@ -201,8 +201,47 @@ app.post('/api/partidas/:codigo/backups/restaurar', async (req, res) => {
 
     const partida = await restoreSnapshotFile(codigo, filename);
     partida.nombre = limpiarNombrePartida(partida.nombre);
-    // Notificar a todos los clientes en la partida para que recarguen su estado
-    io.to(partida.id).emit('partida_restaurada', { mensaje: 'Partida cargada a la versión seleccionada.' });
+
+    // Obtener escena activa restaurada
+    let escenaActiva = await dbGet(`SELECT * FROM escenas WHERE id = ?`, [partida.escena_activa_id]);
+    if (!escenaActiva) {
+      escenaActiva = await dbGet(`SELECT * FROM escenas WHERE partida_id = ? ORDER BY rowid ASC LIMIT 1`, [partida.id]);
+    }
+    if (escenaActiva && partida.escena_activa_id !== escenaActiva.id) {
+      await dbRun(`UPDATE partidas SET escena_activa_id = ? WHERE id = ?`, [escenaActiva.id, partida.id]);
+      partida.escena_activa_id = escenaActiva.id;
+    }
+
+    const escenas = await dbAll(`SELECT id, partida_id, nombre, config_grid_x, config_grid_y, config_casilla FROM escenas WHERE partida_id = ?`, [partida.id]);
+    const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ?`, [partida.id]);
+    if (escenaActiva) {
+      const posiciones = await dbAll(`SELECT * FROM posiciones_fichas WHERE escena_id = ?`, [escenaActiva.id]);
+      fichas.forEach(f => {
+        const pos = posiciones.find(p => p.ficha_id === f.id);
+        if (pos) {
+          f.x = pos.x;
+          f.y = pos.y;
+        }
+      });
+    }
+    const figuras = escenaActiva ? await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaActiva.id]) : [];
+    const dibujoRow = escenaActiva ? await dbGet(`SELECT datos FROM dibujos WHERE escena_id = ?`, [escenaActiva.id]) : null;
+    const dibujos = dibujoRow ? JSON.parse(dibujoRow.datos || '[]') : [];
+    const mensajes = await dbAll(`SELECT * FROM mensajes WHERE partida_id = ? ORDER BY datetime(fecha) ASC LIMIT 100`, [partida.id]);
+    const historial = await dbAll(`SELECT * FROM historial_dados WHERE partida_id = ? ORDER BY datetime(fecha) DESC LIMIT 100`, [partida.id]);
+
+    // Notificar a todos los clientes en la partida para que recarguen su estado inmediatamente con datos completos
+    io.to(partida.id).emit('partida_restaurada', {
+      mensaje: 'Partida cargada a la versión seleccionada.',
+      partida,
+      escenaActiva,
+      escenas,
+      fichas,
+      figuras,
+      dibujos,
+      mensajes,
+      historial
+    });
     res.json({ success: true, partida });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -433,6 +472,10 @@ io.on('connection', (socket) => {
       let escenaActiva = await dbGet(`SELECT * FROM escenas WHERE id = ?`, [partida.escena_activa_id]);
       if (!escenaActiva) {
         escenaActiva = await dbGet(`SELECT * FROM escenas WHERE partida_id = ? ORDER BY rowid ASC LIMIT 1`, [partida.id]);
+      }
+      if (escenaActiva && partida.escena_activa_id !== escenaActiva.id) {
+        await dbRun(`UPDATE partidas SET escena_activa_id = ? WHERE id = ?`, [escenaActiva.id, partida.id]);
+        partida.escena_activa_id = escenaActiva.id;
       }
 
       // Obtener listas completas (optimizadas: escenas sin mapa base64 para evitar payloads de 30MB+)

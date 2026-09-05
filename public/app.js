@@ -260,11 +260,13 @@
       btnClearMapBg: document.getElementById('btn-clear-map-bg'),
       gridColsInput: document.getElementById('grid-cols-input'),
       gridRowsInput: document.getElementById('grid-rows-input'),
+      gridFeetInput: document.getElementById('grid-feet-input'),
       btnApplyGrid: document.getElementById('btn-apply-grid'),
       btnQuickGallery: document.getElementById('btn-quick-gallery'),
       btnOpenGalleryModal: document.getElementById('btn-open-gallery-modal'),
       modalDmGallery: document.getElementById('modal-dm-gallery'),
       dmGalleryCount: document.getElementById('dm-gallery-count'),
+      modalGalleryCount: document.getElementById('modal-gallery-count'),
       selectFichaToTemplate: document.getElementById('select-ficha-to-template'),
       btnSaveCurrentTemplate: document.getElementById('btn-save-current-template'),
       dmGalleryList: document.getElementById('dm-gallery-list'),
@@ -491,9 +493,33 @@
       showSaveIndicator('🔴 Reconectando...');
     });
 
-    socket.on('partida_restaurada', ({ mensaje }) => {
-      showToast('🔄 ' + (mensaje || 'Partida cargada a una versión previa.'), 'info');
-      if (state.partida?.codigo) {
+    socket.on('partida_restaurada', (data) => {
+      showToast('🔄 ' + (data?.mensaje || 'Partida cargada a una versión previa.'), 'info');
+      if (data && data.partida && data.escenaActiva) {
+        if (data.partida) {
+          data.partida.nombre = limpiarNombrePartida(data.partida.nombre);
+        }
+        state.partida = data.partida;
+        state.escenaActiva = data.escenaActiva;
+        state.escenas = data.escenas || [];
+        state.fichas = data.fichas || [];
+        state.figuras = data.figuras || [];
+        state.dibujos = data.dibujos || [];
+        state.mensajes = data.mensajes || [];
+        state.historial = data.historial || [];
+        saveLocalMirrorBackup();
+        if (state.usuario?.esDM) {
+          loadDmBackupsList();
+        }
+        showScreen('vtt');
+        updateUIForCurrentGame();
+        if (state.escenaActiva && state.escenaActiva.mapa) {
+          loadMapImage(state.escenaActiva.mapa);
+        } else {
+          loadMapImage(null);
+        }
+        markDirty();
+      } else if (state.partida?.codigo) {
         socket.emit('unirse_partida', {
           codigo: state.partida.codigo,
           nombreUsuario: state.usuario.nombre,
@@ -525,17 +551,18 @@
         localStorage.setItem('vtt_active_game_id', state.partida.id);
       }
       saveLocalMirrorBackup();
-      if (state.usuario.esDM) {
+      if (state.usuario?.esDM) {
         loadDmBackupsList();
       }
 
-      updateUIForCurrentGame();
       showScreen('vtt');
+      updateUIForCurrentGame();
       if (state.escenaActiva && state.escenaActiva.mapa) {
         loadMapImage(state.escenaActiva.mapa);
       } else {
-        markDirty();
+        loadMapImage(null);
       }
+      markDirty();
     });
 
     socket.on('error_partida', (msg) => {
@@ -817,7 +844,7 @@
   function loadMapImage(src) {
     if (!src) {
       mapImageLoaded = false;
-      mapImage = new Image();
+      mapImage = null;
       if (dom.mapBgImg) {
         dom.mapBgImg.src = '';
         dom.mapBgImg.classList.add('hidden');
@@ -828,10 +855,13 @@
     const img = new Image();
     img.onload = () => {
       mapImage = img;
+      mapImageLoaded = true;
       
       if (src.startsWith('data:image/gif')) {
-        dom.mapBgImg.src = src;
-        dom.mapBgImg.classList.remove('hidden');
+        if (dom.mapBgImg) {
+          dom.mapBgImg.src = src;
+          dom.mapBgImg.classList.remove('hidden');
+        }
         mapImage = null; // Don't render with canvas if it's a GIF
       } else {
         if (dom.mapBgImg) {
@@ -841,6 +871,12 @@
       }
       
       if (!isPanning) centerMap(); // Centrar al cargar mapa
+      markDirty();
+    };
+    img.onerror = (e) => {
+      console.warn('[VTT] No se pudo cargar imagen de mapa:', e);
+      mapImage = null;
+      mapImageLoaded = false;
       markDirty();
     };
     img.src = src;
@@ -883,7 +919,7 @@
     const mapHeight = rows * tileSize;
 
     // 1. Dibujar Mapa de Fondo (si existe y no es GIF)
-    if (mapImage) {
+    if (mapImage && mapImage.complete && mapImage.naturalWidth > 0) {
       ctx.drawImage(mapImage, 0, 0, mapWidth, mapHeight);
     } else {
       // Fondo oscuro por defecto
@@ -2525,33 +2561,33 @@
     if (!state.partida) return;
     const nombreLimpio = limpiarNombrePartida(state.partida.nombre);
     state.partida.nombre = nombreLimpio;
-    dom.navGameTitle.textContent = nombreLimpio;
+    if (dom.navGameTitle) dom.navGameTitle.textContent = nombreLimpio;
     document.title = `${nombreLimpio} - VTT D&D 5e`;
-    dom.currentRoomCode.textContent = state.partida.codigo;
-    dom.currentSceneName.textContent = state.escenaActiva?.nombre || 'Escena';
+    if (dom.currentRoomCode) dom.currentRoomCode.textContent = state.partida.codigo;
+    if (dom.currentSceneName) dom.currentSceneName.textContent = state.escenaActiva?.nombre || 'Escena';
 
-    if (state.usuario.esDM) {
-      dom.userRoleBadge.className = 'role-badge dm';
-      dom.userRoleText.textContent = 'Dungeon Master';
+    if (state.usuario?.esDM) {
+      if (dom.userRoleBadge) dom.userRoleBadge.className = 'role-badge dm';
+      if (dom.userRoleText) dom.userRoleText.textContent = 'Dungeon Master';
       document.querySelectorAll('.dm-only').forEach(el => el.classList.remove('hidden'));
     } else {
-      dom.userRoleBadge.className = 'role-badge';
-      dom.userRoleText.textContent = state.usuario.nombre;
+      if (dom.userRoleBadge) dom.userRoleBadge.className = 'role-badge';
+      if (dom.userRoleText) dom.userRoleText.textContent = state.usuario?.nombre || 'Jugador';
       document.querySelectorAll('.dm-only').forEach(el => el.classList.add('hidden'));
     }
 
-    dom.gridColsInput.value = state.escenaActiva?.config_grid_x || state.partida.config_grid_x || 40;
-    dom.gridRowsInput.value = state.escenaActiva?.config_grid_y || state.partida.config_grid_y || 40;
-    dom.gridFeetInput.value = state.escenaActiva?.config_casilla || state.partida.config_casilla || 5;
+    if (dom.gridColsInput) dom.gridColsInput.value = state.escenaActiva?.config_grid_x || state.partida.config_grid_x || 40;
+    if (dom.gridRowsInput) dom.gridRowsInput.value = state.escenaActiva?.config_grid_y || state.partida.config_grid_y || 40;
+    if (dom.gridFeetInput) dom.gridFeetInput.value = state.escenaActiva?.config_casilla || state.partida.config_casilla || 5;
 
-    renderFichasList();
-    renderTokenSelects();
-    renderScenesList();
-    renderGalleryChips();
-    renderChatMessages();
-    renderHistoryTable();
-    renderQuickHistory();
-    renderDmPlayersList();
+    try { renderFichasList(); } catch (e) { console.error('[VTT] Error renderFichasList:', e); }
+    try { renderTokenSelects(); } catch (e) { console.error('[VTT] Error renderTokenSelects:', e); }
+    try { renderScenesList(); } catch (e) { console.error('[VTT] Error renderScenesList:', e); }
+    try { renderGalleryChips(); } catch (e) { console.error('[VTT] Error renderGalleryChips:', e); }
+    try { renderChatMessages(); } catch (e) { console.error('[VTT] Error renderChatMessages:', e); }
+    try { renderHistoryTable(); } catch (e) { console.error('[VTT] Error renderHistoryTable:', e); }
+    try { renderQuickHistory(); } catch (e) { console.error('[VTT] Error renderQuickHistory:', e); }
+    try { renderDmPlayersList(); } catch (e) { console.error('[VTT] Error renderDmPlayersList:', e); }
   }
 
   function renderDmPlayersList() {
@@ -2589,12 +2625,19 @@
   }
 
   function renderFichasList() {
+    if (!dom.fichasList) return;
     dom.fichasList.innerHTML = '';
-    const filter = dom.filterFichasInput.value.toLowerCase();
+    const filter = (dom.filterFichasInput?.value || '').toLowerCase();
 
-    let listToRender = [...(state.fichas || [])].filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id);
+    const escenaActualId = state.escenaActiva?.id;
+    let listToRender = [...(state.fichas || [])].filter(f => {
+      const tipo = (f.tipo || 'jugador').toLowerCase();
+      if (tipo === 'jugador') return true;
+      if (!escenaActualId) return true;
+      return String(f.escena_id) === String(escenaActualId);
+    });
     // Filtrar fichas ocultas para jugadores
-    if (!state.usuario.esDM) {
+    if (!state.usuario?.esDM) {
       listToRender = listToRender.filter(f => !f.oculto || esDuenioDeFicha(f));
     }
 
@@ -2613,8 +2656,9 @@
       const card = document.createElement('div');
       card.className = `ficha-card ${selectedFichasIds.includes(ficha.id) ? 'selected' : ''} ${ficha.oculto ? 'ficha-oculta' : ''}`;
 
-      const isMonster = ficha.tipo === 'monstruo' || ficha.tipo === 'npc';
-      const isPlayerView = !state.usuario.esDM;
+      const tipoStr = (ficha.tipo || 'jugador').toLowerCase();
+      const isMonster = tipoStr === 'monstruo' || tipoStr === 'npc';
+      const isPlayerView = !state.usuario?.esDM;
       const visibility = getFichaVisibility(ficha);
 
       const hpText = (isMonster && isPlayerView && !visibility.hp) ? '???' : `${ficha.hp_actual}/${ficha.hp_maximo}`;
@@ -2623,14 +2667,14 @@
       const avatarSrc = (isMonster && isPlayerView && !visibility.imagen) ? 'https://via.placeholder.com/48?text=?' : (ficha.imagen || 'https://via.placeholder.com/48?text=Avatar');
 
       const esPropietario = esDuenioDeFicha(ficha);
-      const ocultoBadge = (state.usuario.esDM && ficha.oculto) ? `<span style="background:#555; color:#f87171; font-size:0.75rem; padding:2px 6px; border-radius:4px; margin-left:6px;"><i class="fa-solid fa-eye-slash"></i> Oculto</span>` : '';
+      const ocultoBadge = (state.usuario?.esDM && ficha.oculto) ? `<span style="background:#555; color:#f87171; font-size:0.75rem; padding:2px 6px; border-radius:4px; margin-left:6px;"><i class="fa-solid fa-eye-slash"></i> Oculto</span>` : '';
 
       card.innerHTML = `
         <div class="ficha-card-header">
           <img src="${avatarSrc}" class="ficha-avatar" style="cursor: pointer;" title="Haz clic para ampliar">
           <div class="ficha-info">
             <div class="ficha-name">${ficha.nombre} ${ocultoBadge}</div>
-            <div class="ficha-sub">${ficha.tipo.toUpperCase()} | HP: ${hpText} | AC: ${acText} | INI: <strong class="gold-text">${iniText}</strong></div>
+            <div class="ficha-sub">${tipoStr.toUpperCase()} | HP: ${hpText} | AC: ${acText} | INI: <strong class="gold-text">${iniText}</strong></div>
             <div class="hp-bar-outer">
               <div class="hp-bar-inner" style="width: ${Math.max(0, Math.min(100, (ficha.hp_actual / (ficha.hp_maximo || 1)) * 100))}%"></div>
             </div>
