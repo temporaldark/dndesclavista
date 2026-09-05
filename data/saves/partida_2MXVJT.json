@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "fechaExport": "2026-09-04T17:58:36.838Z",
+  "partida": {
+    "id": "775c897a-c491-40eb-b262-759ed9fd6e88",
+    "nombre": "Campaña Subterranea",
+    "codigo": "2MXVJT",
+    "dm_id": "usr_dm_imp",
+    "escena_activa_id": "b581b96d-1c1e-4cc4-8edb-24ca0a59f728",
+    "fecha_creacion": "2026-09-04T17:58:36.825Z",
+    "fecha_modificacion": "2026-09-04T17:58:36.825Z",
+    "config_grid_x": 40,
+    "config_grid_y": 40,
+    "config_casilla": 5,
+    "imagen_portada": null
+  },
+  "escenas": [
+    {
+      "id": "b581b96d-1c1e-4cc4-8edb-24ca0a59f728",
+      "partida_id": "775c897a-c491-40eb-b262-759ed9fd6e88",
+      "nombre": "Nivel 1",
+      "mapa": null,
+      "config_grid_x": 40,
+      "config_grid_y": 40,
+      "config_casilla": 5
+    }
+  ],
+  "fichas": [],
+  "posiciones_fichas": [],
+  "figuras": [],
+  "dibujos": [],
+  "mensajes": [],
+  "historial": [],
+  "galeria": []
+}

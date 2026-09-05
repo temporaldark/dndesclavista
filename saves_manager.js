@@ -281,10 +281,37 @@ async function autoRestoreFromFiles() {
   ensureDirectories();
   if (!fs.existsSync(savesDir)) return;
 
+  // 1. Recuperar archivos principales si faltan en savesDir pero existen copias en backups/
+  if (fs.existsSync(backupsDir)) {
+    try {
+      const backupFiles = fs.readdirSync(backupsDir).filter(f => f.endsWith('.json'));
+      const byCode = new Map();
+      for (const file of backupFiles) {
+        const code = file.split('_')[0];
+        if (!code || code.length !== 6) continue;
+        if (!byCode.has(code)) byCode.set(code, []);
+        byCode.get(code).push(file);
+      }
+
+      for (const [code, files] of byCode.entries()) {
+        const mainPath = path.join(savesDir, `partida_${code}.json`);
+        if (!fs.existsSync(mainPath)) {
+          files.sort().reverse();
+          const latestFile = files[0];
+          try {
+            fs.copyFileSync(path.join(backupsDir, latestFile), mainPath);
+            console.log(`📦 [SavesManager] Archivo principal generado para ${code} a partir de backup ${latestFile}`);
+          } catch (_) {}
+        }
+      }
+    } catch (err) {
+      console.error('[SavesManager] Error al verificar backups huérfanos:', err);
+    }
+  }
+
+  // 2. Escanear todos los archivos independientes partida_*.json
   const saveFiles = fs.readdirSync(savesDir).filter(f => f.startsWith('partida_') && f.endsWith('.json'));
   if (saveFiles.length === 0) return;
-
-  console.log(`🔍 [SavesManager] Escaneando archivos de guardado independientes en /data/saves... Encontrados: ${saveFiles.length}`);
 
   let restoredCount = 0;
   for (const filename of saveFiles) {
@@ -293,14 +320,30 @@ async function autoRestoreFromFiles() {
       const content = fs.readFileSync(filePath, 'utf8');
       const data = JSON.parse(content);
 
-      if (!data || !data.partida || !data.partida.id) continue;
+      if (!data || !data.partida || (!data.partida.id && !data.partida.codigo)) continue;
 
-      // Verificar si existe en la base de datos actual
-      const exists = await dbGet(`SELECT id FROM partidas WHERE id = ?`, [data.partida.id]);
+      // Verificar si existe en la base de datos actual (por id o por código)
+      const exists = await dbGet(
+        `SELECT id, fecha_modificacion FROM partidas WHERE id = ? OR codigo = ?`,
+        [data.partida.id, data.partida.codigo]
+      );
+
       if (!exists) {
         console.log(`⚡ [SavesManager] Partida "${data.partida.nombre}" (${data.partida.codigo}) no encontrada en BD. Restaurando automáticamente...`);
         await importPartidaDataIntoDb(data, false);
         restoredCount++;
+      } else {
+        // Si la base de datos no tiene escenas pero el archivo JSON sí las tiene, o si el archivo JSON es más reciente que la BD
+        const escenasDb = await dbGet(`SELECT COUNT(*) as count FROM escenas WHERE partida_id = ?`, [exists.id]);
+        const fileHasScenes = (data.escenas && data.escenas.length > 0);
+        const fileDate = new Date(data.partida.fecha_modificacion || 0).getTime();
+        const dbDate = new Date(exists.fecha_modificacion || 0).getTime();
+
+        if ((escenasDb?.count === 0 && fileHasScenes) || (fileDate > dbDate + 2000)) {
+          console.log(`🔄 [SavesManager] Sincronizando partida "${data.partida.nombre}" (${data.partida.codigo}) con versión más reciente desde archivo JSON...`);
+          await importPartidaDataIntoDb(data, true);
+          restoredCount++;
+        }
       }
     } catch (err) {
       console.error(`❌ [SavesManager] Error al procesar archivo de guardado ${filename}:`, err);
@@ -308,9 +351,7 @@ async function autoRestoreFromFiles() {
   }
 
   if (restoredCount > 0) {
-    console.log(`✅ [SavesManager] ¡Se restauraron automáticamente ${restoredCount} partidas desde los archivos de guardado independientes!`);
-  } else {
-    console.log(`✅ [SavesManager] La base de datos ya contiene todas las partidas guardadas en disco.`);
+    console.log(`✅ [SavesManager] ¡Se sincronizaron automáticamente ${restoredCount} partidas desde los archivos de guardado independientes!`);
   }
 }
 

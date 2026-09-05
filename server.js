@@ -68,6 +68,9 @@ const connectedUsers = new Map();
 // Listar todas las partidas guardadas
 app.get('/api/partidas', async (req, res) => {
   try {
+    // Sincronizar automáticamente con archivos de guardado independientes en disco
+    await autoRestoreFromFiles();
+
     const partidas = await dbAll(`
       SELECT p.*, 
         (SELECT COUNT(DISTINCT f.jugador_id) FROM fichas f WHERE f.partida_id = p.id AND f.jugador_id IS NOT NULL) as total_jugadores
