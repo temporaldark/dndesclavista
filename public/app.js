@@ -936,6 +936,38 @@
     return { x, y };
   }
 
+  // Multiplicador de escala según el tamaño base de la criatura / ficha (D&D 5e)
+  function getFichaScaleMult(ficha) {
+    if (!ficha) return 1;
+    let scaleMult = 1;
+    const t = String(ficha.tamanio_base || 'mediano').toLowerCase().trim();
+    if (t === 'tiny' || t === 'diminuto') scaleMult = 0.5;
+    else if (t === 'pequeno' || t === 'pequeño') scaleMult = 0.8;
+    else if (t === 'enano') scaleMult = 0.75;
+    else if (t === 'grande') scaleMult = 2;
+    else if (t === 'enorme') scaleMult = 3;
+    else if (t === 'gargantua') scaleMult = 4;
+    else if (t === 'supergargantua' || t === 'supergargantura' || t === 'colosal') scaleMult = 6;
+    else scaleMult = 1; // mediano
+
+    if (ficha.gigante) scaleMult *= 2;
+    return scaleMult;
+  }
+
+  function formatTamanioBase(val) {
+    if (!val) return 'MEDIANO';
+    const v = String(val).toLowerCase().trim();
+    if (v === 'tiny' || v === 'diminuto') return 'TINY';
+    if (v === 'pequeno' || v === 'pequeño') return 'PEQUEÑO';
+    if (v === 'enano') return 'ENANO';
+    if (v === 'mediano') return 'MEDIANO';
+    if (v === 'grande') return 'GRANDE';
+    if (v === 'enorme') return 'ENORME';
+    if (v === 'gargantua') return 'GARGANTÚA';
+    if (v === 'supergargantua' || v === 'supergargantura' || v === 'colosal') return 'SUPERGARGANTÚA';
+    return v.toUpperCase();
+  }
+
   // Renderizado Principal del Tablero
   function renderCanvas() {
     if (!ctx || !canvas) return;
@@ -1087,13 +1119,8 @@
       const isPlayerView = !state.usuario.esDM;
       const visibility = getFichaVisibility(ficha);
 
-      // Calcular multiplicador de tamaño (Gigante = x2)
-      let scaleMult = 1;
-      if (ficha.tamanio_base === 'grande') scaleMult = 2;
-      if (ficha.tamanio_base === 'enorme') scaleMult = 3;
-      if (ficha.tamanio_base === 'gargantua') scaleMult = 4;
-      if (ficha.tamanio_base === 'enano') scaleMult = 0.75;
-      if (ficha.gigante) scaleMult *= 2;
+      // Calcular multiplicador de tamaño (Tiny, Enano, Mediano, Grande, Enorme, Gargantúa, Supergargantúa, Gigante)
+      const scaleMult = getFichaScaleMult(ficha);
 
       const tokenWidth = tileSize * scaleMult;
       const tokenHeight = tileSize * scaleMult;
@@ -1318,8 +1345,7 @@
     if (activeTool === 'move') {
       // Buscar si hizo clic sobre alguna ficha
       const clickedFicha = [...(state.fichas || [])].reverse().find(f => {
-        let mult = f.tamanio_base === 'gargantua' ? 4 : f.tamanio_base === 'enorme' ? 3 : f.tamanio_base === 'grande' ? 2 : f.tamanio_base === 'enano' ? 0.75 : 1;
-        if (f.gigante) mult *= 2;
+        const mult = getFichaScaleMult(f);
         return gridPos.x >= f.x && gridPos.x <= f.x + mult && gridPos.y >= f.y && gridPos.y <= f.y + mult;
       });
 
@@ -3063,7 +3089,8 @@
           document.getElementById('ficha-ini').value = ficha.iniciativa ?? 0;
           document.getElementById('ficha-nivel').value = ficha.nivel ?? 1;
           document.getElementById('ficha-altura').value = ficha.altura ?? 2;
-          document.getElementById('ficha-tamanio').value = ficha.tamanio_base || 'mediano';
+          const tVal = (ficha.tamanio_base || 'mediano').toLowerCase();
+          document.getElementById('ficha-tamanio').value = (tVal === 'supergargantura') ? 'supergargantua' : tVal;
           if (document.getElementById('ficha-color-aro')) document.getElementById('ficha-color-aro').value = ficha.color_aro || '#c9a84c';
           document.getElementById('ficha-notas').value = ficha.notas || '';
 
@@ -3345,7 +3372,7 @@
       dom.templateDetailType.textContent = tipo.toUpperCase();
       dom.templateDetailType.className = `badge-tag tag-${tipo === 'monstruo' ? 'monster' : tipo === 'npc' ? 'npc' : 'player'}`;
     }
-    if (dom.templateDetailSize) dom.templateDetailSize.textContent = (d.tamanio_base || 'mediano').toUpperCase();
+    if (dom.templateDetailSize) dom.templateDetailSize.textContent = formatTamanioBase(d.tamanio_base);
     if (dom.templateDetailLevel) dom.templateDetailLevel.textContent = `Nivel ${d.nivel || 1}`;
 
     if (dom.templateDetailHp) dom.templateDetailHp.textContent = `${d.hp_actual || d.hp_maximo || 10}/${d.hp_maximo || 10}`;
@@ -3465,7 +3492,7 @@
       const hp = d.hp_maximo || d.hp_actual || 10;
       const ac = d.ac ?? 10;
       const vel = d.velocidad ?? 30;
-      const tamanio = (d.tamanio_base || 'Mediano').toUpperCase();
+      const tamanio = formatTamanioBase(d.tamanio_base);
 
       card.innerHTML = `
         <div class="template-card-header">
