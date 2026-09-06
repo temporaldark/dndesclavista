@@ -1601,11 +1601,24 @@
     });
 
     // Menús y Navegación & Botones Inicio
-    dom.btnNavInicio?.addEventListener('click', () => {
+    dom.btnNavInicio?.addEventListener('click', async () => {
       if (state.partida && state.partida.codigo) {
         const salir = confirm('¿Deseas volver a la pantalla de inicio? Tu partida sigue guardada de forma segura.');
         if (!salir) return;
+        const partidaIdToSave = state.partida.id;
         localStorage.removeItem('vtt_active_game_code');
+
+        // Guardado garantizado en disco antes de volver a la pantalla de inicio
+        if (partidaIdToSave) {
+          try {
+            fetch(`/api/partidas/${partidaIdToSave}/guardar_ahora`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ snapshot: false }),
+              keepalive: true
+            }).catch(() => {});
+          } catch (_) {}
+        }
       }
       autoSaveGame();
       loadGamesList();

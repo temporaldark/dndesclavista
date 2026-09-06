@@ -353,6 +353,21 @@ async function autoRestoreFromFiles() {
   if (restoredCount > 0) {
     console.log(`✅ [SavesManager] ¡Se sincronizaron automáticamente ${restoredCount} partidas desde los archivos de guardado independientes!`);
   }
+
+  // 3. Garantía bidireccional inversa: Si una partida existe en SQLite pero le falta su partida_[CODIGO].json en disco, generarla inmediatamente
+  try {
+    const partidasDb = await dbAll(`SELECT id, codigo, nombre FROM partidas`);
+    for (const p of partidasDb) {
+      if (!p.codigo) continue;
+      const expectedPath = path.join(savesDir, `partida_${p.codigo.toUpperCase()}.json`);
+      if (!fs.existsSync(expectedPath)) {
+        console.log(`📝 [SavesManager] Generando archivo JSON independiente faltante para "${p.nombre}" (${p.codigo})...`);
+        await savePartidaToFile(p.id, false);
+      }
+    }
+  } catch (err) {
+    console.error('[SavesManager] Error al verificar partidas faltantes en disco:', err);
+  }
 }
 
 // Listar copias de seguridad de una partida

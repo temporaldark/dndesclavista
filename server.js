@@ -542,6 +542,15 @@ io.on('connection', (socket) => {
         color: colorUsuario
       });
 
+      // Asegurar que el archivo JSON independiente exista en /data/saves/
+      if (partida.codigo) {
+        const fs = require('fs');
+        const expectedSave = path.join(__dirname, 'data', 'saves', `partida_${partida.codigo.toUpperCase()}.json`);
+        if (!fs.existsSync(expectedSave)) {
+          savePartidaToFile(partida.id, false).catch(() => {});
+        }
+      }
+
     } catch (err) {
       console.error('Error al unirse a la partida:', err);
       socket.emit('error_partida', 'Error en el servidor al cargar la partida.');
@@ -1083,11 +1092,19 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     console.log(`❌ Cliente desconectado: ${socket.id}`);
     
     // Remover usuario de la lista de conectados y notificar
     const { partidaId, usuarioId } = socket.data || {};
+    if (partidaId) {
+      // Guardar inmediatamente el archivo JSON independiente en disco al salir
+      try {
+        await savePartidaToFile(partidaId, false);
+      } catch (err) {
+        console.error('[Servidor] Error al guardar partida en desconexión:', err);
+      }
+    }
     if (partidaId && usuarioId && connectedUsers.has(partidaId)) {
       connectedUsers.get(partidaId).delete(usuarioId);
       const jugadoresConectados = Array.from(connectedUsers.get(partidaId).values());
