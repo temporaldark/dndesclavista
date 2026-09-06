@@ -1134,7 +1134,6 @@ initDb().then(async () => {
 📁 Directorio de datos: ${dataDir}
 🔮 Auto-Guardado en disco activo! 🎲
 🛡️  Protección contra caídas y reinicios habilitada!
-${githubSync.isConfigured() ? `🐙 GitHub Auto-Sync: ACTIVO (repo: ${githubSync.GITHUB_REPO})` : 'ℹ️  GitHub Auto-Sync: Desactivado (agrega GITHUB_TOKEN en Railway para auto-guardar en GitHub)'}
 ═════════════════════════════════════════════════════════════════
     `);
   });
