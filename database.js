@@ -2,8 +2,23 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 
-// Asegurar que exista la carpeta /data (soporta volúmenes persistentes como Railway o Docker)
-const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
+// Detección automática de volúmenes persistentes (Railway / Docker / Local)
+function getDataDir() {
+  if (process.env.DATA_DIR) return process.env.DATA_DIR;
+  if (process.env.RAILWAY_VOLUME_MOUNT_PATH) return process.env.RAILWAY_VOLUME_MOUNT_PATH;
+
+  // En Linux/Railway, si existe /data en la raíz con permisos de escritura (volumen común de Railway)
+  if (process.platform !== 'win32' && fs.existsSync('/data')) {
+    try {
+      fs.accessSync('/data', fs.constants.W_OK);
+      return '/data';
+    } catch (_) {}
+  }
+
+  return path.join(__dirname, 'data');
+}
+
+const dataDir = getDataDir();
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
@@ -279,5 +294,7 @@ module.exports = {
   dbGet,
   dbTransaction,
   initDb,
-  checkpointDb
+  checkpointDb,
+  getDataDir,
+  dataDir
 };

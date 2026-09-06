@@ -4,7 +4,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const { dbRun, dbAll, dbGet, dbTransaction, initDb, checkpointDb } = require('./database');
+const { dbRun, dbAll, dbGet, dbTransaction, initDb, checkpointDb, dataDir } = require('./database');
 const {
   ensureDirectories,
   savePartidaToFile,
@@ -15,7 +15,6 @@ const {
   restoreSnapshotFile,
   limpiarNombrePartida
 } = require('./saves_manager');
-const githubSync = require('./github_sync');
 
 const app = express();
 const server = http.createServer(app);
@@ -131,10 +130,6 @@ app.delete('/api/partidas/:id', async (req, res) => {
       const saveFile = path.join(__dirname, 'data', 'saves', `partida_${partida.codigo.toUpperCase()}.json`);
       if (fs.existsSync(saveFile)) {
         try { fs.unlinkSync(saveFile); } catch (_) {}
-      }
-      // Eliminar también de GitHub si la sincronización está activa
-      if (githubSync.isConfigured()) {
-        githubSync.deletePartidaFromGithub(partida.codigo).catch(() => {});
       }
     }
 
@@ -1136,7 +1131,8 @@ initDb().then(async () => {
     console.log(`
 ═════════════════════════════════════════════════════════════════
 ⚔️  VTT D&D 5e SERVER LISTENING ON http://${HOST}:${PORT}
-🔮 Auto-Guardado en /data/saves Activo! 🎲
+📁 Directorio de datos: ${dataDir}
+🔮 Auto-Guardado en disco activo! 🎲
 🛡️  Protección contra caídas y reinicios habilitada!
 ${githubSync.isConfigured() ? `🐙 GitHub Auto-Sync: ACTIVO (repo: ${githubSync.GITHUB_REPO})` : 'ℹ️  GitHub Auto-Sync: Desactivado (agrega GITHUB_TOKEN en Railway para auto-guardar en GitHub)'}
 ═════════════════════════════════════════════════════════════════
