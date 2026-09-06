@@ -15,6 +15,7 @@ const {
   restoreSnapshotFile,
   limpiarNombrePartida
 } = require('./saves_manager');
+const githubSync = require('./github_sync');
 
 const app = express();
 const server = http.createServer(app);
@@ -130,6 +131,10 @@ app.delete('/api/partidas/:id', async (req, res) => {
       const saveFile = path.join(__dirname, 'data', 'saves', `partida_${partida.codigo.toUpperCase()}.json`);
       if (fs.existsSync(saveFile)) {
         try { fs.unlinkSync(saveFile); } catch (_) {}
+      }
+      // Eliminar también de GitHub si la sincronización está activa
+      if (githubSync.isConfigured()) {
+        githubSync.deletePartidaFromGithub(partida.codigo).catch(() => {});
       }
     }
 
@@ -1133,6 +1138,7 @@ initDb().then(async () => {
 ⚔️  VTT D&D 5e SERVER LISTENING ON http://${HOST}:${PORT}
 🔮 Auto-Guardado en /data/saves Activo! 🎲
 🛡️  Protección contra caídas y reinicios habilitada!
+${githubSync.isConfigured() ? `🐙 GitHub Auto-Sync: ACTIVO (repo: ${githubSync.GITHUB_REPO})` : 'ℹ️  GitHub Auto-Sync: Desactivado (agrega GITHUB_TOKEN en Railway para auto-guardar en GitHub)'}
 ═════════════════════════════════════════════════════════════════
     `);
   });

@@ -2,8 +2,8 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 
-// Asegurar que exista la carpeta /data
-const dataDir = path.join(__dirname, 'data');
+// Asegurar que exista la carpeta /data (soporta volúmenes persistentes como Railway o Docker)
+const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }

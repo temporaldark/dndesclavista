@@ -2,9 +2,10 @@ const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { dbRun, dbAll, dbGet, dbTransaction } = require('./database');
+const githubSync = require('./github_sync');
 
-// Directorios de guardado
-const dataDir = path.join(__dirname, 'data');
+// Directorios de guardado (soporta volúmenes persistentes como Railway o Docker)
+const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
 const savesDir = path.join(dataDir, 'saves');
 const backupsDir = path.join(savesDir, 'backups');
 
@@ -92,6 +93,15 @@ async function savePartidaToFile(partidaId, createSnapshot = false) {
     // 1. Archivo principal independiente de la partida
     const mainFilePath = path.join(savesDir, `partida_${codigo}.json`);
     await writeJsonAtomic(mainFilePath, backupData);
+
+    // 1.1 Sincronización automática con GitHub si está configurado (ej: Railway a GitHub)
+    if (githubSync.isConfigured()) {
+      if (createSnapshot) {
+        githubSync.syncPartidaImmediate(codigo, backupData).catch(() => {});
+      } else {
+        githubSync.scheduleGithubSync(codigo, backupData);
+      }
+    }
 
     // 2. Snapshot periódico o manual (máximo 5 por partida)
     const now = Date.now();
