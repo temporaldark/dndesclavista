@@ -172,6 +172,38 @@
         <div class="vtt-loading-subtext">Cargando tablero, fichas y escenas</div>
       </div>
 
+      <!-- BARRA FLOTANTE DE SEGUIMIENTO DE COMBATE (COMBAT TRACKER) -->
+      <div id="combat-tracker-bar" class="combat-tracker-bar hidden">
+        <div class="combat-tracker-header">
+          <div class="combat-round-badge">
+            <i class="fa-solid fa-swords gold-text"></i> <span id="combat-round-text">Ronda 1</span>
+          </div>
+          <div class="combat-turn-info">
+            <span class="combat-turn-label">Turno:</span>
+            <strong id="combat-active-name">Personaje</strong>
+          </div>
+          <div class="combat-controls">
+            <!-- Botón para el jugador activo -->
+            <button id="btn-player-end-turn" class="btn btn-sm btn-gold hidden" title="Terminar tu turno actual">
+              <i class="fa-solid fa-forward-step"></i> Terminar Mi Turno
+            </button>
+            <!-- Controles DM -->
+            <button id="btn-combat-prev" class="btn-circle-sm dm-only" title="Turno Anterior (DM)">
+              <i class="fa-solid fa-backward-step"></i>
+            </button>
+            <button id="btn-combat-next" class="btn-circle-sm dm-only" title="Siguiente Turno (DM)">
+              <i class="fa-solid fa-forward-step"></i>
+            </button>
+            <button id="btn-combat-end" class="btn-circle-sm btn-danger-sm dm-only" title="Finalizar Combate (DM)">
+              <i class="fa-solid fa-flag-checkered"></i>
+            </button>
+          </div>
+        </div>
+        <div id="combat-track-list" class="combat-track-list">
+          <!-- Participantes ordenados por iniciativa -->
+        </div>
+      </div>
+
       <div id="vtt-canvas-container" class="vtt-canvas-container">
         <img id="vtt-map-bg" class="hidden" style="position: absolute; top: 0; left: 0; transform-origin: 0 0; pointer-events: none; z-index: 0;" alt="Map Background">
         <canvas id="vtt-canvas" style="position: relative; z-index: 1;"></canvas>
@@ -220,6 +252,9 @@
               </button>
               <button id="btn-sort-initiative" class="btn btn-secondary btn-sm" title="Ordenar por Iniciativa">
                 <i class="fa-solid fa-arrow-down-9-1"></i>
+              </button>
+              <button id="btn-open-combat-modal" class="btn btn-secondary btn-sm dm-only" title="Gestionar / Iniciar Combate">
+                <i class="fa-solid fa-swords gold-text"></i>
               </button>
               <button id="btn-open-create-ficha" class="btn btn-primary btn-sm">
                 <i class="fa-solid fa-plus"></i> Crear
@@ -819,6 +854,44 @@
         </div>
         <button type="button" class="btn btn-secondary btn-close-modal">Cerrar</button>
         <button type="button" id="btn-spawn-from-detail" class="btn btn-gold"><i class="fa-solid fa-wand-magic-sparkles"></i> Invocar al Mapa (x1)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: INICIAR / GESTIONAR COMBATE -->
+  <div id="modal-combat-setup" class="modal-overlay hidden">
+    <div class="modal-content modal-md modal-combat-setup">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-swords gold-text"></i> Preparación de Combate</h3>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="combat-setup-toolbar">
+          <button type="button" id="btn-combat-select-all" class="btn btn-secondary btn-sm"><i class="fa-solid fa-check-double"></i> Marcar Todos</button>
+          <button type="button" id="btn-combat-roll-all" class="btn btn-secondary btn-sm"><i class="fa-solid fa-dice-d20 gold-text"></i> Tirar Iniciativa (d20+DES)</button>
+        </div>
+        <div class="combat-setup-table-wrap">
+          <table class="combat-setup-table">
+            <thead>
+              <tr>
+                <th style="width: 38px; text-align: center;"><input type="checkbox" id="combat-select-master" checked></th>
+                <th style="width: 44px; text-align: center;">Token</th>
+                <th>Nombre</th>
+                <th>Tipo</th>
+                <th style="width: 90px; text-align: center;">Iniciativa</th>
+              </tr>
+            </thead>
+            <tbody id="combat-setup-tbody">
+              <!-- Participantes dinámicos de la escena actual -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-close-modal">Cancelar</button>
+        <button type="button" id="btn-combat-start-confirm" class="btn btn-gold">
+          <i class="fa-solid fa-play"></i> ¡Comenzar Combate!
+        </button>
       </div>
     </div>
   </div>

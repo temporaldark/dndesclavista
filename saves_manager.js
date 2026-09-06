@@ -191,9 +191,22 @@ async function importPartidaDataIntoDb(data, overrideExisting = false) {
     const nombreLimpio = limpiarNombrePartida(partida.nombre);
     partida.nombre = nombreLimpio;
     await dbRun(
-      `INSERT OR REPLACE INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla, imagen_portada)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [partida.id, nombreLimpio, partida.codigo, partida.dm_id || null, partida.escena_activa_id || null, partida.fecha_creacion || new Date().toISOString(), partida.fecha_modificacion || new Date().toISOString(), partida.config_grid_x || 40, partida.config_grid_y || 40, partida.config_casilla || 5, partida.imagen_portada || null]
+      `INSERT OR REPLACE INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla, imagen_portada, datos_combate)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        partida.id,
+        nombreLimpio,
+        partida.codigo,
+        partida.dm_id || null,
+        partida.escena_activa_id || null,
+        partida.fecha_creacion || new Date().toISOString(),
+        partida.fecha_modificacion || new Date().toISOString(),
+        partida.config_grid_x || 40,
+        partida.config_grid_y || 40,
+        partida.config_casilla || 5,
+        partida.imagen_portada || null,
+        typeof partida.datos_combate === 'object' ? JSON.stringify(partida.datos_combate) : (partida.datos_combate || null)
+      ]
     );
 
     // Insertar escenas

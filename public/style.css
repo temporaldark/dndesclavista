@@ -2406,3 +2406,357 @@ input:focus, select:focus, textarea:focus, button:focus {
   color: #94a3b8;
   letter-spacing: 0.5px;
 }
+
+/* ==========================================================================
+   COMBAT TRACKER & INICIATIVA (D&D 5e)
+   ========================================================================== */
+
+.combat-tracker-bar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
+  width: max-content;
+  min-width: 320px;
+  max-width: min(880px, 92vw);
+  background: rgba(16, 22, 44, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-gold);
+  border-radius: 12px;
+  padding: 8px 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 15px rgba(201, 168, 76, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: all;
+  transition: all 0.3s ease;
+  animation: slideDownFade 0.3s ease-out;
+}
+
+@keyframes slideDownFade {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -15px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.combat-tracker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.combat-round-badge {
+  background: rgba(201, 168, 76, 0.15);
+  border: 1px solid var(--gold-primary);
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--gold-light);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.combat-turn-info {
+  font-size: 0.88rem;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.combat-turn-label {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.combat-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.btn-circle-sm {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--gold-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+}
+
+.btn-circle-sm:hover {
+  background: var(--gold-primary);
+  color: #000;
+  border-color: var(--gold-light);
+  box-shadow: 0 0 10px rgba(240, 208, 96, 0.3);
+}
+
+.btn-danger-sm:hover {
+  background: var(--red-damage) !important;
+  color: #fff !important;
+  border-color: #ff7675 !important;
+  box-shadow: 0 0 10px rgba(231, 76, 60, 0.4) !important;
+}
+
+#btn-player-end-turn {
+  animation: turnButtonGlow 1.5s infinite alternate;
+  font-weight: bold;
+}
+
+@keyframes turnButtonGlow {
+  0% {
+    box-shadow: 0 0 5px rgba(201, 168, 76, 0.4);
+  }
+  100% {
+    box-shadow: 0 0 18px rgba(240, 208, 96, 0.85);
+  }
+}
+
+.combat-track-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 2px 6px 2px;
+  scroll-behavior: smooth;
+}
+
+.combat-track-list::-webkit-scrollbar {
+  height: 4px;
+}
+.combat-track-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+.combat-track-list::-webkit-scrollbar-thumb {
+  background: rgba(201, 168, 76, 0.4);
+  border-radius: 4px;
+}
+.combat-track-list::-webkit-scrollbar-thumb:hover {
+  background: var(--gold-primary);
+}
+
+.combat-participant-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 5px;
+  background: rgba(26, 33, 62, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.22s ease;
+  user-select: none;
+}
+
+.combat-participant-card:hover {
+  background: rgba(35, 45, 85, 0.8);
+  border-color: rgba(201, 168, 76, 0.4);
+}
+
+.combat-participant-card.active {
+  background: linear-gradient(135deg, rgba(201, 168, 76, 0.28) 0%, rgba(26, 33, 62, 0.95) 100%);
+  border-color: var(--gold-light);
+  box-shadow: 0 0 14px rgba(240, 208, 96, 0.45);
+  transform: scale(1.05);
+}
+
+.combat-card-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border-subtle);
+  background: #0d0d22;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 0.85rem;
+  color: var(--gold-light);
+  flex-shrink: 0;
+}
+
+.combat-participant-card.active .combat-card-avatar {
+  border-color: var(--gold-light);
+  box-shadow: 0 0 8px rgba(240, 208, 96, 0.6);
+}
+
+.combat-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.combat-card-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fff;
+  max-width: 90px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.combat-participant-card.active .combat-card-name {
+  color: var(--gold-light);
+}
+
+.combat-card-ini {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+
+.combat-card-dead {
+  opacity: 0.45;
+  filter: grayscale(80%);
+}
+
+/* MODAL PREPARACIÓN COMBATE */
+.modal-combat-setup {
+  max-width: 650px;
+  width: 95%;
+}
+
+.combat-setup-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.combat-setup-table-wrap {
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.combat-setup-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.combat-setup-table th {
+  background: var(--bg-card);
+  padding: 10px 12px;
+  color: var(--gold-light);
+  font-family: var(--font-title);
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border-subtle);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.combat-setup-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  vertical-align: middle;
+}
+
+.combat-setup-table tr:hover td {
+  background: rgba(201, 168, 76, 0.06);
+}
+
+.combat-setup-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border-subtle);
+  background: #0d0d22;
+  display: block;
+  margin: 0 auto;
+}
+
+.combat-setup-ini-input {
+  width: 65px;
+  padding: 4px 8px;
+  text-align: center;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--gold-light);
+  font-weight: bold;
+  margin: 0 auto;
+  display: block;
+}
+
+.combat-setup-ini-input:focus {
+  border-color: var(--gold-primary);
+  box-shadow: 0 0 6px rgba(201, 168, 76, 0.4);
+}
+
+/* RESPONSIVE COMBAT TRACKER (MÓVIL) */
+@media (max-width: 768px) {
+  .combat-tracker-bar {
+    top: 6px;
+    min-width: unset;
+    width: 96vw;
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .combat-round-badge {
+    font-size: 0.8rem;
+    padding: 2px 8px;
+  }
+
+  .combat-turn-info {
+    font-size: 0.8rem;
+    max-width: 140px;
+  }
+
+  .btn-circle-sm {
+    width: 28px;
+    height: 28px;
+    font-size: 0.75rem;
+  }
+
+  #btn-player-end-turn {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+  }
+
+  .combat-card-avatar {
+    width: 26px;
+    height: 26px;
+  }
+
+  .combat-card-name {
+    max-width: 65px;
+    font-size: 0.75rem;
+  }
+}
+

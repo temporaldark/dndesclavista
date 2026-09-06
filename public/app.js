@@ -19,6 +19,7 @@
     mensajes: [],
     historial: [],
     galeria: [],
+    combate: { activo: false, ronda: 1, turnoIndex: 0, participantes: [] },
     jugadoresConectados: [],
     usuario: { id: null, nombre: '', esDM: false, color: '#c9a84c' }
   };
@@ -346,7 +347,24 @@
       editGameImgUrl: document.getElementById('edit-game-img-url'),
       editGamePreviewImg: document.getElementById('edit-game-preview-img'),
       btnDmEditSession: document.getElementById('btn-dm-edit-session'),
-      codeBadge: document.getElementById('code-badge')
+      codeBadge: document.getElementById('code-badge'),
+
+      // Combat Tracker
+      combatTrackerBar: document.getElementById('combat-tracker-bar'),
+      combatRoundText: document.getElementById('combat-round-text'),
+      combatActiveName: document.getElementById('combat-active-name'),
+      combatTrackList: document.getElementById('combat-track-list'),
+      btnCombatPrev: document.getElementById('btn-combat-prev'),
+      btnCombatNext: document.getElementById('btn-combat-next'),
+      btnCombatEnd: document.getElementById('btn-combat-end'),
+      btnPlayerEndTurn: document.getElementById('btn-player-end-turn'),
+      btnOpenCombatModal: document.getElementById('btn-open-combat-modal'),
+      modalCombatSetup: document.getElementById('modal-combat-setup'),
+      combatSetupTbody: document.getElementById('combat-setup-tbody'),
+      combatSelectMaster: document.getElementById('combat-select-master'),
+      btnCombatSelectAll: document.getElementById('btn-combat-select-all'),
+      btnCombatRollAll: document.getElementById('btn-combat-roll-all'),
+      btnCombatStartConfirm: document.getElementById('btn-combat-start-confirm')
     };
 
     setupEventListeners();
@@ -542,6 +560,7 @@
       state.mensajes = data.mensajes || [];
       state.historial = data.historial || [];
       state.galeria = data.galeria || [];
+      state.combate = data.combate || { activo: false, ronda: 1, turnoIndex: 0, participantes: [] };
       state.jugadoresConectados = data.jugadoresConectados || [];
       state.usuario = data.usuario;
 
@@ -557,12 +576,29 @@
 
       showScreen('vtt');
       updateUIForCurrentGame();
+      renderCombatTracker();
       if (state.escenaActiva && state.escenaActiva.mapa) {
         loadMapImage(state.escenaActiva.mapa);
       } else {
         loadMapImage(null);
       }
       markDirty();
+    });
+
+    socket.on('combate_actualizado', (combate) => {
+      const combateAnterior = state.combate;
+      state.combate = combate || { activo: false, ronda: 1, turnoIndex: 0, participantes: [] };
+      renderCombatTracker();
+      markDirty();
+
+      // Notificación si el turno pasó al jugador actual
+      if (state.combate.activo && state.combate.participantes && state.combate.participantes.length > 0) {
+        const turnoActual = state.combate.participantes[state.combate.turnoIndex];
+        const cambioDeTurno = !combateAnterior || !combateAnterior.activo || combateAnterior.turnoIndex !== state.combate.turnoIndex || combateAnterior.ronda !== state.combate.ronda;
+        if (turnoActual && cambioDeTurno && state.usuario?.id && (turnoActual.jugador_id === state.usuario.id)) {
+          showToast(`⚔️ ¡Es tu turno de actuar con ${turnoActual.nombre}!`, 'gold');
+        }
+      }
     });
 
     socket.on('error_partida', (msg) => {
@@ -796,9 +832,14 @@
 
   function rafRender() {
     rafScheduled = false;
-    if (isDirty) {
+    const shouldAnimateCombat = state.combate && state.combate.activo && state.combate.participantes && state.combate.participantes.length > 0;
+    if (isDirty || shouldAnimateCombat || activeDiceAnimations.length > 0) {
       isDirty = false;
       renderCanvas();
+      if (shouldAnimateCombat || activeDiceAnimations.length > 0) {
+        rafScheduled = true;
+        requestAnimationFrame(rafRender);
+      }
     }
   }
 
@@ -1117,6 +1158,31 @@
 
       if (ficha.hp_actual <= 0) {
         ctx.globalAlpha = 0.4;
+      }
+
+      // Aureola / Resplandor animado de Combate si es el turno activo de esta ficha
+      const esTurnoCombate = state.combate && state.combate.activo &&
+        state.combate.participantes &&
+        state.combate.participantes[state.combate.turnoIndex]?.id === ficha.id;
+
+      if (esTurnoCombate) {
+        ctx.save();
+        const pulse = (Math.sin(Date.now() / 250) + 1) / 2; // 0 a 1 suave
+        const haloR = radius + 6 + pulse * 4;
+        ctx.shadowColor = '#f0d060';
+        ctx.shadowBlur = 14 + pulse * 10;
+        ctx.strokeStyle = '#f0d060';
+        ctx.lineWidth = 3 + pulse * 1.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(201, 168, 76, 0.6)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, haloR + 4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
       }
 
       // Dibujar Borde Dorado del Token (o del color del aro)
@@ -1591,6 +1657,53 @@
         sortInitiative = !sortInitiative;
         dom.btnSortInitiative.classList.toggle('active', sortInitiative);
         renderFichasList();
+      }
+    });
+
+    // --- CONTROLES DE COMBATE & TURN TRACKER ---
+    dom.btnOpenCombatModal?.addEventListener('click', openCombatSetupModal);
+
+    dom.btnCombatSelectAll?.addEventListener('click', () => {
+      if (!dom.combatSetupTbody) return;
+      const checks = dom.combatSetupTbody.querySelectorAll('.combat-token-check');
+      const allChecked = Array.from(checks).every(c => c.checked);
+      checks.forEach(c => c.checked = !allChecked);
+      if (dom.combatSelectMaster) dom.combatSelectMaster.checked = !allChecked;
+    });
+
+    dom.combatSelectMaster?.addEventListener('change', (e) => {
+      if (!dom.combatSetupTbody) return;
+      const checks = dom.combatSetupTbody.querySelectorAll('.combat-token-check');
+      checks.forEach(c => c.checked = e.target.checked);
+    });
+
+    dom.btnCombatRollAll?.addEventListener('click', rollAllCombatInitiatives);
+
+    dom.btnCombatStartConfirm?.addEventListener('click', confirmStartCombat);
+
+    dom.btnCombatNext?.addEventListener('click', () => {
+      if (state.partida?.id) {
+        socket.emit('siguiente_turno', { partidaId: state.partida.id });
+      }
+    });
+
+    dom.btnPlayerEndTurn?.addEventListener('click', () => {
+      if (state.partida?.id) {
+        socket.emit('siguiente_turno', { partidaId: state.partida.id });
+      }
+    });
+
+    dom.btnCombatPrev?.addEventListener('click', () => {
+      if (state.partida?.id) {
+        socket.emit('anterior_turno', { partidaId: state.partida.id });
+      }
+    });
+
+    dom.btnCombatEnd?.addEventListener('click', () => {
+      if (confirm('¿Estás seguro de que deseas finalizar el combate?')) {
+        if (state.partida?.id) {
+          socket.emit('terminar_combate', { partidaId: state.partida.id });
+        }
       }
     });
 
@@ -2564,8 +2677,205 @@
     }
   }
 
+  function centerOnToken(fichaId) {
+    const ficha = (state.fichas || []).find(f => f.id === fichaId);
+    if (ficha && canvas) {
+      const tileSize = getTileSize();
+      viewport.panX = canvas.width / 2 - (ficha.x * tileSize);
+      viewport.panY = canvas.height / 2 - (ficha.y * tileSize);
+      selectedFichasIds = [ficha.id];
+      markDirty();
+    }
+  }
+
   function scrollChatToBottom() {
     dom.chatMessagesContainer.scrollTop = dom.chatMessagesContainer.scrollHeight;
+  }
+
+  // --- COMBAT & TURN TRACKER ENGINE ---
+
+  function renderCombatTracker() {
+    if (!dom.combatTrackerBar) return;
+
+    const combate = state.combate;
+    if (!combate || !combate.activo || !combate.participantes || combate.participantes.length === 0) {
+      dom.combatTrackerBar.classList.add('hidden');
+      return;
+    }
+
+    dom.combatTrackerBar.classList.remove('hidden');
+    if (dom.combatRoundText) {
+      dom.combatRoundText.textContent = `Ronda ${combate.ronda || 1}`;
+    }
+
+    const currentTurnIndex = combate.turnoIndex || 0;
+    const activeParticipant = combate.participantes[currentTurnIndex];
+    if (dom.combatActiveName) {
+      dom.combatActiveName.textContent = activeParticipant ? activeParticipant.nombre : 'Nadie';
+    }
+
+    // Botón "Terminar Mi Turno" para el jugador dueño
+    if (dom.btnPlayerEndTurn) {
+      const isMyTurn = activeParticipant && state.usuario?.id && (activeParticipant.jugador_id === state.usuario.id);
+      if (isMyTurn) {
+        dom.btnPlayerEndTurn.classList.remove('hidden');
+      } else {
+        dom.btnPlayerEndTurn.classList.add('hidden');
+      }
+    }
+
+    // Renderizar la tira horizontal de combatientes
+    if (dom.combatTrackList) {
+      dom.combatTrackList.innerHTML = '';
+      combate.participantes.forEach((p, idx) => {
+        const card = document.createElement('div');
+        const isActive = idx === currentTurnIndex;
+        card.className = `combat-participant-card ${isActive ? 'active' : ''} ${p.hp_actual <= 0 ? 'combat-card-dead' : ''}`;
+        card.title = `${p.nombre} (Iniciativa: ${p.iniciativa ?? 0})${isActive ? ' - ¡En Turno!' : ''}\nHaz clic para centrar en el mapa`;
+
+        // Avatar
+        let avatarEl;
+        if (p.imagen) {
+          avatarEl = document.createElement('img');
+          avatarEl.src = p.imagen;
+          avatarEl.className = 'combat-card-avatar';
+          avatarEl.alt = p.nombre;
+        } else {
+          avatarEl = document.createElement('div');
+          avatarEl.className = 'combat-card-avatar';
+          avatarEl.textContent = (p.nombre || '?')[0].toUpperCase();
+        }
+
+        // Meta info
+        const metaEl = document.createElement('div');
+        metaEl.className = 'combat-card-meta';
+
+        const nameEl = document.createElement('span');
+        nameEl.className = 'combat-card-name';
+        nameEl.textContent = p.nombre;
+
+        const iniEl = document.createElement('span');
+        iniEl.className = 'combat-card-ini';
+        iniEl.textContent = `⚡ ${p.iniciativa ?? 0}`;
+
+        metaEl.appendChild(nameEl);
+        metaEl.appendChild(iniEl);
+
+        card.appendChild(avatarEl);
+        card.appendChild(metaEl);
+
+        card.addEventListener('click', () => {
+          centerOnToken(p.id);
+        });
+
+        dom.combatTrackList.appendChild(card);
+
+        // Desplazar automáticamente para que el turno activo esté centrado
+        if (isActive) {
+          setTimeout(() => {
+            card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+          }, 50);
+        }
+      });
+    }
+  }
+
+  function openCombatSetupModal() {
+    if (!state.usuario?.esDM) {
+      alert('Solo el Dungeon Master puede preparar e iniciar el combate.');
+      return;
+    }
+
+    if (!dom.combatSetupTbody) return;
+    dom.combatSetupTbody.innerHTML = '';
+
+    // Obtener fichas de la escena activa (o todos los jugadores y criaturas de esta escena)
+    const escenaId = state.escenaActiva?.id;
+    const tokensDisponibles = (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === escenaId);
+
+    if (tokensDisponibles.length === 0) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">No hay fichas en esta escena para iniciar combate.</td>`;
+      dom.combatSetupTbody.appendChild(tr);
+      openModal(dom.modalCombatSetup);
+      return;
+    }
+
+    tokensDisponibles.forEach(f => {
+      const tr = document.createElement('tr');
+      tr.dataset.fichaId = f.id;
+
+      // Calcular modificador de destreza: Math.floor((destreza - 10) / 2)
+      const dexMod = Math.floor(((f.destreza ?? 10) - 10) / 2);
+      // Si la ficha ya tiene una iniciativa guardada, usarla como base
+      const iniBase = (f.iniciativa !== undefined && f.iniciativa !== null && f.iniciativa !== 0) ? f.iniciativa : (10 + dexMod);
+
+      const avatarHtml = f.imagen
+        ? `<img src="${f.imagen}" class="combat-setup-avatar" alt="${f.nombre}">`
+        : `<div class="combat-setup-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--gold-light);">${(f.nombre || '?')[0].toUpperCase()}</div>`;
+
+      tr.innerHTML = `
+        <td style="text-align: center;"><input type="checkbox" class="combat-token-check" checked data-ficha-id="${f.id}"></td>
+        <td>${avatarHtml}</td>
+        <td><strong>${f.nombre}</strong></td>
+        <td><span class="badge-tag tag-${f.tipo || 'jugador'}">${f.tipo === 'jugador' ? 'Jugador' : (f.tipo === 'npc' ? 'NPC' : 'Monstruo')}</span></td>
+        <td><input type="number" class="combat-setup-ini-input" data-ficha-id="${f.id}" data-dex-mod="${dexMod}" value="${iniBase}"></td>
+      `;
+
+      dom.combatSetupTbody.appendChild(tr);
+    });
+
+    if (dom.combatSelectMaster) dom.combatSelectMaster.checked = true;
+    openModal(dom.modalCombatSetup);
+  }
+
+  function rollAllCombatInitiatives() {
+    if (!dom.combatSetupTbody) return;
+    const inputs = dom.combatSetupTbody.querySelectorAll('.combat-setup-ini-input');
+    inputs.forEach(input => {
+      const dexMod = parseInt(input.dataset.dexMod, 10) || 0;
+      const d20 = Math.floor(Math.random() * 20) + 1;
+      input.value = d20 + dexMod;
+    });
+  }
+
+  function confirmStartCombat() {
+    if (!dom.combatSetupTbody) return;
+    const checks = dom.combatSetupTbody.querySelectorAll('.combat-token-check:checked');
+    if (checks.length === 0) {
+      alert('Debes seleccionar al menos un participante para iniciar el combate.');
+      return;
+    }
+
+    const participantes = [];
+    checks.forEach(chk => {
+      const fichaId = chk.dataset.fichaId;
+      const ficha = (state.fichas || []).find(f => f.id === fichaId);
+      const iniInput = dom.combatSetupTbody.querySelector(`.combat-setup-ini-input[data-ficha-id="${fichaId}"]`);
+      const iniciativa = parseInt(iniInput?.value, 10) || 0;
+
+      if (ficha) {
+        participantes.push({
+          id: ficha.id,
+          nombre: ficha.nombre,
+          tipo: ficha.tipo,
+          imagen: ficha.imagen,
+          jugador_id: ficha.jugador_id,
+          destreza: ficha.destreza || 10,
+          iniciativa: iniciativa,
+          hp_actual: ficha.hp_actual ?? 10,
+          hp_maximo: ficha.hp_maximo ?? 10,
+          ac: ficha.ac ?? 10
+        });
+      }
+    });
+
+    socket.emit('iniciar_combate', {
+      partidaId: state.partida.id,
+      participantes
+    });
+
+    closeModal(dom.modalCombatSetup);
   }
 
   // --- RENDERIZADO DE LISTAS E INTERFAZ ---
@@ -2593,6 +2903,7 @@
     if (dom.gridRowsInput) dom.gridRowsInput.value = state.escenaActiva?.config_grid_y || state.partida.config_grid_y || 40;
     if (dom.gridFeetInput) dom.gridFeetInput.value = state.escenaActiva?.config_casilla || state.partida.config_casilla || 5;
 
+    try { renderCombatTracker(); } catch (e) { console.error('[VTT] Error renderCombatTracker:', e); }
     try { renderFichasList(); } catch (e) { console.error('[VTT] Error renderFichasList:', e); }
     try { renderTokenSelects(); } catch (e) { console.error('[VTT] Error renderTokenSelects:', e); }
     try { renderScenesList(); } catch (e) { console.error('[VTT] Error renderScenesList:', e); }

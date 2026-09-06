@@ -324,9 +324,22 @@ app.post('/api/partidas/import', async (req, res) => {
       // Insertar partida limpiando totalmente cualquier sufijo
       const nombreLimpio = limpiarNombrePartida(partida.nombre);
       await dbRun(
-        `INSERT INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla, imagen_portada)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [newPartidaId, nombreLimpio, newCodigo, partida.dm_id || null, null, ahora, ahora, partida.config_grid_x || 40, partida.config_grid_y || 40, partida.config_casilla || 5, partida.imagen_portada || null]
+        `INSERT INTO partidas (id, nombre, codigo, dm_id, escena_activa_id, fecha_creacion, fecha_modificacion, config_grid_x, config_grid_y, config_casilla, imagen_portada, datos_combate)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          newPartidaId,
+          nombreLimpio,
+          newCodigo,
+          partida.dm_id || null,
+          null,
+          ahora,
+          ahora,
+          partida.config_grid_x || 40,
+          partida.config_grid_y || 40,
+          partida.config_casilla || 5,
+          partida.imagen_portada || null,
+          typeof partida.datos_combate === 'object' ? JSON.stringify(partida.datos_combate) : (partida.datos_combate || null)
+        ]
       );
 
       let firstNewEscenaId = null;
@@ -517,6 +530,14 @@ io.on('connection', (socket) => {
       // Preparar lista de jugadores conectados
       const jugadoresConectados = Array.from(connectedUsers.get(partida.id).values());
 
+      // Parsear estado de combate
+      let combate = { activo: false, ronda: 1, turnoIndex: 0, participantes: [] };
+      if (partida.datos_combate) {
+        try {
+          combate = JSON.parse(partida.datos_combate);
+        } catch (_) {}
+      }
+
       socket.emit('estado_inicial', {
         partida,
         escenaActiva,
@@ -527,6 +548,7 @@ io.on('connection', (socket) => {
         mensajes,
         historial,
         galeria,
+        combate,
         jugadoresConectados,
         usuario: { id: usuarioId, nombre: nombreUsuario, esDM, color: colorUsuario }
       });
@@ -1089,6 +1111,213 @@ io.on('connection', (socket) => {
       }
     } catch (err) {
       console.error(err);
+    }
+  });
+
+  // --- COMBAT / INITIATIVE TRACKER EVENTS ---
+
+  // Iniciar Combate (DM)
+  socket.on('iniciar_combate', async ({ partidaId, participantes }) => {
+    try {
+      if (!socket.data?.esDM) {
+        return socket.emit('error_partida', 'Solo el DM puede iniciar el combate.');
+      }
+
+      // Ordenar por iniciativa de mayor a menor
+      const ordenados = (participantes || []).slice().sort((a, b) => {
+        const iniA = Number(a.iniciativa) || 0;
+        const iniB = Number(b.iniciativa) || 0;
+        if (iniB !== iniA) return iniB - iniA;
+        const desA = Number(a.destreza) || 10;
+        const desB = Number(b.destreza) || 10;
+        return desB - desA;
+      });
+
+      const combate = {
+        activo: true,
+        ronda: 1,
+        turnoIndex: 0,
+        participantes: ordenados
+      };
+
+      const ahora = new Date().toISOString();
+      await dbRun(`UPDATE partidas SET datos_combate = ?, fecha_modificacion = ? WHERE id = ?`, [JSON.stringify(combate), ahora, partidaId]);
+      scheduleAutoSave(partidaId);
+
+      io.to(partidaId).emit('combate_actualizado', combate);
+
+      // Mensaje en chat de sistema
+      const primerTurno = ordenados[0]?.nombre || 'Nadie';
+      const mensajeTexto = `⚔️ **¡Ha comenzado el combate!** (Ronda 1) — Turno de: **${primerTurno}**`;
+      const msgId = uuidv4();
+      await dbRun(
+        `INSERT INTO mensajes (id, partida_id, usuario_id, nombre_usuario, color_usuario, mensaje, es_gif, fecha, nombre_ficha)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [msgId, partidaId, 'sistema', 'Sistema', '#c9a84c', mensajeTexto, 0, ahora, null]
+      );
+      io.to(partidaId).emit('nuevo_mensaje', {
+        id: msgId,
+        partida_id: partidaId,
+        usuario_id: 'sistema',
+        nombre_usuario: 'Sistema',
+        color_usuario: '#c9a84c',
+        mensaje: mensajeTexto,
+        es_gif: 0,
+        fecha: ahora,
+        nombre_ficha: null
+      });
+    } catch (err) {
+      console.error('[Combate] Error en iniciar_combate:', err);
+    }
+  });
+
+  // Siguiente Turno (DM o jugador del turno actual)
+  socket.on('siguiente_turno', async ({ partidaId }) => {
+    try {
+      const partida = await dbGet(`SELECT datos_combate FROM partidas WHERE id = ?`, [partidaId]);
+      if (!partida || !partida.datos_combate) return;
+
+      let combate = JSON.parse(partida.datos_combate);
+      if (!combate || !combate.activo || !combate.participantes || combate.participantes.length === 0) return;
+
+      const turnoActual = combate.participantes[combate.turnoIndex];
+      const esDuenio = turnoActual && socket.data?.usuarioId && (turnoActual.jugador_id === socket.data.usuarioId);
+      if (!socket.data?.esDM && !esDuenio) {
+        return socket.emit('error_partida', 'Solo el DM o el jugador en turno puede avanzar el combate.');
+      }
+
+      let nuevaRonda = combate.ronda || 1;
+      let nuevoTurnoIndex = (combate.turnoIndex || 0) + 1;
+
+      if (nuevoTurnoIndex >= combate.participantes.length) {
+        nuevoTurnoIndex = 0;
+        nuevaRonda += 1;
+      }
+
+      combate.ronda = nuevaRonda;
+      combate.turnoIndex = nuevoTurnoIndex;
+
+      const ahora = new Date().toISOString();
+      await dbRun(`UPDATE partidas SET datos_combate = ?, fecha_modificacion = ? WHERE id = ?`, [JSON.stringify(combate), ahora, partidaId]);
+      scheduleAutoSave(partidaId);
+
+      io.to(partidaId).emit('combate_actualizado', combate);
+
+      const siguienteNombre = combate.participantes[nuevoTurnoIndex]?.nombre || 'Desconocido';
+      const mensajeTexto = `⚔️ Ronda ${nuevaRonda}: Turno de **${siguienteNombre}**`;
+      const msgId = uuidv4();
+      await dbRun(
+        `INSERT INTO mensajes (id, partida_id, usuario_id, nombre_usuario, color_usuario, mensaje, es_gif, fecha, nombre_ficha)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [msgId, partidaId, 'sistema', 'Sistema', '#c9a84c', mensajeTexto, 0, ahora, null]
+      );
+      io.to(partidaId).emit('nuevo_mensaje', {
+        id: msgId,
+        partida_id: partidaId,
+        usuario_id: 'sistema',
+        nombre_usuario: 'Sistema',
+        color_usuario: '#c9a84c',
+        mensaje: mensajeTexto,
+        es_gif: 0,
+        fecha: ahora,
+        nombre_ficha: null
+      });
+    } catch (err) {
+      console.error('[Combate] Error en siguiente_turno:', err);
+    }
+  });
+
+  // Turno Anterior (DM)
+  socket.on('anterior_turno', async ({ partidaId }) => {
+    try {
+      if (!socket.data?.esDM) {
+        return socket.emit('error_partida', 'Solo el DM puede retroceder el turno.');
+      }
+
+      const partida = await dbGet(`SELECT datos_combate FROM partidas WHERE id = ?`, [partidaId]);
+      if (!partida || !partida.datos_combate) return;
+
+      let combate = JSON.parse(partida.datos_combate);
+      if (!combate || !combate.activo || !combate.participantes || combate.participantes.length === 0) return;
+
+      let nuevaRonda = combate.ronda || 1;
+      let nuevoTurnoIndex = (combate.turnoIndex || 0) - 1;
+
+      if (nuevoTurnoIndex < 0) {
+        if (nuevaRonda > 1) {
+          nuevaRonda -= 1;
+          nuevoTurnoIndex = combate.participantes.length - 1;
+        } else {
+          nuevoTurnoIndex = 0;
+        }
+      }
+
+      combate.ronda = nuevaRonda;
+      combate.turnoIndex = nuevoTurnoIndex;
+
+      const ahora = new Date().toISOString();
+      await dbRun(`UPDATE partidas SET datos_combate = ?, fecha_modificacion = ? WHERE id = ?`, [JSON.stringify(combate), ahora, partidaId]);
+      scheduleAutoSave(partidaId);
+
+      io.to(partidaId).emit('combate_actualizado', combate);
+    } catch (err) {
+      console.error('[Combate] Error en anterior_turno:', err);
+    }
+  });
+
+  // Terminar Combate (DM)
+  socket.on('terminar_combate', async ({ partidaId }) => {
+    try {
+      if (!socket.data?.esDM) {
+        return socket.emit('error_partida', 'Solo el DM puede terminar el combate.');
+      }
+
+      const combate = {
+        activo: false,
+        ronda: 1,
+        turnoIndex: 0,
+        participantes: []
+      };
+
+      const ahora = new Date().toISOString();
+      await dbRun(`UPDATE partidas SET datos_combate = ?, fecha_modificacion = ? WHERE id = ?`, [JSON.stringify(combate), ahora, partidaId]);
+      scheduleAutoSave(partidaId);
+
+      io.to(partidaId).emit('combate_actualizado', combate);
+
+      const mensajeTexto = `🏁 **El combate ha finalizado.**`;
+      const msgId = uuidv4();
+      await dbRun(
+        `INSERT INTO mensajes (id, partida_id, usuario_id, nombre_usuario, color_usuario, mensaje, es_gif, fecha, nombre_ficha)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [msgId, partidaId, 'sistema', 'Sistema', '#c9a84c', mensajeTexto, 0, ahora, null]
+      );
+      io.to(partidaId).emit('nuevo_mensaje', {
+        id: msgId,
+        partida_id: partidaId,
+        usuario_id: 'sistema',
+        nombre_usuario: 'Sistema',
+        color_usuario: '#c9a84c',
+        mensaje: mensajeTexto,
+        es_gif: 0,
+        fecha: ahora,
+        nombre_ficha: null
+      });
+    } catch (err) {
+      console.error('[Combate] Error en terminar_combate:', err);
+    }
+  });
+
+  // Actualizar participantes o iniciativas en combate en vivo (DM)
+  socket.on('actualizar_combate', async ({ partidaId, combate }) => {
+    try {
+      if (!socket.data?.esDM) return;
+      const ahora = new Date().toISOString();
+      await dbRun(`UPDATE partidas SET datos_combate = ?, fecha_modificacion = ? WHERE id = ?`, [JSON.stringify(combate), ahora, partidaId]);
+      scheduleAutoSave(partidaId);
+      io.to(partidaId).emit('combate_actualizado', combate);
+    } catch (err) {
+      console.error('[Combate] Error en actualizar_combate:', err);
     }
   });
 

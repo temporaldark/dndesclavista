@@ -90,7 +90,8 @@ async function initDb() {
       config_grid_x INTEGER DEFAULT 40,
       config_grid_y INTEGER DEFAULT 40,
       config_casilla INTEGER DEFAULT 5,
-      imagen_portada TEXT
+      imagen_portada TEXT,
+      datos_combate TEXT
     )
   `);
 
@@ -226,6 +227,13 @@ async function initDb() {
   // Add imagen_portada to partidas if it doesn't exist
   try {
     await dbRun(`ALTER TABLE partidas ADD COLUMN imagen_portada TEXT`);
+  } catch (err) {
+    // Ignore error if column already exists
+  }
+
+  // Add datos_combate to partidas if it doesn't exist
+  try {
+    await dbRun(`ALTER TABLE partidas ADD COLUMN datos_combate TEXT`);
   } catch (err) {
     // Ignore error if column already exists
   }
