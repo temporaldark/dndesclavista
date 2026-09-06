@@ -364,7 +364,8 @@
       combatSelectMaster: document.getElementById('combat-select-master'),
       btnCombatSelectAll: document.getElementById('btn-combat-select-all'),
       btnCombatRollAll: document.getElementById('btn-combat-roll-all'),
-      btnCombatStartConfirm: document.getElementById('btn-combat-start-confirm')
+      btnCombatStartConfirm: document.getElementById('btn-combat-start-confirm'),
+      toolCombat: document.getElementById('tool-combat')
     };
 
     setupEventListeners();
@@ -1662,6 +1663,7 @@
 
     // --- CONTROLES DE COMBATE & TURN TRACKER ---
     dom.btnOpenCombatModal?.addEventListener('click', openCombatSetupModal);
+    dom.toolCombat?.addEventListener('click', openCombatSetupModal);
 
     dom.btnCombatSelectAll?.addEventListener('click', () => {
       if (!dom.combatSetupTbody) return;
