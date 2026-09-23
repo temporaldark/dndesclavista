@@ -56,6 +56,7 @@
     panY: 0,
     tileSize: 50 // Pixeles por casilla base
   };
+  let viewportInitializedForScene = null;
 
   let activeTool = 'move'; // 'move', 'measure', 'draw', 'erase', 'figures', 'healdamage'
   let selectedFichasIds = [];
@@ -325,6 +326,8 @@
       revAc: document.getElementById('rev-ac'),
       revNotas: document.getElementById('rev-notas'),
       revJugadoresSelect: document.getElementById('rev-jugadores-select'),
+      btnRevOcultarTodo: document.getElementById('btn-rev-ocultar-todo'),
+      btnRevRevelarTodo: document.getElementById('btn-rev-revelar-todo'),
       btnSaveRevelar: document.getElementById('btn-save-revelar') || document.getElementById('btn-aplicar-revelado'),
 
       modalCreateGame: document.getElementById('modal-create-game'),
@@ -462,7 +465,7 @@
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      timeout: 10000
+      timeout: 30000
     });
 
     // Helper: emite cuando el socket esté conectado
@@ -493,6 +496,13 @@
 
     socket.on('disconnect', (reason) => {
       console.warn('⚠️ Desconectado del host:', reason);
+      if (isDraggingToken || isDraggingFigure) {
+        isDraggingToken = false;
+        isDraggingFigure = false;
+        selectedFichasIds = [];
+        dragOffsets = {};
+        markDirty();
+      }
       if (dom.reconnectBanner) {
         dom.reconnectBanner.classList.remove('hidden');
         if (dom.reconnectMsg) {
@@ -503,6 +513,13 @@
     });
 
     socket.on('connect_error', () => {
+      if (isDraggingToken || isDraggingFigure) {
+        isDraggingToken = false;
+        isDraggingFigure = false;
+        selectedFichasIds = [];
+        dragOffsets = {};
+        markDirty();
+      }
       if (dom.reconnectBanner) {
         dom.reconnectBanner.classList.remove('hidden');
         if (dom.reconnectMsg) {
@@ -510,6 +527,16 @@
         }
       }
       showSaveIndicator('🔴 Reconectando...');
+    });
+
+    window.addEventListener('blur', () => {
+      if (isDraggingToken || isDraggingFigure) {
+        isDraggingToken = false;
+        isDraggingFigure = false;
+        selectedFichasIds = [];
+        dragOffsets = {};
+        markDirty();
+      }
     });
 
     socket.on('partida_restaurada', (data) => {
@@ -610,6 +637,9 @@
     });
 
     socket.on('escena_cambiada', ({ escenaActiva, figuras, dibujos, posiciones_fichas }) => {
+      if (!state.escenaActiva || state.escenaActiva.id !== escenaActiva?.id) {
+        viewportInitializedForScene = null;
+      }
       state.escenaActiva = escenaActiva;
       state.figuras = figuras || [];
       state.dibujos = dibujos || [];
@@ -912,7 +942,10 @@
         }
       }
       
-      if (!isPanning) centerMap(); // Centrar al cargar mapa
+      if (viewportInitializedForScene !== state.escenaActiva?.id) {
+        if (!isPanning) centerMap(); // Centrar una sola vez al entrar por primera vez a la escena
+        viewportInitializedForScene = state.escenaActiva?.id;
+      }
       markDirty();
     };
     img.onerror = (e) => {
@@ -1241,7 +1274,8 @@
       ctx.textAlign = 'center';
       ctx.shadowColor = '#000000';
       ctx.shadowBlur = 4;
-      const displayName = (isMonster && isPlayerView && !visibility.nombre) ? '???' : ficha.nombre;
+      const displayName = (isMonster && isPlayerView && !visibility.nombre) ? 'Desconocido' : ficha.nombre;
+      const showName = !isMonster || !isPlayerView || visibility.nombre;
 
       // Usar hp visibility para la barra de vida
       const showBar = showHpBars && (!isMonster || !isPlayerView || visibility.hp);
@@ -1259,10 +1293,12 @@
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';
         ctx.strokeRect(barX, barY, barW, barH);
 
-        // Nombre encima de la barra
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(displayName, cx, py - 22);
-      } else {
+        // Nombre encima de la barra (solo si está revelado)
+        if (showName) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(displayName, cx, py - 22);
+        }
+      } else if (showName) {
         // Solo nombre, sin barra
         ctx.fillText(displayName, cx, py - 6);
       }
@@ -1404,22 +1440,25 @@
       });
 
       if (clickedFig && !isDraggingToken) {
-        selectedFigureId = clickedFig.id;
+        const canControl = state.usuario.esDM || clickedFig.creador_id === state.usuario.id;
+        if (canControl) {
+          selectedFigureId = clickedFig.id;
 
-        if (activeTool === 'move') {
-          if (state.usuario.esDM || clickedFig.creador_id === state.usuario.id) {
+          if (activeTool === 'move') {
             isDraggingFigure = true;
             dragOffset = { x: gridPos.x - clickedFig.x, y: gridPos.y - clickedFig.y };
           }
-        }
 
-        // Poblar la UI con los datos de la figura seleccionada
-        if (dom.figType) dom.figType.value = clickedFig.tipo;
-        if (dom.figSize) dom.figSize.value = clickedFig.tamanio || 1;
-        if (dom.figRotation) dom.figRotation.value = clickedFig.rotacion || 0;
-        if (dom.figColor) dom.figColor.value = clickedFig.color || '#c9a84c';
-        if (dom.figOpacity) dom.figOpacity.value = clickedFig.transparencia || 0.4;
-        if (dom.figLabel) dom.figLabel.value = clickedFig.etiqueta || '';
+          // Poblar la UI con los datos de la figura seleccionada SOLO para dueño o DM
+          if (dom.figType) dom.figType.value = clickedFig.tipo;
+          if (dom.figSize) dom.figSize.value = clickedFig.tamanio || 1;
+          if (dom.figRotation) dom.figRotation.value = clickedFig.rotacion || 0;
+          if (dom.figColor) dom.figColor.value = clickedFig.color || '#c9a84c';
+          if (dom.figOpacity) dom.figOpacity.value = clickedFig.transparencia || 0.4;
+          if (dom.figLabel) dom.figLabel.value = clickedFig.etiqueta || '';
+        } else {
+          selectedFigureId = null;
+        }
 
         markDirty();
         return; // Detenemos aquí para no crear figuras nuevas ni hacer pan
@@ -1450,10 +1489,13 @@
         creador_id: state.usuario.id
       };
 
-      // La nueva figura queda seleccionada
+      // La nueva figura queda seleccionada para su creador
       selectedFigureId = newFigId;
 
       socket?.emit('guardar_figura', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, figuraData: nuevaFig });
+
+      // Limpiar el campo de etiqueta para que no se herede a siguientes figuras
+      if (dom.figLabel) dom.figLabel.value = '';
     } else if (activeTool === 'erase') {
       // Borrar figura o trazo en ese punto (Dueño o DM)
       const figToDel = (state.figuras || []).find(fig =>
@@ -2017,6 +2059,9 @@
         } else if (activeTool === 'figures') {
           dom.toolOptionsContainer?.classList.remove('hidden');
           dom.optFigures?.classList.remove('hidden');
+          if (!selectedFigureId && dom.figLabel) {
+            dom.figLabel.value = '';
+          }
         }
       });
     });
@@ -2066,8 +2111,7 @@
     dom.btnZoomOut?.addEventListener('click', () => zoomAt(canvas.width / 2, canvas.height / 2, 0.8));
     dom.btnZoomReset?.addEventListener('click', () => {
       viewport.zoom = 1.0;
-      viewport.panX = 0;
-      viewport.panY = 0;
+      centerMap();
       if (dom.zoomLevelText) dom.zoomLevelText.textContent = '100%';
       markDirty();
     });
@@ -2124,6 +2168,7 @@
     dom.formFicha?.addEventListener('submit', (e) => {
       e.preventDefault();
       const id = document.getElementById('ficha-id').value;
+      const existingFicha = id ? state.fichas.find(f => f.id === id) : null;
       const fichaData = {
         id: id || undefined,
         nombre: document.getElementById('ficha-nombre').value,
@@ -2148,7 +2193,10 @@
         tamanioBase: document.getElementById('ficha-tamanio').value,
         tamanio_base: document.getElementById('ficha-tamanio').value,
         color_aro: document.getElementById('ficha-color-aro') ? document.getElementById('ficha-color-aro').value : '#c9a84c',
-        notas: document.getElementById('ficha-notas').value
+        notas: document.getElementById('ficha-notas').value,
+        revelado: existingFicha ? existingFicha.revelado : undefined,
+        gigante: existingFicha ? (existingFicha.gigante ? 1 : 0) : 0,
+        oculto: existingFicha ? (existingFicha.oculto ? 1 : 0) : 0
       };
 
       if (id) {
@@ -2430,6 +2478,22 @@
         const overlay = e.target.closest('.modal-overlay');
         if (overlay) closeModal(overlay);
       });
+    });
+
+    dom.btnRevOcultarTodo?.addEventListener('click', () => {
+      if (dom.revImagen) dom.revImagen.checked = false;
+      if (dom.revNombre) dom.revNombre.checked = false;
+      if (dom.revHp) dom.revHp.checked = false;
+      if (dom.revAc) dom.revAc.checked = false;
+      if (dom.revNotas) dom.revNotas.checked = false;
+    });
+
+    dom.btnRevRevelarTodo?.addEventListener('click', () => {
+      if (dom.revImagen) dom.revImagen.checked = true;
+      if (dom.revNombre) dom.revNombre.checked = true;
+      if (dom.revHp) dom.revHp.checked = true;
+      if (dom.revAc) dom.revAc.checked = true;
+      if (dom.revNotas) dom.revNotas.checked = true;
     });
 
     const btnSaveRev = dom.btnSaveRevelar || dom.btnAplicarRevelado;
@@ -2739,7 +2803,14 @@
     const currentTurnIndex = combate.turnoIndex || 0;
     const activeParticipant = combate.participantes[currentTurnIndex];
     if (dom.combatActiveName) {
-      dom.combatActiveName.textContent = activeParticipant ? activeParticipant.nombre : 'Nadie';
+      if (activeParticipant) {
+        const isMonsterAct = (activeParticipant.tipo || 'jugador').toLowerCase() !== 'jugador';
+        const visAct = getFichaVisibility(activeParticipant);
+        const nameAct = (isMonsterAct && !state.usuario?.esDM && !visAct.nombre) ? 'Desconocido' : activeParticipant.nombre;
+        dom.combatActiveName.textContent = nameAct;
+      } else {
+        dom.combatActiveName.textContent = 'Nadie';
+      }
     }
 
     // Botón "Terminar Mi Turno" para el jugador dueño
@@ -2756,22 +2827,28 @@
     if (dom.combatTrackList) {
       dom.combatTrackList.innerHTML = '';
       combate.participantes.forEach((p, idx) => {
+        const isMonster = (p.tipo || 'jugador').toLowerCase() !== 'jugador';
+        const pVis = getFichaVisibility(p);
+        const isPlayerView = !state.usuario?.esDM;
+        const pName = (isMonster && isPlayerView && !pVis.nombre) ? 'Desconocido' : p.nombre;
+        const showAvatar = (!isMonster || !isPlayerView || pVis.imagen);
+
         const card = document.createElement('div');
         const isActive = idx === currentTurnIndex;
         card.className = `combat-participant-card ${isActive ? 'active' : ''} ${p.hp_actual <= 0 ? 'combat-card-dead' : ''}`;
-        card.title = `${p.nombre} (Iniciativa: ${p.iniciativa ?? 0})${isActive ? ' - ¡En Turno!' : ''}\nHaz clic para centrar en el mapa`;
+        card.title = `${pName} (Iniciativa: ${p.iniciativa ?? 0})${isActive ? ' - ¡En Turno!' : ''}\nHaz clic para centrar en el mapa`;
 
         // Avatar
         let avatarEl;
-        if (p.imagen) {
+        if (showAvatar && p.imagen) {
           avatarEl = document.createElement('img');
           avatarEl.src = p.imagen;
           avatarEl.className = 'combat-card-avatar';
-          avatarEl.alt = p.nombre;
+          avatarEl.alt = pName;
         } else {
           avatarEl = document.createElement('div');
           avatarEl.className = 'combat-card-avatar';
-          avatarEl.textContent = (p.nombre || '?')[0].toUpperCase();
+          avatarEl.textContent = (pName || '?')[0].toUpperCase();
         }
 
         // Meta info
@@ -2780,7 +2857,7 @@
 
         const nameEl = document.createElement('span');
         nameEl.className = 'combat-card-name';
-        nameEl.textContent = p.nombre;
+        nameEl.textContent = pName;
 
         const iniEl = document.createElement('span');
         iniEl.className = 'combat-card-ini';
@@ -3013,10 +3090,24 @@
       const isPlayerView = !state.usuario?.esDM;
       const visibility = getFichaVisibility(ficha);
 
-      const hpText = (isMonster && isPlayerView && !visibility.hp) ? '???' : `${ficha.hp_actual}/${ficha.hp_maximo}`;
-      const acText = (isMonster && isPlayerView && !visibility.ac) ? '???' : ficha.ac;
+      const displayName = (isMonster && isPlayerView && !visibility.nombre) ? 'Desconocido' : ficha.nombre;
+      const showCardHpBar = (!isMonster || !isPlayerView || visibility.hp);
+      const hpText = (isMonster && isPlayerView && !visibility.hp) ? null : `${ficha.hp_actual}/${ficha.hp_maximo}`;
+      const acText = (isMonster && isPlayerView && !visibility.ac) ? null : ficha.ac;
       const iniText = ficha.iniciativa || 0;
       const avatarSrc = (isMonster && isPlayerView && !visibility.imagen) ? 'https://via.placeholder.com/48?text=?' : (ficha.imagen || 'https://via.placeholder.com/48?text=Avatar');
+
+      const subParts = [tipoStr.toUpperCase()];
+      if (hpText !== null) subParts.push(`HP: ${hpText}`);
+      if (acText !== null) subParts.push(`AC: ${acText}`);
+      subParts.push(`INI: <strong class="gold-text">${iniText}</strong>`);
+      const subInfoText = subParts.join(' | ');
+
+      const hpBarHtml = showCardHpBar ? `
+        <div class="hp-bar-outer">
+          <div class="hp-bar-inner" style="width: ${Math.max(0, Math.min(100, (ficha.hp_actual / (ficha.hp_maximo || 1)) * 100))}%"></div>
+        </div>
+      ` : '';
 
       const esPropietario = esDuenioDeFicha(ficha);
       const ocultoBadge = (state.usuario?.esDM && ficha.oculto) ? `<span style="background:#555; color:#f87171; font-size:0.75rem; padding:2px 6px; border-radius:4px; margin-left:6px;"><i class="fa-solid fa-eye-slash"></i> Oculto</span>` : '';
@@ -3025,11 +3116,9 @@
         <div class="ficha-card-header">
           <img src="${avatarSrc}" class="ficha-avatar" style="cursor: pointer;" title="Haz clic para ampliar">
           <div class="ficha-info">
-            <div class="ficha-name">${ficha.nombre} ${ocultoBadge}</div>
-            <div class="ficha-sub">${tipoStr.toUpperCase()} | HP: ${hpText} | AC: ${acText} | INI: <strong class="gold-text">${iniText}</strong></div>
-            <div class="hp-bar-outer">
-              <div class="hp-bar-inner" style="width: ${Math.max(0, Math.min(100, (ficha.hp_actual / (ficha.hp_maximo || 1)) * 100))}%"></div>
-            </div>
+            <div class="ficha-name">${displayName} ${ocultoBadge}</div>
+            <div class="ficha-sub">${subInfoText}</div>
+            ${hpBarHtml}
           </div>
         </div>
         <div class="ficha-actions">
@@ -3046,7 +3135,7 @@
         avatarImg.addEventListener('click', () => {
           dom.enlargedGifImg.src = avatarSrc;
           if (dom.enlargedImgTitle) {
-            dom.enlargedImgTitle.textContent = ficha.nombre;
+            dom.enlargedImgTitle.textContent = displayName;
           }
           if (dom.enlargedImgNotas) {
             const showNotas = state.usuario.esDM || !isMonster || visibility.notas;

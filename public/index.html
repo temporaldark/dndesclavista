@@ -637,7 +637,15 @@
         <input type="hidden" id="revelar-ficha-id" value="">
 
         <div
-          style="margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1); padding: 10px; border-radius: 4px; background: rgba(0,0,0,0.3);">
+          style="margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.1); padding: 10px; border-radius: 4px; background: rgba(0,0,0,0.3);">
+          <div style="display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;">
+            <button type="button" id="btn-rev-ocultar-todo" class="btn btn-secondary btn-sm" title="Ocultar todo: Los jugadores no verán la barra de vida, ni CA, ni nombre real">
+              <i class="fa-solid fa-eye-slash"></i> Ocultar Todo (Jefe Oculto)
+            </button>
+            <button type="button" id="btn-rev-revelar-todo" class="btn btn-secondary btn-sm" title="Revelar todos los atributos a los jugadores">
+              <i class="fa-solid fa-eye"></i> Revelar Todo
+            </button>
+          </div>
           <label style="display: block; margin-bottom: 8px; cursor: pointer;">
             <input type="checkbox" id="rev-imagen" class="rev-checkbox"> Revelar Imagen (Avatar)
           </label>
@@ -645,10 +653,10 @@
             <input type="checkbox" id="rev-nombre" class="rev-checkbox"> Revelar Nombre
           </label>
           <label style="display: block; margin-bottom: 8px; cursor: pointer;">
-            <input type="checkbox" id="rev-hp" class="rev-checkbox"> Revelar Vida (HP)
+            <input type="checkbox" id="rev-hp" class="rev-checkbox"> Revelar Vida (HP y Barra de Vida)
           </label>
           <label style="display: block; margin-bottom: 8px; cursor: pointer;">
-            <input type="checkbox" id="rev-ac" class="rev-checkbox"> Revelar CA (AC)
+            <input type="checkbox" id="rev-ac" class="rev-checkbox"> Revelar CA (Clase de Armadura)
           </label>
           <label style="display: block; margin-bottom: 8px; cursor: pointer;">
             <input type="checkbox" id="rev-notas" class="rev-checkbox"> Revelar Notas

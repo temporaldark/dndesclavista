@@ -21,9 +21,9 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
   maxHttpBufferSize: 1e8, // 100MB para imágenes de mapa base64 de alta resolución
-  pingTimeout: 10000, // Detección rápida de desconexión (10s en vez de 60s)
-  pingInterval: 10000, // Heartbeat cada 10s (en vez de 25s)
-  transports: ['websocket', 'polling'], // Priorizar WebSocket directo de inmediato
+  pingTimeout: 60000, // 60s para evitar falsos positivos de desconexión en Railway / redes móviles
+  pingInterval: 25000, // Heartbeat cada 25s (estándar recomendado Socket.IO)
+  transports: ['websocket', 'polling'], // Priorizar WebSocket directo con fallback
   connectionStateRecovery: {
     maxDisconnectionDuration: 2 * 60 * 1000,
     skipMiddlewares: true
@@ -457,6 +457,10 @@ app.post('/api/partidas/import', async (req, res) => {
 io.on('connection', (socket) => {
   console.log(`🔌 Cliente conectado: ${socket.id}`);
 
+  socket.on('error', (err) => {
+    console.warn(`⚠️ [Socket] Error en socket ${socket.id}:`, err?.message || err);
+  });
+
   // Unirse a una partida con código
   socket.on('unirse_partida', async ({ codigo, nombreUsuario, usuarioId, esDMRequested }) => {
     try {
@@ -724,7 +728,7 @@ io.on('connection', (socket) => {
       const {
         nombre, tipo, jugadorId, jugador_id, imagen, fuerza, destreza, constitucion,
         inteligencia, sabiduria, carisma, hpActual, hp_actual, hpMaximo, hp_maximo, ac, velocidad,
-        iniciativa, nivel, altura, tamanioBase, tamanio_base, color_aro, notas, x = 5, y = 5, revelado = 0
+        iniciativa, nivel, altura, tamanioBase, tamanio_base, color_aro, notas, x = 5, y = 5, revelado
       } = payload;
 
       const ownerId = jugador_id || jugadorId || socket.data?.usuarioId;
@@ -734,10 +738,14 @@ io.on('connection', (socket) => {
         jugadores: {}
       });
 
+      const finalRevelado = (revelado !== undefined && revelado !== null && revelado !== 0 && revelado !== '0')
+        ? (typeof revelado === 'object' ? JSON.stringify(revelado) : revelado)
+        : defaultRevelado;
+
       await dbRun(
         `INSERT INTO fichas (id, partida_id, escena_id, nombre, tipo, jugador_id, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro, notas, x, y, revelado)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, partidaId, escenaId, nombre, tipo || 'jugador', ownerId, imagen, fuerza || 10, destreza || 10, constitucion || 10, inteligencia || 10, sabiduria || 10, carisma || 10, hpActual ?? hp_actual ?? 10, hpMaximo ?? hp_maximo ?? 10, ac ?? 10, velocidad ?? 30, iniciativa ?? 0, nivel ?? 1, altura ?? 2, tamanioBase || tamanio_base || 'mediano', color_aro || '#c9a84c', notas || '', x, y, revelado !== undefined ? revelado : defaultRevelado]
+        [id, partidaId, escenaId, nombre, tipo || 'jugador', ownerId, imagen, fuerza || 10, destreza || 10, constitucion || 10, inteligencia || 10, sabiduria || 10, carisma || 10, hpActual ?? hp_actual ?? 10, hpMaximo ?? hp_maximo ?? 10, ac ?? 10, velocidad ?? 30, iniciativa ?? 0, nivel ?? 1, altura ?? 2, tamanioBase || tamanio_base || 'mediano', color_aro || '#c9a84c', notas || '', x, y, finalRevelado]
       );
 
       if (escenaId) {
@@ -755,18 +763,48 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Actualizar ficha
+  // Actualizar ficha (preservando revelado, gigante y oculto si no se envían)
   socket.on('actualizar_ficha', async ({ partidaId, fichaData }) => {
     try {
+      if (!fichaData || !fichaData.id) return;
+      const current = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [fichaData.id]);
+      if (!current) return;
+
       const {
-        id, nombre, tipo, imagen, fuerza, destreza, constitucion,
-        inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad,
-        iniciativa, nivel, altura, tamanio_base, color_aro, gigante, notas, revelado
+        id,
+        nombre = current.nombre,
+        tipo = current.tipo,
+        imagen = current.imagen,
+        fuerza = current.fuerza,
+        destreza = current.destreza,
+        constitucion = current.constitucion,
+        inteligencia = current.inteligencia,
+        sabiduria = current.sabiduria,
+        carisma = current.carisma,
+        hp_actual = (fichaData.hpActual !== undefined ? fichaData.hpActual : current.hp_actual),
+        hp_maximo = (fichaData.hpMaximo !== undefined ? fichaData.hpMaximo : current.hp_maximo),
+        ac = current.ac,
+        velocidad = current.velocidad,
+        iniciativa = current.iniciativa,
+        nivel = current.nivel,
+        altura = current.altura,
+        tamanio_base = (fichaData.tamanioBase || current.tamanio_base),
+        color_aro = current.color_aro,
+        gigante,
+        notas = current.notas,
+        revelado,
+        oculto
       } = fichaData;
 
+      const finalRevelado = revelado !== undefined
+        ? (typeof revelado === 'object' ? JSON.stringify(revelado) : revelado)
+        : current.revelado;
+      const finalGigante = gigante !== undefined ? (gigante ? 1 : 0) : current.gigante;
+      const finalOculto = oculto !== undefined ? (oculto ? 1 : 0) : current.oculto;
+
       await dbRun(
-        `UPDATE fichas SET nombre = ?, tipo = ?, imagen = ?, fuerza = ?, destreza = ?, constitucion = ?, inteligencia = ?, sabiduria = ?, carisma = ?, hp_actual = ?, hp_maximo = ?, ac = ?, velocidad = ?, iniciativa = ?, nivel = ?, altura = ?, tamanio_base = ?, color_aro = ?, gigante = ?, notas = ?, revelado = ? WHERE id = ?`,
-        [nombre, tipo, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro || '#c9a84c', gigante ? 1 : 0, notas, revelado, id]
+        `UPDATE fichas SET nombre = ?, tipo = ?, imagen = ?, fuerza = ?, destreza = ?, constitucion = ?, inteligencia = ?, sabiduria = ?, carisma = ?, hp_actual = ?, hp_maximo = ?, ac = ?, velocidad = ?, iniciativa = ?, nivel = ?, altura = ?, tamanio_base = ?, color_aro = ?, gigante = ?, notas = ?, revelado = ?, oculto = ? WHERE id = ?`,
+        [nombre, tipo, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro || '#c9a84c', finalGigante, notas, finalRevelado, finalOculto, id]
       );
 
       const fichaActualizada = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [id]);
@@ -1327,11 +1365,11 @@ io.on('connection', (socket) => {
     // Remover usuario de la lista de conectados y notificar
     const { partidaId, usuarioId } = socket.data || {};
     if (partidaId) {
-      // Guardar inmediatamente el archivo JSON independiente en disco al salir
+      // Programar auto-guardado debounced (5s) en lugar de guardar sincrónico masivo
       try {
-        await savePartidaToFile(partidaId, false);
+        scheduleAutoSave(partidaId, 5000);
       } catch (err) {
-        console.error('[Servidor] Error al guardar partida en desconexión:', err);
+        console.error('[Servidor] Error al programar auto-guardado en desconexión:', err);
       }
     }
     if (partidaId && usuarioId && connectedUsers.has(partidaId)) {
@@ -1391,6 +1429,11 @@ process.on('SIGTERM', () => shutdownGracefully('SIGTERM'));
 
 process.on('uncaughtException', async (err) => {
   console.error('🔥 [Servidor] Excepción no capturada:', err);
+  const code = err?.code || '';
+  if (code === 'ECONNRESET' || code === 'EPIPE' || code === 'ETIMEDOUT' || code === 'ECONNABORTED') {
+    console.warn('⚠️ [Servidor] Error de red no fatal ignorado para evitar caída del host.');
+    return;
+  }
   await shutdownGracefully('UNCAUGHT_EXCEPTION');
 });
 process.on('unhandledRejection', (reason) => {
