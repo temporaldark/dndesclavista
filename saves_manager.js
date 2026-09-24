@@ -50,8 +50,8 @@ async function exportPartidaData(partidaId) {
   const figuras = await dbAll(`SELECT f.* FROM figuras f JOIN escenas e ON f.escena_id = e.id WHERE e.partida_id = ?`, [partidaId]);
   const dibujos = await dbAll(`SELECT d.* FROM dibujos d JOIN escenas e ON d.escena_id = e.id WHERE e.partida_id = ?`, [partidaId]);
   const posiciones_fichas = await dbAll(`SELECT pf.* FROM posiciones_fichas pf JOIN escenas e ON pf.escena_id = e.id WHERE e.partida_id = ?`, [partidaId]);
-  const mensajes = await dbAll(`SELECT * FROM mensajes WHERE partida_id = ? ORDER BY datetime(fecha) ASC`, [partidaId]);
-  const historial = await dbAll(`SELECT * FROM historial_dados WHERE partida_id = ? ORDER BY datetime(fecha) DESC`, [partidaId]);
+  const mensajes = await dbAll(`SELECT * FROM mensajes WHERE partida_id = ? ORDER BY fecha ASC`, [partidaId]);
+  const historial = await dbAll(`SELECT * FROM historial_dados WHERE partida_id = ? ORDER BY fecha DESC`, [partidaId]);
   const galeria = await dbAll(`SELECT * FROM galeria WHERE partida_id = ?`, [partidaId]);
 
   return {

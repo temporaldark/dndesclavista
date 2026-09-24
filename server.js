@@ -76,7 +76,7 @@ app.get('/api/partidas', async (req, res) => {
       SELECT p.*, 
         (SELECT COUNT(DISTINCT f.jugador_id) FROM fichas f WHERE f.partida_id = p.id AND f.jugador_id IS NOT NULL) as total_jugadores
       FROM partidas p 
-      ORDER BY datetime(p.fecha_modificacion) DESC
+      ORDER BY p.fecha_modificacion DESC
     `);
     partidas.forEach(p => {
       p.nombre = limpiarNombrePartida(p.nombre);
@@ -209,7 +209,7 @@ app.post('/api/partidas/:codigo/backups/restaurar', async (req, res) => {
     // Obtener escena activa restaurada
     let escenaActiva = await dbGet(`SELECT * FROM escenas WHERE id = ?`, [partida.escena_activa_id]);
     if (!escenaActiva) {
-      escenaActiva = await dbGet(`SELECT * FROM escenas WHERE partida_id = ? ORDER BY rowid ASC LIMIT 1`, [partida.id]);
+      escenaActiva = await dbGet(`SELECT * FROM escenas WHERE partida_id = ? ORDER BY id ASC LIMIT 1`, [partida.id]);
     }
     if (escenaActiva && partida.escena_activa_id !== escenaActiva.id) {
       await dbRun(`UPDATE partidas SET escena_activa_id = ? WHERE id = ?`, [escenaActiva.id, partida.id]);
@@ -231,8 +231,8 @@ app.post('/api/partidas/:codigo/backups/restaurar', async (req, res) => {
     const figuras = escenaActiva ? await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaActiva.id]) : [];
     const dibujoRow = escenaActiva ? await dbGet(`SELECT datos FROM dibujos WHERE escena_id = ?`, [escenaActiva.id]) : null;
     const dibujos = dibujoRow ? JSON.parse(dibujoRow.datos || '[]') : [];
-    const mensajes = await dbAll(`SELECT * FROM mensajes WHERE partida_id = ? ORDER BY datetime(fecha) ASC LIMIT 100`, [partida.id]);
-    const historial = await dbAll(`SELECT * FROM historial_dados WHERE partida_id = ? ORDER BY datetime(fecha) DESC LIMIT 100`, [partida.id]);
+    const mensajes = await dbAll(`SELECT * FROM mensajes WHERE partida_id = ? ORDER BY fecha ASC LIMIT 100`, [partida.id]);
+    const historial = await dbAll(`SELECT * FROM historial_dados WHERE partida_id = ? ORDER BY fecha DESC LIMIT 100`, [partida.id]);
 
     // Notificar a todos los clientes en la partida para que recarguen su estado inmediatamente con datos completos
     io.to(partida.id).emit('partida_restaurada', {
@@ -492,7 +492,7 @@ io.on('connection', (socket) => {
       // Obtener escena activa
       let escenaActiva = await dbGet(`SELECT * FROM escenas WHERE id = ?`, [partida.escena_activa_id]);
       if (!escenaActiva) {
-        escenaActiva = await dbGet(`SELECT * FROM escenas WHERE partida_id = ? ORDER BY rowid ASC LIMIT 1`, [partida.id]);
+        escenaActiva = await dbGet(`SELECT * FROM escenas WHERE partida_id = ? ORDER BY id ASC LIMIT 1`, [partida.id]);
       }
       if (escenaActiva && partida.escena_activa_id !== escenaActiva.id) {
         await dbRun(`UPDATE partidas SET escena_activa_id = ? WHERE id = ?`, [escenaActiva.id, partida.id]);
@@ -515,8 +515,8 @@ io.on('connection', (socket) => {
       const figuras = escenaActiva ? await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaActiva.id]) : [];
       const dibujoRow = escenaActiva ? await dbGet(`SELECT datos FROM dibujos WHERE escena_id = ?`, [escenaActiva.id]) : null;
       const dibujos = dibujoRow ? JSON.parse(dibujoRow.datos || '[]') : [];
-      const mensajes = await dbAll(`SELECT * FROM mensajes WHERE partida_id = ? ORDER BY datetime(fecha) ASC LIMIT 100`, [partida.id]);
-      const historial = await dbAll(`SELECT * FROM historial_dados WHERE partida_id = ? ORDER BY datetime(fecha) DESC LIMIT 100`, [partida.id]);
+      const mensajes = await dbAll(`SELECT * FROM mensajes WHERE partida_id = ? ORDER BY fecha ASC LIMIT 100`, [partida.id]);
+      const historial = await dbAll(`SELECT * FROM historial_dados WHERE partida_id = ? ORDER BY fecha DESC LIMIT 100`, [partida.id]);
       const galeria = esDM ? await dbAll(`SELECT * FROM galeria WHERE partida_id = ?`, [partida.id]) : [];
 
       // Responder con estado inicial

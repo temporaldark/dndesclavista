@@ -118,7 +118,11 @@ function prepareSql(sql) {
     );
   }
 
-  // 4. Convertir marcadores de parámetros '?' a '$1', '$2', ...
+  // 4. Convertir funciones exclusivas de SQLite (datetime y rowid)
+  query = query.replace(/datetime\s*\(\s*([^)]+)\s*\)/gi, '$1');
+  query = query.replace(/\browid\b/gi, 'id');
+
+  // 5. Convertir marcadores de parámetros '?' a '$1', '$2', ...
   let paramIdx = 1;
   query = query.replace(/\?/g, () => `$${paramIdx++}`);
 
