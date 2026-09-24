@@ -330,6 +330,11 @@
       btnRevRevelarTodo: document.getElementById('btn-rev-revelar-todo'),
       btnSaveRevelar: document.getElementById('btn-save-revelar') || document.getElementById('btn-aplicar-revelado'),
 
+      // 5eTools Compendio
+      tool5eTools: document.getElementById('tool-5etools'),
+      btnOpen5eToolsPanel: document.getElementById('btn-open-5etools-panel'),
+      modal5eTools: document.getElementById('modal-5etools'),
+
       modalCreateGame: document.getElementById('modal-create-game'),
       formCreateGame: document.getElementById('form-create-game'),
       createGameTitle: document.getElementById('create-game-title') || document.getElementById('new-game-name'),
@@ -2044,6 +2049,7 @@
     // Herramientas DM (Panel Izquierdo)
     dom.toolButtons?.forEach(btn => {
       btn.addEventListener('click', () => {
+        if (!btn.dataset.tool) return;
         dom.toolButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         activeTool = btn.dataset.tool;
@@ -2063,6 +2069,31 @@
             dom.figLabel.value = '';
           }
         }
+      });
+    });
+
+    // 5eTools Compendio (Apertura en ventana auxiliar / flotante)
+    function open5eTools(url = 'https://2014.5e.tools/') {
+      const width = Math.min(1280, Math.floor(window.screen.availWidth * 0.75));
+      const height = Math.min(900, Math.floor(window.screen.availHeight * 0.85));
+      const left = Math.floor((window.screen.availWidth - width) / 2);
+      const top = Math.floor((window.screen.availHeight - height) / 2);
+      window.open(url, '5eToolsCompanion', `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=no,toolbar=no,menubar=no`);
+    }
+
+    dom.tool5eTools?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openModal(dom.modal5eTools);
+    });
+
+    dom.btnOpen5eToolsPanel?.addEventListener('click', () => {
+      open5eTools('https://2014.5e.tools/');
+    });
+
+    document.querySelectorAll('.btn-5etools-link').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const url = btn.dataset.url || 'https://2014.5e.tools/';
+        open5eTools(url);
       });
     });
 
