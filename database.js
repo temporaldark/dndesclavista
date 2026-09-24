@@ -145,10 +145,12 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS figuras (
       id TEXT PRIMARY KEY,
       escena_id TEXT NOT NULL,
-      tipo TEXT NOT NULL, -- 'circulo', 'cuadrado', 'cono'
+      tipo TEXT NOT NULL, -- 'circulo', 'cuadrado', 'cono', 'rectangulo'
       x REAL DEFAULT 0,
       y REAL DEFAULT 0,
       tamanio REAL DEFAULT 1,
+      ancho REAL DEFAULT 1,
+      alto REAL DEFAULT 1,
       color TEXT DEFAULT '#c9a84c',
       transparencia REAL DEFAULT 0.4,
       rotacion REAL DEFAULT 0,
@@ -157,6 +159,9 @@ async function initDb() {
       FOREIGN KEY (escena_id) REFERENCES escenas(id) ON DELETE CASCADE
     )
   `);
+
+  try { await dbRun(`ALTER TABLE figuras ADD COLUMN ancho REAL DEFAULT 1`); } catch (_) {}
+  try { await dbRun(`ALTER TABLE figuras ADD COLUMN alto REAL DEFAULT 1`); } catch (_) {}
 
   await dbRun(`
     CREATE TABLE IF NOT EXISTS posiciones_fichas (

@@ -396,9 +396,9 @@ app.post('/api/partidas/import', async (req, res) => {
         const newFigId = uuidv4();
         const newEscenaId = escenaIdMap.get(fig.escena_id) || firstNewEscenaId;
         await dbRun(
-          `INSERT INTO figuras (id, escena_id, tipo, x, y, tamanio, rotacion, color, transparencia, etiqueta, creador_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [newFigId, newEscenaId, fig.tipo, fig.x, fig.y, fig.tamanio, fig.rotacion || 0, fig.color, fig.transparencia, fig.etiqueta, fig.creador_id]
+          `INSERT INTO figuras (id, escena_id, tipo, x, y, tamanio, ancho, alto, rotacion, color, transparencia, etiqueta, creador_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [newFigId, newEscenaId, fig.tipo, fig.x, fig.y, fig.tamanio, fig.ancho || fig.tamanio || 1, fig.alto || fig.tamanio || 1, fig.rotacion || 0, fig.color, fig.transparencia, fig.etiqueta, fig.creador_id]
         );
       }
 
@@ -911,13 +911,16 @@ io.on('connection', (socket) => {
   socket.on('guardar_figura', async ({ partidaId, escenaId, figuraData }) => {
     try {
       const id = figuraData.id || uuidv4();
-      const { tipo, x, y, tamanio, rotacion, color, transparencia, etiqueta, creador_id } = figuraData;
+      const { tipo, x, y, tamanio, ancho, alto, rotacion, color, transparencia, etiqueta, creador_id } = figuraData;
+      const finalAncho = ancho !== undefined ? parseFloat(ancho) : (parseFloat(tamanio) || 1);
+      const finalAlto = alto !== undefined ? parseFloat(alto) : (parseFloat(tamanio) || 1);
+      const finalTamanio = tamanio !== undefined ? parseFloat(tamanio) : finalAncho;
 
       await dbRun(
-        `INSERT INTO figuras (id, escena_id, tipo, x, y, tamanio, rotacion, color, transparencia, etiqueta, creador_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET tipo=excluded.tipo, x=excluded.x, y=excluded.y, tamanio=excluded.tamanio, rotacion=excluded.rotacion, color=excluded.color, transparencia=excluded.transparencia, etiqueta=excluded.etiqueta, creador_id=excluded.creador_id`,
-        [id, escenaId, tipo, x, y, tamanio, rotacion || 0, color, transparencia, etiqueta, creador_id]
+        `INSERT INTO figuras (id, escena_id, tipo, x, y, tamanio, ancho, alto, rotacion, color, transparencia, etiqueta, creador_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET tipo=excluded.tipo, x=excluded.x, y=excluded.y, tamanio=excluded.tamanio, ancho=excluded.ancho, alto=excluded.alto, rotacion=excluded.rotacion, color=excluded.color, transparencia=excluded.transparencia, etiqueta=excluded.etiqueta, creador_id=excluded.creador_id`,
+        [id, escenaId, tipo, x, y, finalTamanio, finalAncho, finalAlto, rotacion || 0, color, transparencia, etiqueta, creador_id]
       );
 
       const figuras = await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaId]);

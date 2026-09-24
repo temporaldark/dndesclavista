@@ -212,6 +212,7 @@
       btnClearDrawings: document.getElementById('btn-clear-drawings'),
       figType: document.getElementById('fig-type'),
       figSize: document.getElementById('fig-size'),
+      figHeight: document.getElementById('fig-height'),
       figRotation: document.getElementById('fig-rotation'),
       figColor: document.getElementById('fig-color'),
       figOpacity: document.getElementById('fig-opacity'),
@@ -322,6 +323,7 @@
       revelarFichaId: document.getElementById('revelar-ficha-id'),
       revImagen: document.getElementById('rev-imagen'),
       revNombre: document.getElementById('rev-nombre'),
+      revHpBar: document.getElementById('rev-hp-bar'),
       revHp: document.getElementById('rev-hp'),
       revAc: document.getElementById('rev-ac'),
       revNotas: document.getElementById('rev-notas'),
@@ -430,7 +432,7 @@
 
   function getFichaVisibility(ficha) {
     if (state.usuario.esDM || ficha.tipo === 'jugador') {
-      return { imagen: true, nombre: true, hp: true, ac: true, notas: true };
+      return { imagen: true, nombre: true, hp: true, barra_hp: true, ac: true, notas: true };
     }
 
     let config;
@@ -438,20 +440,27 @@
       config = JSON.parse(ficha.revelado);
     } catch (e) {
       const isRevealed = ficha.revelado === 1 || ficha.revelado === '1' || ficha.revelado === true;
-      config = { global: { imagen: isRevealed, nombre: isRevealed, hp: isRevealed, ac: isRevealed, notas: isRevealed }, jugadores: {} };
+      config = { global: { imagen: isRevealed, nombre: isRevealed, hp: isRevealed, barra_hp: isRevealed, ac: isRevealed, notas: isRevealed }, jugadores: {} };
     }
 
     if (!config || !config.global) {
-      config = { global: { imagen: false, nombre: false, hp: false, ac: false, notas: false }, jugadores: {} };
+      config = { global: { imagen: false, nombre: false, hp: false, barra_hp: false, ac: false, notas: false }, jugadores: {} };
     }
 
     const userId = state.usuario.id;
     const userConfig = config.jugadores?.[userId];
 
+    const globalHp = config.global.hp;
+    const globalBarraHp = config.global.barra_hp !== undefined ? config.global.barra_hp : globalHp;
+
+    const userHp = userConfig?.hp;
+    const userBarraHp = userConfig?.barra_hp !== undefined ? userConfig.barra_hp : (userHp !== undefined ? userHp : globalBarraHp);
+
     return {
       imagen: userConfig?.imagen ?? config.global.imagen,
       nombre: userConfig?.nombre ?? config.global.nombre,
-      hp: userConfig?.hp ?? config.global.hp,
+      hp: userHp ?? globalHp,
+      barra_hp: userBarraHp,
       ac: userConfig?.ac ?? config.global.ac,
       notas: userConfig?.notas ?? config.global.notas,
     };
@@ -1092,7 +1101,10 @@
       state.figuras.forEach(fig => {
         const centerX = fig.x * tileSize;
         const centerY = fig.y * tileSize;
-        const radius = fig.tamanio * tileSize;
+        const anchoCasillas = fig.ancho !== undefined ? parseFloat(fig.ancho) : (parseFloat(fig.tamanio) || 1);
+        const largoCasillas = fig.alto !== undefined ? parseFloat(fig.alto) : (parseFloat(fig.tamanio) || 1);
+        const wPx = anchoCasillas * tileSize;
+        const hPx = largoCasillas * tileSize;
 
         ctx.save();
         ctx.globalAlpha = fig.transparencia || 0.4;
@@ -1107,19 +1119,33 @@
 
         if (fig.tipo === 'circulo') {
           ctx.beginPath();
-          ctx.arc(0, 0, radius, 0, Math.PI * 2);
+          if (fig.ancho !== undefined || fig.alto !== undefined) {
+            const rx = wPx / 2;
+            const ry = hPx / 2;
+            if (Math.abs(rx - ry) < 0.1) {
+              ctx.arc(0, 0, rx, 0, Math.PI * 2);
+            } else {
+              ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+            }
+          } else {
+            // Legacy círculo (tamanio = radio)
+            const radius = (parseFloat(fig.tamanio) || 1) * tileSize;
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+          }
           ctx.fill();
           ctx.stroke();
-        } else if (fig.tipo === 'cuadrado') {
-          ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
-          ctx.strokeRect(-radius, -radius, radius * 2, radius * 2);
-        } else if (fig.tipo === 'rectangulo') {
-          ctx.fillRect(-radius, -radius * 2, radius * 2, radius * 4);
-          ctx.strokeRect(-radius, -radius * 2, radius * 2, radius * 4);
+        } else if (fig.tipo === 'cuadrado' || fig.tipo === 'rectangulo') {
+          const w = (fig.ancho !== undefined ? anchoCasillas : (fig.tipo === 'rectangulo' ? (fig.tamanio || 1) * 2 : (fig.tamanio || 1) * 2)) * tileSize;
+          const h = (fig.alto !== undefined ? largoCasillas : (fig.tipo === 'rectangulo' ? (fig.tamanio || 1) * 4 : (fig.tamanio || 1) * 2)) * tileSize;
+          ctx.fillRect(-w / 2, -h / 2, w, h);
+          ctx.strokeRect(-w / 2, -h / 2, w, h);
         } else if (fig.tipo === 'cono') {
+          const alcance = hPx;
+          const mitadAncho = wPx / 2;
+          const angulo = Math.atan2(mitadAncho, Math.max(1, alcance)) || (Math.PI / 4);
           ctx.beginPath();
           ctx.moveTo(0, 0);
-          ctx.arc(0, 0, radius, -Math.PI / 4, Math.PI / 4);
+          ctx.arc(0, 0, alcance, -angulo, angulo);
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
@@ -1282,8 +1308,8 @@
       const displayName = (isMonster && isPlayerView && !visibility.nombre) ? 'Desconocido' : ficha.nombre;
       const showName = !isMonster || !isPlayerView || visibility.nombre;
 
-      // Usar hp visibility para la barra de vida
-      const showBar = showHpBars && (!isMonster || !isPlayerView || visibility.hp);
+      // Usar barra_hp visibility para la barra de vida visual
+      const showBar = showHpBars && (!isMonster || !isPlayerView || visibility.barra_hp);
       if (showBar) {
         const hpPercent = Math.max(0, Math.min(1, ficha.hp_actual / (ficha.hp_maximo || 1)));
         const barW = Math.max(40, tokenWidth);
@@ -1440,8 +1466,10 @@
     // Lógica para seleccionar figuras compartida entre 'move' y 'figures'
     if (activeTool === 'move' || activeTool === 'figures') {
       const clickedFig = (state.figuras || []).find(fig => {
-        return gridPos.x >= fig.x - (fig.tamanio || 1) && gridPos.x <= fig.x + (fig.tamanio || 1) &&
-          gridPos.y >= fig.y - (fig.tamanio || 1) && gridPos.y <= fig.y + (fig.tamanio || 1);
+        const halfW = ((fig.ancho !== undefined ? fig.ancho : (fig.tamanio * 2)) || 2) / 2;
+        const halfH = ((fig.alto !== undefined ? fig.alto : (fig.tamanio * 2)) || 2) / 2;
+        return gridPos.x >= fig.x - halfW && gridPos.x <= fig.x + halfW &&
+          gridPos.y >= fig.y - halfH && gridPos.y <= fig.y + halfH;
       });
 
       if (clickedFig && !isDraggingToken) {
@@ -1456,7 +1484,8 @@
 
           // Poblar la UI con los datos de la figura seleccionada SOLO para dueño o DM
           if (dom.figType) dom.figType.value = clickedFig.tipo;
-          if (dom.figSize) dom.figSize.value = clickedFig.tamanio || 1;
+          if (dom.figSize) dom.figSize.value = clickedFig.ancho !== undefined ? clickedFig.ancho : (clickedFig.tamanio || 1);
+          if (dom.figHeight) dom.figHeight.value = clickedFig.alto !== undefined ? clickedFig.alto : (clickedFig.tamanio || 1);
           if (dom.figRotation) dom.figRotation.value = clickedFig.rotacion || 0;
           if (dom.figColor) dom.figColor.value = clickedFig.color || '#c9a84c';
           if (dom.figOpacity) dom.figOpacity.value = clickedFig.transparencia || 0.4;
@@ -1481,12 +1510,16 @@
     if (activeTool === 'figures') {
       figureStart = gridPos;
       const newFigId = 'fig_' + Math.random().toString(36).substr(2, 9);
+      const anchoVal = parseFloat(dom.figSize.value) || 1;
+      const altoVal = parseFloat(dom.figHeight ? dom.figHeight.value : dom.figSize.value) || anchoVal;
       const nuevaFig = {
         id: newFigId,
         tipo: dom.figType.value,
         x: Math.round(gridPos.x),
         y: Math.round(gridPos.y),
-        tamanio: parseFloat(dom.figSize.value),
+        tamanio: anchoVal,
+        ancho: anchoVal,
+        alto: altoVal,
         rotacion: parseFloat(dom.figRotation?.value || 0),
         color: dom.figColor.value,
         transparencia: parseFloat(dom.figOpacity.value),
@@ -1503,10 +1536,11 @@
       if (dom.figLabel) dom.figLabel.value = '';
     } else if (activeTool === 'erase') {
       // Borrar figura o trazo en ese punto (Dueño o DM)
-      const figToDel = (state.figuras || []).find(fig =>
-        (fig.creador_id === state.usuario.id || state.usuario.esDM) &&
-        Math.hypot(fig.x - gridPos.x, fig.y - gridPos.y) <= fig.tamanio
-      );
+      const figToDel = (state.figuras || []).find(fig => {
+        if (fig.creador_id !== state.usuario.id && !state.usuario.esDM) return false;
+        const maxDim = Math.max(fig.ancho || fig.tamanio || 1, fig.alto || fig.tamanio || 1);
+        return Math.hypot(fig.x - gridPos.x, fig.y - gridPos.y) <= maxDim;
+      });
       if (figToDel) {
         socket?.emit('eliminar_figura', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, figuraId: figToDel.id });
       }
@@ -2117,7 +2151,7 @@
     });
 
     // Actualizar propiedades de figura en tiempo real
-    ['figType', 'figSize', 'figRotation', 'figColor', 'figOpacity', 'figLabel'].forEach(key => {
+    ['figType', 'figSize', 'figHeight', 'figRotation', 'figColor', 'figOpacity', 'figLabel'].forEach(key => {
       if (dom[key]) {
         dom[key].addEventListener('input', () => {
           if (selectedFigureId && activeTool === 'figures') {
@@ -2125,6 +2159,8 @@
             if (fig && (fig.creador_id === state.usuario.id || state.usuario.esDM)) {
               fig.tipo = dom.figType.value;
               fig.tamanio = parseFloat(dom.figSize.value) || 1;
+              fig.ancho = parseFloat(dom.figSize.value) || 1;
+              fig.alto = parseFloat(dom.figHeight?.value || dom.figSize.value) || 1;
               fig.rotacion = parseFloat(dom.figRotation.value) || 0;
               fig.color = dom.figColor.value;
               fig.transparencia = parseFloat(dom.figOpacity.value) || 0.4;
@@ -2536,6 +2572,7 @@
     dom.btnRevOcultarTodo?.addEventListener('click', () => {
       if (dom.revImagen) dom.revImagen.checked = false;
       if (dom.revNombre) dom.revNombre.checked = false;
+      if (dom.revHpBar) dom.revHpBar.checked = false;
       if (dom.revHp) dom.revHp.checked = false;
       if (dom.revAc) dom.revAc.checked = false;
       if (dom.revNotas) dom.revNotas.checked = false;
@@ -2544,6 +2581,7 @@
     dom.btnRevRevelarTodo?.addEventListener('click', () => {
       if (dom.revImagen) dom.revImagen.checked = true;
       if (dom.revNombre) dom.revNombre.checked = true;
+      if (dom.revHpBar) dom.revHpBar.checked = true;
       if (dom.revHp) dom.revHp.checked = true;
       if (dom.revAc) dom.revAc.checked = true;
       if (dom.revNotas) dom.revNotas.checked = true;
@@ -2559,6 +2597,7 @@
       const newConf = {
         imagen: dom.revImagen.checked,
         nombre: dom.revNombre.checked,
+        barra_hp: dom.revHpBar ? dom.revHpBar.checked : dom.revHp.checked,
         hp: dom.revHp.checked,
         ac: dom.revAc.checked,
         notas: dom.revNotas.checked
@@ -3144,7 +3183,7 @@
       const visibility = getFichaVisibility(ficha);
 
       const displayName = (isMonster && isPlayerView && !visibility.nombre) ? 'Desconocido' : ficha.nombre;
-      const showCardHpBar = (!isMonster || !isPlayerView || visibility.hp);
+      const showCardHpBar = (!isMonster || !isPlayerView || visibility.barra_hp);
       const hpText = (isMonster && isPlayerView && !visibility.hp) ? null : `${ficha.hp_actual}/${ficha.hp_maximo}`;
       const acText = (isMonster && isPlayerView && !visibility.ac) ? null : ficha.ac;
       const iniText = ficha.iniciativa || 0;
@@ -3175,6 +3214,7 @@
           </div>
         </div>
         <div class="ficha-actions">
+          ${tieneNotasVisibles ? `<button class="btn btn-sm btn-secondary btn-ver-notas" title="Ver rasgos, hechizos y notas"><i class="fa-solid fa-scroll gold-text"></i> Notas</button>` : ''}
           ${esPropietario ? `<button class="btn btn-sm ${ficha.gigante ? 'btn-gold' : 'btn-secondary'} btn-gigante" title="${ficha.gigante ? 'Volver a tamaño normal' : 'Aumentar a tamaño gigante'}"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> ${ficha.gigante ? 'Normal' : 'Gigante'}</button>` : ''}
           ${state.usuario.esDM ? `<button class="btn btn-sm ${ficha.oculto ? 'btn-warning' : 'btn-secondary'} btn-toggle-oculto" title="${ficha.oculto ? 'Mostrar en mapa a jugadores' : 'Ocultar en mapa a jugadores'}"><i class="fa-solid ${ficha.oculto ? 'fa-eye' : 'fa-eye-slash'}"></i> ${ficha.oculto ? 'Mostrar' : 'Ocultar'}</button>` : ''}
           ${state.usuario.esDM && isMonster ? `<button class="btn btn-sm btn-primary btn-revelar-menu" title="Configurar visibilidad de datos para jugadores"><i class="fa-solid fa-eye"></i> Visibilidad</button>` : ''}
@@ -3183,26 +3223,30 @@
         </div>
       `;
 
+      function abrirModalNotas() {
+        dom.enlargedGifImg.src = avatarSrc;
+        if (dom.enlargedImgTitle) {
+          dom.enlargedImgTitle.textContent = displayName;
+        }
+        if (dom.enlargedImgNotas) {
+          const showNotas = state.usuario.esDM || !isMonster || visibility.notas;
+          if (showNotas && ficha.notas && ficha.notas.trim() !== '') {
+            dom.enlargedImgNotas.textContent = ficha.notas;
+            dom.enlargedImgNotas.style.display = 'block';
+          } else {
+            dom.enlargedImgNotas.style.display = 'none';
+            dom.enlargedImgNotas.textContent = '';
+          }
+        }
+        openModal(dom.modalGifView);
+      }
+
       const avatarImg = card.querySelector('.ficha-avatar');
       if (avatarImg) {
-        avatarImg.addEventListener('click', () => {
-          dom.enlargedGifImg.src = avatarSrc;
-          if (dom.enlargedImgTitle) {
-            dom.enlargedImgTitle.textContent = displayName;
-          }
-          if (dom.enlargedImgNotas) {
-            const showNotas = state.usuario.esDM || !isMonster || visibility.notas;
-            if (showNotas && ficha.notas && ficha.notas.trim() !== '') {
-              dom.enlargedImgNotas.textContent = ficha.notas;
-              dom.enlargedImgNotas.style.display = 'block';
-            } else {
-              dom.enlargedImgNotas.style.display = 'none';
-              dom.enlargedImgNotas.textContent = '';
-            }
-          }
-          openModal(dom.modalGifView);
-        });
+        avatarImg.addEventListener('click', abrirModalNotas);
       }
+
+      card.querySelector('.btn-ver-notas')?.addEventListener('click', abrirModalNotas);
 
       card.querySelector('.btn-toggle-oculto')?.addEventListener('click', () => {
         socket?.emit('toggle_oculto', { partidaId: state.partida.id, fichaId: ficha.id });
@@ -4235,6 +4279,7 @@
 
     dom.revImagen.checked = !!target.imagen;
     dom.revNombre.checked = !!target.nombre;
+    if (dom.revHpBar) dom.revHpBar.checked = target.barra_hp !== undefined ? !!target.barra_hp : !!target.hp;
     dom.revHp.checked = !!target.hp;
     dom.revAc.checked = !!target.ac;
     dom.revNotas.checked = !!target.notas;

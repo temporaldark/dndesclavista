@@ -1534,16 +1534,82 @@ input:focus, select:focus, textarea:focus, button:focus {
 }
 
 .template-notes-box {
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(201, 168, 76, 0.3);
   border-radius: 6px;
-  padding: 10px;
-  font-size: 0.82rem;
-  color: #cbd5e1;
-  max-height: 140px;
+  padding: 14px;
+  font-size: 0.88rem;
+  color: #e2e8f0;
+  max-height: 400px;
   overflow-y: auto;
   white-space: pre-wrap;
-  line-height: 1.45;
+  line-height: 1.55;
+}
+
+/* ÁREA DE TEXTO: NOTAS / RASGOS / HECHIZOS (SIN LÍMITE DE ESPACIO) */
+#ficha-notas {
+  width: 100%;
+  min-height: 190px;
+  max-height: 520px;
+  resize: vertical;
+  background: rgba(13, 13, 30, 0.75);
+  border: 1px solid rgba(201, 168, 76, 0.35);
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-family: 'Roboto', sans-serif;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  padding: 12px 14px;
+  overflow-y: auto;
+  box-sizing: border-box;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+#ficha-notas:focus {
+  border-color: var(--gold-primary);
+  box-shadow: 0 0 10px rgba(201, 168, 76, 0.35);
+  outline: none;
+}
+
+/* BARRITA DESLIZADORA (SCROLLBAR) TEMÁTICA D&D ELEGANTE */
+.custom-scrollbar::-webkit-scrollbar,
+#ficha-notas::-webkit-scrollbar,
+#enlarged-img-notas::-webkit-scrollbar,
+.template-notes-box::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track,
+#ficha-notas::-webkit-scrollbar-track,
+#enlarged-img-notas::-webkit-scrollbar-track,
+.template-notes-box::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb,
+#ficha-notas::-webkit-scrollbar-thumb,
+#enlarged-img-notas::-webkit-scrollbar-thumb,
+.template-notes-box::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--gold-primary), #8a6d2b);
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover,
+#ficha-notas::-webkit-scrollbar-thumb:hover,
+#enlarged-img-notas::-webkit-scrollbar-thumb:hover,
+.template-notes-box::-webkit-scrollbar-thumb:hover {
+  background: var(--gold-light);
+}
+
+.custom-scrollbar,
+#ficha-notas,
+#enlarged-img-notas,
+.template-notes-box {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-primary) rgba(0, 0, 0, 0.45);
 }
 
 /* BOTONES Y BOTONERÍA GENERICA */
