@@ -1812,6 +1812,21 @@ input:focus, select:focus, textarea:focus, button:focus {
   font-size: 1.1rem;
 }
 
+.stat-mod-badge {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: var(--gold-light);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(201, 168, 76, 0.3);
+  border-radius: 4px;
+  padding: 1px 2px;
+  letter-spacing: 0.5px;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
 .avatar-preview {
   width: 80px;
   height: 80px;

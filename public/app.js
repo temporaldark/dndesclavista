@@ -2147,7 +2147,22 @@
         if (!state.usuario.esDM) fichaTipo.value = 'jugador';
       }
 
+      updateAllFichaStatMods(true);
       openModal(dom.modalFicha);
+    });
+
+    // Actualización en tiempo real de bonificadores de estadísticas (D&D 5e)
+    ['ficha-fue', 'ficha-des', 'ficha-con', 'ficha-int', 'ficha-sab', 'ficha-car'].forEach(id => {
+      document.getElementById(id)?.addEventListener('input', (e) => {
+        updateStatModDisplay(id, 'mod-' + id);
+        if (id === 'ficha-des') {
+          const iniInput = document.getElementById('ficha-ini');
+          const val = parseInt(e.target.value, 10);
+          const dexScore = isNaN(val) ? 10 : val;
+          const dexMod = Math.floor((dexScore - 10) / 2);
+          if (iniInput) iniInput.value = dexMod;
+        }
+      });
     });
 
     dom.fichaImgFile?.addEventListener('change', (e) => {
@@ -3194,6 +3209,7 @@
             }
           });
 
+          updateAllFichaStatMods(false);
           openModal(dom.modalFicha);
         });
       }
@@ -3369,6 +3385,46 @@
     const num = Number(score) || 10;
     const mod = Math.floor((num - 10) / 2);
     return mod >= 0 ? `+${mod}` : `${mod}`;
+  }
+
+  // Actualizar indicador visual de modificador para un atributo
+  function updateStatModDisplay(inputId, modId) {
+    const input = document.getElementById(inputId);
+    const modEl = document.getElementById(modId);
+    if (!input || !modEl) return;
+    const val = parseInt(input.value, 10);
+    const score = isNaN(val) ? 10 : val;
+    const mod = Math.floor((score - 10) / 2);
+    modEl.textContent = mod >= 0 ? `+${mod}` : `${mod}`;
+    if (mod > 0) {
+      modEl.style.color = '#4ade80';
+    } else if (mod < 0) {
+      modEl.style.color = '#f87171';
+    } else {
+      modEl.style.color = 'var(--gold-light)';
+    }
+    return mod;
+  }
+
+  // Actualizar los 6 modificadores y opcionalmente sincronizar iniciativa
+  function updateAllFichaStatMods(autoUpdateIni = false) {
+    const stats = [
+      { inputId: 'ficha-fue', modId: 'mod-ficha-fue' },
+      { inputId: 'ficha-des', modId: 'mod-ficha-des' },
+      { inputId: 'ficha-con', modId: 'mod-ficha-con' },
+      { inputId: 'ficha-int', modId: 'mod-ficha-int' },
+      { inputId: 'ficha-sab', modId: 'mod-ficha-sab' },
+      { inputId: 'ficha-car', modId: 'mod-ficha-car' }
+    ];
+    stats.forEach(s => {
+      const mod = updateStatModDisplay(s.inputId, s.modId);
+      if (s.inputId === 'ficha-des' && autoUpdateIni) {
+        const iniInput = document.getElementById('ficha-ini');
+        if (iniInput && mod !== undefined) {
+          iniInput.value = mod;
+        }
+      }
+    });
   }
 
   // Actualizar selector desplegable de fichas para guardar como plantilla
