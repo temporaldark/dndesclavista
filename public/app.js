@@ -3204,6 +3204,9 @@
       const esPropietario = esDuenioDeFicha(ficha);
       const ocultoBadge = (state.usuario?.esDM && ficha.oculto) ? `<span style="background:#555; color:#f87171; font-size:0.75rem; padding:2px 6px; border-radius:4px; margin-left:6px;"><i class="fa-solid fa-eye-slash"></i> Oculto</span>` : '';
 
+      const showNotas = state.usuario.esDM || !isMonster || visibility.notas;
+      const tieneNotasVisibles = showNotas && !!(ficha.notas && ficha.notas.trim() !== '');
+
       card.innerHTML = `
         <div class="ficha-card-header">
           <img src="${avatarSrc}" class="ficha-avatar" style="cursor: pointer;" title="Haz clic para ampliar">
