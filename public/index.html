@@ -143,7 +143,7 @@
           </svg>
           <span>Rondas</span>
         </button>
-        <button id="tool-5etools" class="tool-btn dm-only" title="Compendio y Reglas 5eTools (D&D 5e)">
+        <button id="tool-5etools" class="tool-btn" title="Compendio y Reglas 5eTools (D&D 5e)">
           <i class="fa-solid fa-book-skull gold-text" style="font-size: 1.25rem;"></i>
           <span>5eTools</span>
         </button>
@@ -297,8 +297,11 @@
               </button>
             </div>
           </div>
-          <div class="search-box">
-            <input type="text" id="filter-fichas-input" placeholder="🔍 Buscar personaje o monstruo...">
+          <div class="search-box" style="display: flex; gap: 6px; align-items: center;">
+            <input type="text" id="filter-fichas-input" placeholder="🔍 Buscar personaje o monstruo..." style="flex: 1;">
+            <button id="btn-open-5etools-fichas" type="button" class="btn btn-secondary btn-sm" title="Abrir Compendio 5eTools (Hechizos, Reglas, Objetos)" style="white-space: nowrap; display: flex; align-items: center; gap: 5px; height: 36px; padding: 0 10px;">
+              <i class="fa-solid fa-book-skull gold-text"></i> <span>5eTools</span>
+            </button>
           </div>
           <div id="fichas-list" class="fichas-list">
             <!-- Se puebla dinámicamente -->
@@ -547,6 +550,9 @@
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3 id="modal-ficha-title"><i class="fa-solid fa-user-pen gold-text"></i> Crear / Editar Ficha</h3>
+        <button type="button" id="btn-modal-ficha-5etools" class="btn btn-secondary btn-sm" style="margin-left: auto; margin-right: 12px;" title="Abrir Compendio 5eTools para consultar conjuros, rasgos o equipo">
+          <i class="fa-solid fa-book-skull gold-text"></i> 5eTools
+        </button>
         <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <form id="form-ficha" class="modal-body">

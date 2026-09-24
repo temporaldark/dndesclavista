@@ -2086,6 +2086,13 @@
       openModal(dom.modal5eTools);
     });
 
+    document.querySelectorAll('#btn-open-5etools-fichas, #btn-modal-ficha-5etools').forEach(btn => {
+      btn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openModal(dom.modal5eTools);
+      });
+    });
+
     dom.btnOpen5eToolsPanel?.addEventListener('click', () => {
       open5eTools('https://2014.5e.tools/');
     });
