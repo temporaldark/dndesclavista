@@ -1,10 +1,11 @@
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const { dbRun, dbAll, dbGet, dbTransaction, initDb, checkpointDb, dataDir } = require('./database');
+const { dbRun, dbAll, dbGet, dbTransaction, initDb, checkpointDb, dataDir, isPostgres } = require('./database');
 const {
   ensureDirectories,
   savePartidaToFile,
@@ -1394,7 +1395,67 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 const HOST = '0.0.0.0';
 
-initDb().then(async () => {
+async function bootstrap() {
+  if (process.env.DATABASE_URL) {
+    console.log('🔗 Conectando a PostgreSQL mediante process.env.DATABASE_URL...');
+  }
+
+  // 1. Inicialización de motor de base de datos
+  await initDb();
+
+  // 2. Consulta explícita CREATE TABLE IF NOT EXISTS para partidas y fichas
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS partidas (
+      id TEXT PRIMARY KEY,
+      nombre TEXT NOT NULL,
+      codigo TEXT UNIQUE NOT NULL,
+      dm_id TEXT,
+      escena_activa_id TEXT,
+      fecha_creacion TEXT,
+      fecha_modificacion TEXT,
+      config_grid_x INTEGER DEFAULT 40,
+      config_grid_y INTEGER DEFAULT 40,
+      config_casilla INTEGER DEFAULT 5,
+      imagen_portada TEXT,
+      datos_combate TEXT
+    )
+  `);
+
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS fichas (
+      id TEXT PRIMARY KEY,
+      partida_id TEXT NOT NULL REFERENCES partidas(id) ON DELETE CASCADE,
+      escena_id TEXT,
+      nombre TEXT NOT NULL,
+      tipo TEXT DEFAULT 'jugador',
+      jugador_id TEXT,
+      imagen TEXT,
+      fuerza INTEGER DEFAULT 10,
+      destreza INTEGER DEFAULT 10,
+      constitucion INTEGER DEFAULT 10,
+      inteligencia INTEGER DEFAULT 10,
+      sabiduria INTEGER DEFAULT 10,
+      carisma INTEGER DEFAULT 10,
+      hp_actual INTEGER DEFAULT 10,
+      hp_maximo INTEGER DEFAULT 10,
+      ac INTEGER DEFAULT 10,
+      velocidad INTEGER DEFAULT 30,
+      iniciativa INTEGER DEFAULT 0,
+      nivel INTEGER DEFAULT 1,
+      altura INTEGER DEFAULT 2,
+      tamanio_base TEXT DEFAULT 'mediano',
+      color_aro TEXT DEFAULT '#c9a84c',
+      gigante INTEGER DEFAULT 0,
+      revelado TEXT DEFAULT '0',
+      oculto INTEGER DEFAULT 0,
+      notas TEXT,
+      x REAL DEFAULT 0,
+      y REAL DEFAULT 0
+    )
+  `);
+
+  console.log('✅ Tablas "partidas" y "fichas" aseguradas con CREATE TABLE IF NOT EXISTS.');
+
   ensureDirectories();
   // Auto-restaurar partidas desde /data/saves/ si faltan en la base de datos (por caída o reinicio de contenedor)
   await autoRestoreFromFiles();
@@ -1403,14 +1464,17 @@ initDb().then(async () => {
     console.log(`
 ═════════════════════════════════════════════════════════════════
 ⚔️  VTT D&D 5e SERVER LISTENING ON http://${HOST}:${PORT}
+🗄️  Motor de BD: ${isPostgres ? '🐘 PostgreSQL (Conexión activa)' : '📁 SQLite (Local vtt.db)'}
 📁 Directorio de datos: ${dataDir}
 🔮 Auto-Guardado en disco activo! 🎲
 🛡️  Protección contra caídas y reinicios habilitada!
 ═════════════════════════════════════════════════════════════════
     `);
   });
-}).catch(err => {
-  console.error('Error fatal al iniciar la base de datos:', err);
+}
+
+bootstrap().catch(err => {
+  console.error('Error fatal al iniciar la base de datos o el servidor:', err);
 });
 
 // Manejo de apagado seguro para evitar corrupción o pérdida de datos
