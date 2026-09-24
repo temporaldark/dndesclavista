@@ -984,6 +984,7 @@ io.on('connection', (socket) => {
         [id, escenaId, datosJson]
       );
       io.to(partidaId).emit('dibujos_actualizados', datos);
+      io.to(partidaId).emit('dibujos_actualizadas', datos);
       scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
@@ -995,6 +996,7 @@ io.on('connection', (socket) => {
     try {
       await dbRun(`DELETE FROM dibujos WHERE escena_id = ?`, [escenaId]);
       io.to(partidaId).emit('dibujos_actualizados', []);
+      io.to(partidaId).emit('dibujos_actualizadas', []);
       scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);

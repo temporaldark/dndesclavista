@@ -332,11 +332,6 @@
       btnRevRevelarTodo: document.getElementById('btn-rev-revelar-todo'),
       btnSaveRevelar: document.getElementById('btn-save-revelar') || document.getElementById('btn-aplicar-revelado'),
 
-      // 5eTools Compendio
-      tool5eTools: document.getElementById('tool-5etools'),
-      btnOpen5eToolsPanel: document.getElementById('btn-open-5etools-panel'),
-      modal5eTools: document.getElementById('modal-5etools'),
-
       modalCreateGame: document.getElementById('modal-create-game'),
       formCreateGame: document.getElementById('form-create-game'),
       createGameTitle: document.getElementById('create-game-title') || document.getElementById('new-game-name'),
@@ -806,6 +801,12 @@
     socket.on('lista_jugadores', (jugadores) => {
       state.jugadoresConectados = jugadores || [];
       renderDmPlayersList();
+    });
+
+    socket.on('dibujos_actualizados', (dibujos) => {
+      state.dibujos = dibujos || [];
+      markDirty();
+      debounceLocalMirrorSave();
     });
 
     socket.on('dibujos_actualizadas', (dibujos) => {
@@ -1544,6 +1545,27 @@
       if (figToDel) {
         socket?.emit('eliminar_figura', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, figuraId: figToDel.id });
       }
+
+      // Borrar trazo de dibujo si se hace clic sobre él (DM)
+      if (state.usuario?.esDM && Array.isArray(state.dibujos) && state.dibujos.length > 0) {
+        const strokeIdx = state.dibujos.findIndex(stroke => {
+          if (!stroke.points || !Array.isArray(stroke.points)) return false;
+          const hitRadius = (stroke.size ? stroke.size / 50 : 0.4) + 0.35;
+          return stroke.points.some(p => Math.hypot(p.x - gridPos.x, p.y - gridPos.y) <= hitRadius);
+        });
+        if (strokeIdx !== -1) {
+          state.dibujos.splice(strokeIdx, 1);
+          markDirty();
+          debounceLocalMirrorSave();
+          if (state.partida?.id && state.escenaActiva?.id) {
+            socket?.emit('guardar_dibujos', {
+              partidaId: state.partida.id,
+              escenaId: state.escenaActiva.id,
+              datos: state.dibujos
+            });
+          }
+        }
+      }
     }
   }
 
@@ -2106,40 +2128,14 @@
       });
     });
 
-    // 5eTools Compendio (Apertura en ventana auxiliar / flotante)
-    function open5eTools(url = 'https://2014.5e.tools/') {
-      const width = Math.min(1280, Math.floor(window.screen.availWidth * 0.75));
-      const height = Math.min(900, Math.floor(window.screen.availHeight * 0.85));
-      const left = Math.floor((window.screen.availWidth - width) / 2);
-      const top = Math.floor((window.screen.availHeight - height) / 2);
-      window.open(url, '5eToolsCompanion', `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=no,toolbar=no,menubar=no`);
-    }
-
-    dom.tool5eTools?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openModal(dom.modal5eTools);
-    });
-
-    document.querySelectorAll('#btn-open-5etools-fichas, #btn-modal-ficha-5etools').forEach(btn => {
-      btn?.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openModal(dom.modal5eTools);
-      });
-    });
-
-    dom.btnOpen5eToolsPanel?.addEventListener('click', () => {
-      open5eTools('https://2014.5e.tools/');
-    });
-
-    document.querySelectorAll('.btn-5etools-link').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const url = btn.dataset.url || 'https://2014.5e.tools/';
-        open5eTools(url);
-      });
-    });
-
+    // Limpiar dibujos
     dom.btnClearDrawings?.addEventListener('click', () => {
-      socket?.emit('limpiar_dibujos', { partidaId: state.partida.id, escenaId: state.escenaActiva.id });
+      state.dibujos = [];
+      markDirty();
+      debounceLocalMirrorSave();
+      if (state.partida?.id && state.escenaActiva?.id) {
+        socket?.emit('limpiar_dibujos', { partidaId: state.partida.id, escenaId: state.escenaActiva.id });
+      }
     });
 
     dom.btnClearFigures?.addEventListener('click', () => {

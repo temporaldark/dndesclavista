@@ -21,7 +21,7 @@
   <meta http-equiv="Expires" content="0">
 
   <!-- Estilos Temáticos D&D -->
-  <link rel="stylesheet" href="style.css?v=2.8">
+  <link rel="stylesheet" href="style.css?v=3.1">
 </head>
 
 <body>
@@ -142,10 +142,6 @@
             <line x1="3" y1="19" x2="5" y2="21"></line>
           </svg>
           <span>Rondas</span>
-        </button>
-        <button id="tool-5etools" class="tool-btn" title="Compendio y Reglas 5eTools (D&D 5e)">
-          <i class="fa-solid fa-book-skull gold-text" style="font-size: 1.25rem;"></i>
-          <span>5eTools</span>
         </button>
       </div>
 
@@ -298,11 +294,8 @@
               </button>
             </div>
           </div>
-          <div class="search-box" style="display: flex; gap: 6px; align-items: center;">
-            <input type="text" id="filter-fichas-input" placeholder="🔍 Buscar personaje o monstruo..." style="flex: 1;">
-            <button id="btn-open-5etools-fichas" type="button" class="btn btn-secondary btn-sm" title="Abrir Compendio 5eTools (Hechizos, Reglas, Objetos)" style="white-space: nowrap; display: flex; align-items: center; gap: 5px; height: 36px; padding: 0 10px;">
-              <i class="fa-solid fa-book-skull gold-text"></i> <span>5eTools</span>
-            </button>
+          <div class="search-box">
+            <input type="text" id="filter-fichas-input" placeholder="🔍 Buscar personaje o monstruo...">
           </div>
           <div id="fichas-list" class="fichas-list">
             <!-- Se puebla dinámicamente -->
@@ -425,26 +418,6 @@
             <h3><i class="fa-solid fa-crown gold-text"></i> Panel del Dungeon Master</h3>
           </div>
 
-          <!-- Compendio y Reglas 5eTools (DM) - Arriba del todo para acceso inmediato -->
-          <div class="dm-section" style="border: 1px solid var(--gold-border); background: linear-gradient(135deg, rgba(201,168,76,0.12), rgba(15,15,30,0.6)); border-radius: 8px; padding: 12px; margin-bottom: 15px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-              <h4 style="margin: 0; color: var(--gold-primary); font-size: 1rem;"><i class="fa-solid fa-book-skull"></i> Compendio 5eTools</h4>
-              <span class="badge-tag tag-monster" style="font-size: 0.7rem;">D&D 5e</span>
-            </div>
-            <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 10px; line-height: 1.3;">
-              Investiga monstruos, conjuros, objetos y reglas oficiales de 5e sin salirte de tu partida.
-            </p>
-            <button id="btn-open-5etools-panel" type="button" class="btn btn-gold btn-block" style="display:flex; align-items:center; justify-content:center; gap:8px;">
-              <i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir 5eTools (Investigar)
-            </button>
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 8px;">
-              <button type="button" class="btn btn-secondary btn-sm btn-5etools-link" data-url="https://2014.5e.tools/bestiary.html">🐲 Monstruos</button>
-              <button type="button" class="btn btn-secondary btn-sm btn-5etools-link" data-url="https://2014.5e.tools/spells.html">🪄 Hechizos</button>
-              <button type="button" class="btn btn-secondary btn-sm btn-5etools-link" data-url="https://2014.5e.tools/items.html">🗡️ Objetos</button>
-              <button type="button" class="btn btn-secondary btn-sm btn-5etools-link" data-url="https://2014.5e.tools/quickreference.html">📜 Reglas</button>
-            </div>
-          </div>
-
           <!-- Sección Escenas -->
           <div class="dm-section">
             <h4>🎬 Escenas y Mapas</h4>
@@ -551,9 +524,6 @@
     <div class="modal-content modal-lg">
       <div class="modal-header">
         <h3 id="modal-ficha-title"><i class="fa-solid fa-user-pen gold-text"></i> Crear / Editar Ficha</h3>
-        <button type="button" id="btn-modal-ficha-5etools" class="btn btn-secondary btn-sm" style="margin-left: auto; margin-right: 12px;" title="Abrir Compendio 5eTools para consultar conjuros, rasgos o equipo">
-          <i class="fa-solid fa-book-skull gold-text"></i> 5eTools
-        </button>
         <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <form id="form-ficha" class="modal-body">
@@ -735,61 +705,6 @@
           <button type="button" class="btn btn-secondary btn-close-modal">Cerrar</button>
           <button type="button" id="btn-save-revelar" class="btn btn-gold">Guardar Cambios</button>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: COMPENDIO 5ETOOLS (DM) -->
-  <div id="modal-5etools" class="modal-overlay hidden">
-    <div class="modal-content modal-lg" style="max-width: 900px; width: 95%;">
-      <div class="modal-header">
-        <h3><i class="fa-solid fa-book-skull gold-text"></i> Compendio de Reglas & Investigación (5eTools)</h3>
-        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modal-body" style="padding: 15px;">
-        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 15px;">
-          Investiga reglas, conjuros, monstruos y equipo oficial de D&D 5e sin salirte ni cerrar tu partida. Puedes abrir la portada principal o acceder directamente a cualquier categoría en una ventana auxiliar:
-        </p>
-
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px;">
-          <button type="button" class="btn btn-gold btn-5etools-link" data-url="https://2014.5e.tools/" style="padding: 15px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
-            <i class="fa-solid fa-house-chimney" style="font-size: 1.5rem;"></i>
-            <strong>5eTools Inicio</strong>
-            <span style="font-size: 0.75rem; opacity: 0.85;">Portada principal</span>
-          </button>
-          <button type="button" class="btn btn-secondary btn-5etools-link" data-url="https://2014.5e.tools/bestiary.html" style="padding: 15px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
-            <i class="fa-solid fa-dragon gold-text" style="font-size: 1.5rem;"></i>
-            <strong>Bestiario / Monstruos</strong>
-            <span style="font-size: 0.75rem; opacity: 0.85;">Estadísticas y rasgos</span>
-          </button>
-          <button type="button" class="btn btn-secondary btn-5etools-link" data-url="https://2014.5e.tools/spells.html" style="padding: 15px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
-            <i class="fa-solid fa-wand-magic-sparkles gold-text" style="font-size: 1.5rem;"></i>
-            <strong>Hechizos & Conjuros</strong>
-            <span style="font-size: 0.75rem; opacity: 0.85;">Niveles, daño y áreas</span>
-          </button>
-          <button type="button" class="btn btn-secondary btn-5etools-link" data-url="https://2014.5e.tools/items.html" style="padding: 15px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
-            <i class="fa-solid fa-shield-halved gold-text" style="font-size: 1.5rem;"></i>
-            <strong>Objetos & Magia</strong>
-            <span style="font-size: 0.75rem; opacity: 0.85;">Armas, armaduras y pociones</span>
-          </button>
-          <button type="button" class="btn btn-secondary btn-5etools-link" data-url="https://2014.5e.tools/quickreference.html" style="padding: 15px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
-            <i class="fa-solid fa-book gold-text" style="font-size: 1.5rem;"></i>
-            <strong>Referencia Rápida</strong>
-            <span style="font-size: 0.75rem; opacity: 0.85;">Acciones de combate y reglas</span>
-          </button>
-          <button type="button" class="btn btn-secondary btn-5etools-link" data-url="https://2014.5e.tools/conditionsdiseases.html" style="padding: 15px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px;">
-            <i class="fa-solid fa-skull-crossbones gold-text" style="font-size: 1.5rem;"></i>
-            <strong>Estados y Condiciones</strong>
-            <span style="font-size: 0.75rem; opacity: 0.85;">Cegado, paralizado, etc.</span>
-          </button>
-        </div>
-
-        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 12px; font-size: 0.85rem; color: #ccc;">
-          <p><i class="fa-solid fa-circle-info gold-text"></i> <strong>Ventana Auxiliar (Companion Window):</strong> Al hacer clic en cualquier sección, se abrirá una ventana flotante independiente sin salir del VTT, permitiéndote investigar libremente mientras mantienes el tablero visible y tu conexión activa.</p>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary btn-close-modal">Cerrar</button>
       </div>
     </div>
   </div>
@@ -1073,7 +988,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script>if (typeof io === 'undefined') document.write('<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"><\/script>');</script>
   <!-- Lógica de la Aplicación -->
-  <script src="app.js?v=2.9"></script>
+  <script src="app.js?v=3.1"></script>
 </body>
 
 </html>
