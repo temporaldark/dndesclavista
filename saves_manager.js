@@ -445,6 +445,43 @@ async function restoreSnapshotFile(codigo, filename) {
   return data.partida;
 }
 
+// Eliminar permanentemente todos los archivos y timers asociados a una partida
+function deletePartidaFiles(partidaId, codigo) {
+  if (partidaId) {
+    if (pendingSaveTimers.has(partidaId)) {
+      clearTimeout(pendingSaveTimers.get(partidaId));
+      pendingSaveTimers.delete(partidaId);
+    }
+    if (lastSnapshotTimers.has(partidaId)) {
+      lastSnapshotTimers.delete(partidaId);
+    }
+    isSavingPartida.delete(partidaId);
+  }
+
+  ensureDirectories();
+  const upperCode = (codigo || '').toUpperCase();
+
+  if (upperCode) {
+    const mainFile = path.join(savesDir, `partida_${upperCode}.json`);
+    if (fs.existsSync(mainFile)) {
+      try { fs.unlinkSync(mainFile); } catch (_) {}
+    }
+
+    if (fs.existsSync(backupsDir)) {
+      try {
+        const files = fs.readdirSync(backupsDir);
+        for (const f of files) {
+          if (f.startsWith(`${upperCode}_`) || f === `partida_${upperCode}.json`) {
+            try { fs.unlinkSync(path.join(backupsDir, f)); } catch (_) {}
+          }
+        }
+      } catch (err) {
+        console.error('Error al limpiar backups de partida eliminada:', err);
+      }
+    }
+  }
+}
+
 module.exports = {
   ensureDirectories,
   exportPartidaData,
@@ -454,5 +491,6 @@ module.exports = {
   autoRestoreFromFiles,
   listBackupsForPartida,
   restoreSnapshotFile,
-  limpiarNombrePartida
+  limpiarNombrePartida,
+  deletePartidaFiles
 };

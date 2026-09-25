@@ -548,6 +548,11 @@
       }
     });
 
+    socket.on('partida_eliminada', (data) => {
+      alert(data?.mensaje || 'La partida ha sido eliminada.');
+      window.location.href = '/';
+    });
+
     socket.on('partida_restaurada', (data) => {
       showToast('🔄 ' + (data?.mensaje || 'Partida cargada a una versión previa.'), 'info');
       if (data && data.partida && data.escenaActiva) {
@@ -2101,6 +2106,58 @@
         alert('Error: ' + err.message);
       }
     });
+
+    // Eliminar partida desde el modal de edición
+    const btnDeleteGameModal = document.getElementById('btn-delete-game-modal');
+    if (btnDeleteGameModal) {
+      btnDeleteGameModal.addEventListener('click', async () => {
+        const partidaId = dom.editGameId?.value;
+        const nombrePartida = dom.editGameTitle?.value || 'esta partida';
+        if (!partidaId) return;
+
+        if (confirm(`¿Estás seguro de que deseas eliminar definitivamente la partida "${nombrePartida}"?\n\nEsta acción borrará todas sus escenas, fichas y datos guardados de forma permanente.`)) {
+          try {
+            const res = await fetch(`/api/partidas/${partidaId}`, { method: 'DELETE' });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.error || 'Error al eliminar');
+            }
+            closeModal(dom.modalEditGame);
+            showToast('🗑️ Partida eliminada con éxito', 'info');
+            if (state.partida && state.partida.id === partidaId) {
+              window.location.href = '/';
+            } else {
+              loadGamesList();
+            }
+          } catch (err) {
+            alert('Error al eliminar la partida: ' + err.message);
+          }
+        }
+      });
+    }
+
+    // Eliminar sesión actual desde el Panel del DM
+    const btnDmDeleteSession = document.getElementById('btn-dm-delete-session');
+    if (btnDmDeleteSession) {
+      btnDmDeleteSession.addEventListener('click', async () => {
+        if (!state.partida?.id) return;
+        const nombrePartida = state.partida.nombre || 'esta sesión';
+
+        if (confirm(`⚠️ ¿ELIMINAR DEFINITIVAMENTE "${nombrePartida.toUpperCase()}"?\n\nEsta acción borrará la sesión entera, las escenas, fichas y desconectará a todos los jugadores.`)) {
+          try {
+            const res = await fetch(`/api/partidas/${state.partida.id}`, { method: 'DELETE' });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.error || 'Error al eliminar');
+            }
+            alert('La sesión ha sido eliminada con éxito.');
+            window.location.href = '/';
+          } catch (err) {
+            alert('Error al eliminar la sesión: ' + err.message);
+          }
+        }
+      });
+    }
 
     // Herramientas DM (Panel Izquierdo)
     dom.toolButtons?.forEach(btn => {
@@ -3936,12 +3993,25 @@
           window.location.href = `/api/partidas/${p.id}/export`;
         });
 
-        card.querySelector('.btn-del-game').addEventListener('click', async () => {
-          if (confirm(`¿Eliminar definitivamente la partida "${p.nombre}"?`)) {
-            await fetch(`/api/partidas/${p.id}`, { method: 'DELETE' });
-            loadGamesList();
-          }
-        });
+        const btnDel = card.querySelector('.btn-del-game');
+        if (btnDel) {
+          btnDel.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (confirm(`¿Eliminar definitivamente la partida "${p.nombre}" (${p.codigo})?\n\nEsta acción borrará todas sus escenas, fichas y datos guardados de forma permanente.`)) {
+              try {
+                const res = await fetch(`/api/partidas/${p.id}`, { method: 'DELETE' });
+                if (!res.ok) {
+                  const errJson = await res.json().catch(() => ({}));
+                  throw new Error(errJson.error || 'Error en el servidor al eliminar');
+                }
+                showToast(`🗑️ Partida "${p.nombre}" eliminada`, 'info');
+                await loadGamesList();
+              } catch (err) {
+                alert('No se pudo eliminar la partida: ' + err.message);
+              }
+            }
+          });
+        }
 
         dom.gamesList.appendChild(card);
       });

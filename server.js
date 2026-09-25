@@ -14,7 +14,8 @@ const {
   autoRestoreFromFiles,
   listBackupsForPartida,
   restoreSnapshotFile,
-  limpiarNombrePartida
+  limpiarNombrePartida,
+  deletePartidaFiles
 } = require('./saves_manager');
 
 const app = express();
@@ -123,19 +124,28 @@ app.post('/api/partidas', async (req, res) => {
 app.delete('/api/partidas/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const partida = await dbGet(`SELECT codigo FROM partidas WHERE id = ?`, [id]);
-    await dbRun(`DELETE FROM partidas WHERE id = ?`, [id]);
-
-    if (partida && partida.codigo) {
-      const fs = require('fs');
-      const saveFile = path.join(__dirname, 'data', 'saves', `partida_${partida.codigo.toUpperCase()}.json`);
-      if (fs.existsSync(saveFile)) {
-        try { fs.unlinkSync(saveFile); } catch (_) {}
-      }
+    const partida = await dbGet(`SELECT id, codigo, nombre FROM partidas WHERE id = ? OR codigo = ?`, [id, id]);
+    if (!partida) {
+      return res.status(404).json({ error: 'Partida no encontrada.' });
     }
 
-    res.json({ success: true });
+    const partidaId = partida.id;
+    const codigo = partida.codigo;
+
+    // 1. Limpiar archivos en disco y detener temporizadores de auto-guardado
+    deletePartidaFiles(partidaId, codigo);
+
+    // 2. Eliminar de la base de datos (cascada elimina escenas, fichas, dibujos, etc.)
+    await dbRun(`DELETE FROM partidas WHERE id = ?`, [partidaId]);
+
+    // 3. Notificar a los clientes conectados a esta partida que ha sido eliminada
+    io.to(partidaId).emit('partida_eliminada', {
+      mensaje: `La partida "${partida.nombre}" ha sido eliminada por el Dungeon Master.`
+    });
+
+    res.json({ success: true, id: partidaId, codigo });
   } catch (err) {
+    console.error('Error al eliminar partida:', err);
     res.status(500).json({ error: err.message });
   }
 });
