@@ -699,6 +699,11 @@
         loadMapImage(mapa);
         markDirty();
       }
+      // Actualizar también en el listado general de escenas para que no se pierda al exportar
+      const esc = (state.escenas || []).find(e => e.id === escenaId);
+      if (esc) {
+        esc.mapa = mapa;
+      }
     });
 
     socket.on('grid_actualizado', ({ escenaId, gridX, gridY, casilla }) => {
@@ -935,15 +940,27 @@
 
   function loadMapImage(src) {
     if (!src) {
-      mapImageLoaded = false;
-      mapImage = null;
-      if (dom.mapBgImg) {
-        dom.mapBgImg.src = '';
-        dom.mapBgImg.classList.add('hidden');
+      // Si la escena activa actual ya tiene mapa en memoria, preservarlo
+      if (state.escenaActiva && state.escenaActiva.mapa) {
+        src = state.escenaActiva.mapa;
+      } else {
+        mapImageLoaded = false;
+        mapImage = null;
+        if (dom.mapBgImg) {
+          dom.mapBgImg.src = '';
+          dom.mapBgImg.classList.add('hidden');
+        }
+        markDirty();
+        return;
       }
+    }
+
+    // Si ya está exactamente la misma imagen cargada en memoria, evitar parpadeos
+    if (mapImage && mapImage.src === src && mapImageLoaded) {
       markDirty();
       return;
     }
+
     const img = new Image();
     img.onload = () => {
       mapImage = img;
@@ -970,9 +987,11 @@
     };
     img.onerror = (e) => {
       console.warn('[VTT] No se pudo cargar imagen de mapa:', e);
-      mapImage = null;
-      mapImageLoaded = false;
-      markDirty();
+      if (!mapImage) {
+        mapImage = null;
+        mapImageLoaded = false;
+        markDirty();
+      }
     };
     img.src = src;
   }
@@ -1947,7 +1966,7 @@
     if (dom.btnDmExportSession) {
       dom.btnDmExportSession.addEventListener('click', () => {
         if (state.partida?.id) {
-          window.location.href = `/api/partidas/${state.partida.id}/export`;
+          descargarPartidaAlPc(state.partida.id, state.partida.nombre, state.partida.codigo);
         }
       });
     }
@@ -3991,8 +4010,9 @@
           });
         }
 
-        card.querySelector('.btn-export-game')?.addEventListener('click', () => {
-          window.location.href = `/api/partidas/${p.id}/export`;
+        card.querySelector('.btn-export-game')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          descargarPartidaAlPc(p.id, p.nombre, p.codigo);
         });
 
         const btnDel = card.querySelector('.btn-del-game');
@@ -4162,16 +4182,66 @@
     showToast('💾 Guardado manual ejecutado (Servidor y Navegador).', 'success');
   }
 
+  async function descargarPartidaAlPc(partidaId, nombrePartida, codigoPartida) {
+    if (!partidaId) return;
+    try {
+      showSaveIndicator('💾 Guardando...');
+      showToast('💾 Generando archivo de guardado para tu PC...', 'info');
+
+      const res = await fetch(`/api/partidas/${partidaId}/export`);
+      if (!res.ok) throw new Error('Error del servidor al exportar sesión');
+
+      const blob = await res.blob();
+      const contentDisposition = res.headers.get('content-disposition');
+      let filename = '';
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match && match[1]) filename = match[1];
+      }
+      if (!filename) {
+        const safeTitle = (nombrePartida || state.partida?.nombre || 'partida').replace(/[^a-zA-Z0-9_\-]/g, '_');
+        const code = codigoPartida || state.partida?.codigo || 'BACKUP';
+        filename = `sesion_dnd_${safeTitle}_${code}.json`;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast('✅ Partida y mapa guardados con éxito en tu PC.', 'success');
+      showSaveIndicator('✅ Guardado en PC');
+    } catch (err) {
+      console.error('Error al guardar en PC:', err);
+      showToast('❌ Error al guardar en PC: ' + err.message, 'danger');
+    }
+  }
+
   function handleEmergencyExport() {
     if (!state.partida) {
       alert('No hay partida activa para exportar.');
       return;
     }
+    // Asegurar que las escenas exportadas incluyan sus mapas (especialmente la activa)
+    const exportEscenas = (state.escenas || []).map(sc => {
+      if (state.escenaActiva && sc.id === state.escenaActiva.id) {
+        return { ...sc, mapa: state.escenaActiva.mapa };
+      }
+      return sc;
+    });
+    if (state.escenaActiva && !exportEscenas.some(sc => sc.id === state.escenaActiva.id)) {
+      exportEscenas.push(state.escenaActiva);
+    }
+
     const data = {
       version: '2.0.0-emergencia',
       fechaExport: new Date().toISOString(),
       partida: state.partida,
-      escenas: state.escenas,
+      escenas: exportEscenas,
       fichas: state.fichas,
       figuras: state.figuras,
       dibujos: state.dibujos,
@@ -4179,7 +4249,7 @@
       historial: state.historial,
       galeria: state.galeria
     };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -4189,7 +4259,7 @@
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast('💾 Copia de seguridad de emergencia descargada.', 'success');
+    showToast('💾 Copia de seguridad de emergencia descargada en tu PC.', 'success');
   }
 
   async function loadDmBackupsList() {
