@@ -103,6 +103,45 @@
     return isNaN(n) ? fallback : n;
   }
 
+  // Helper para comprimir y redimensionar imágenes subidas antes de enviarlas o guardarlas en base de datos
+  async function compressImageFile(file, maxWidth = 1200, maxHeight = 1200, quality = 0.82) {
+    if (!file || !file.type.startsWith('image/')) return null;
+    if (file.type === 'image/gif') {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let w = img.width;
+          let h = img.height;
+          if (w > maxWidth || h > maxHeight) {
+            const ratio = Math.min(maxWidth / w, maxHeight / h);
+            w = Math.round(w * ratio);
+            h = Math.round(h * ratio);
+          }
+          const offCanvas = document.createElement('canvas');
+          offCanvas.width = w;
+          offCanvas.height = h;
+          const offCtx = offCanvas.getContext('2d');
+          offCtx.drawImage(img, 0, 0, w, h);
+          resolve(offCanvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => resolve(e.target.result);
+        img.src = e.target.result;
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  }
+
   // --- INICIALIZACIÓN ---
   window.addEventListener('DOMContentLoaded', () => {
     // Generar o cargar usuario id local basado en nombre de usuario si existe
@@ -891,7 +930,8 @@
     }
   }
 
-  function rafRender() {
+  let lastCombatPulseTime = 0;
+  function rafRender(timestamp) {
     rafScheduled = false;
     const shouldAnimateCombat = state.combate && state.combate.activo && state.combate.participantes && state.combate.participantes.length > 0;
     if (activeDiceAnimations.length > 0) {
@@ -900,13 +940,27 @@
     }
     const hasDiceAnim = activeDiceAnimations.length > 0;
 
-    if (isDirty || shouldAnimateCombat || hasDiceAnim) {
+    let shouldRender = isDirty;
+    if (!shouldRender && hasDiceAnim) {
+      shouldRender = true;
+    }
+    if (!shouldRender && shouldAnimateCombat) {
+      // Pulso suave de combate en reposo a ~25 FPS para no saturar la CPU
+      const now = timestamp || Date.now();
+      if (now - lastCombatPulseTime >= 40) {
+        lastCombatPulseTime = now;
+        shouldRender = true;
+      }
+    }
+
+    if (shouldRender) {
       isDirty = false;
       renderCanvas();
-      if (shouldAnimateCombat || hasDiceAnim) {
-        rafScheduled = true;
-        requestAnimationFrame(rafRender);
-      }
+    }
+
+    if (shouldAnimateCombat || hasDiceAnim) {
+      rafScheduled = true;
+      requestAnimationFrame(rafRender);
     }
   }
 
@@ -1056,7 +1110,7 @@
     return v.toUpperCase();
   }
 
-  // Renderizado Principal del Tablero
+  // Renderizado Principal del Tablero Optimizado
   function renderCanvas() {
     if (!ctx || !canvas) return;
 
@@ -1065,6 +1119,13 @@
     const cols = state.escenaActiva?.config_grid_x || state.partida?.config_grid_x || 40;
     const rows = state.escenaActiva?.config_grid_y || state.partida?.config_grid_y || 40;
     const tileSize = viewport.tileSize; // Se usa base para no escalar 2 veces
+    const scaledTileSize = tileSize * viewport.zoom;
+
+    // Viewport Culling: Casillas visibles en la pantalla actual (+ margen de seguridad)
+    const viewLeft = Math.max(0, Math.floor(-viewport.panX / scaledTileSize) - 1);
+    const viewRight = Math.min(cols, Math.ceil((canvas.width - viewport.panX) / scaledTileSize) + 1);
+    const viewTop = Math.max(0, Math.floor(-viewport.panY / scaledTileSize) - 1);
+    const viewBottom = Math.min(rows, Math.ceil((canvas.height - viewport.panY) / scaledTileSize) + 1);
 
     ctx.save();
     ctx.translate(viewport.panX, viewport.panY);
@@ -1089,19 +1150,24 @@
       ctx.fillRect(0, 0, mapWidth, mapHeight);
     }
 
-    // 2. Dibujar Grid de Casillas (Batch unificado en 1 solo path para máximo rendimiento)
+    // 2. Dibujar Grid de Casillas (Solo las líneas visibles en el viewport)
+    const gridStartX = viewLeft * tileSize;
+    const gridEndX = viewRight * tileSize;
+    const gridStartY = viewTop * tileSize;
+    const gridEndY = viewBottom * tileSize;
+
     ctx.strokeStyle = 'rgba(201, 168, 76, 0.18)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let c = 0; c <= cols; c++) {
+    for (let c = viewLeft; c <= viewRight; c++) {
       const cx = c * tileSize;
-      ctx.moveTo(cx, 0);
-      ctx.lineTo(cx, mapHeight);
+      ctx.moveTo(cx, gridStartY);
+      ctx.lineTo(cx, gridEndY);
     }
-    for (let r = 0; r <= rows; r++) {
+    for (let r = viewTop; r <= viewBottom; r++) {
       const ry = r * tileSize;
-      ctx.moveTo(0, ry);
-      ctx.lineTo(mapWidth, ry);
+      ctx.moveTo(gridStartX, ry);
+      ctx.lineTo(gridEndX, ry);
     }
     ctx.stroke();
 
@@ -1137,13 +1203,20 @@
       ctx.stroke();
     }
 
-    // 4. Dibujar Figuras Geométricas (Áreas de Efecto)
+    // 4. Dibujar Figuras Geométricas (Áreas de Efecto con Viewport Culling)
     if (state.figuras && state.figuras.length > 0) {
       state.figuras.forEach(fig => {
-        const centerX = fig.x * tileSize;
-        const centerY = fig.y * tileSize;
         const anchoCasillas = fig.ancho !== undefined ? parseFloat(fig.ancho) : (parseFloat(fig.tamanio) || 1);
         const largoCasillas = fig.alto !== undefined ? parseFloat(fig.alto) : (parseFloat(fig.tamanio) || 1);
+        const maxRadius = Math.max(anchoCasillas, largoCasillas) + 1;
+        // Culling: saltar figuras fuera de la pantalla
+        if (fig.x + maxRadius < viewLeft || fig.x - maxRadius > viewRight ||
+            fig.y + maxRadius < viewTop || fig.y - maxRadius > viewBottom) {
+          return;
+        }
+
+        const centerX = fig.x * tileSize;
+        const centerY = fig.y * tileSize;
         const wPx = anchoCasillas * tileSize;
         const hPx = largoCasillas * tileSize;
 
@@ -1169,7 +1242,6 @@
               ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
             }
           } else {
-            // Legacy círculo (tamanio = radio)
             const radius = (parseFloat(fig.tamanio) || 1) * tileSize;
             ctx.arc(0, 0, radius, 0, Math.PI * 2);
           }
@@ -1192,13 +1264,9 @@
           ctx.stroke();
         }
 
-        // Deshacer rotación para la etiqueta, si no quieres que el texto rote.
-        // Pero si la rotación se deshace, hay que recordar que ya estamos en centerX, centerY.
         ctx.restore();
         ctx.save();
 
-
-        // Etiqueta de la figura
         if (fig.etiqueta) {
           ctx.globalAlpha = 1.0;
           ctx.fillStyle = '#ffffff';
@@ -1210,7 +1278,7 @@
       });
     }
 
-    // 5. Dibujar Fichas / Tokens de Personaje (búsqueda de selección O(1) con Set)
+    // 5. Dibujar Fichas / Tokens de Personaje con Viewport Culling y O(1) Selección
     const selectedSet = new Set(selectedFichasIds);
     const fichasEnEscena = (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id);
     fichasEnEscena.forEach(ficha => {
@@ -1221,12 +1289,18 @@
         }
       }
 
+      // Multiplicador de tamaño (Tiny, Enano, Mediano, Grande, Enorme, Gargantúa, Supergargantúa, Gigante)
+      const scaleMult = getFichaScaleMult(ficha);
+
+      // Culling: omitir tokens fuera de la pantalla actual para máximo rendimiento
+      if (ficha.x + scaleMult < viewLeft || ficha.x > viewRight ||
+          ficha.y + scaleMult < viewTop || ficha.y > viewBottom) {
+        return;
+      }
+
       const isMonster = ficha.tipo === 'monstruo' || ficha.tipo === 'npc';
       const isPlayerView = !state.usuario.esDM;
       const visibility = getFichaVisibility(ficha);
-
-      // Calcular multiplicador de tamaño (Tiny, Enano, Mediano, Grande, Enorme, Gargantúa, Supergargantúa, Gigante)
-      const scaleMult = getFichaScaleMult(ficha);
 
       const tokenWidth = tileSize * scaleMult;
       const tokenHeight = tileSize * scaleMult;
@@ -1241,16 +1315,6 @@
         ctx.globalAlpha = 0.45;
       }
 
-      // Borde exterior / resplandor si está seleccionada
-      if (selectedSet.has(ficha.id)) {
-        ctx.shadowColor = '#f0d060';
-        ctx.shadowBlur = 15;
-        ctx.beginPath();
-        ctx.arc(px + tokenWidth / 2, py + tokenHeight / 2, tokenWidth / 2 + 2, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-      }
-
       // Dibujar Imagen o Avatar del Token
       const radius = tokenWidth / 2;
       const cx = px + radius;
@@ -1261,7 +1325,6 @@
       ctx.clip();
 
       if (isMonster && isPlayerView && !visibility.imagen) {
-        // Silueta misteriosa para jugadores ante monstruos no revelados
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(px, py, tokenWidth, tokenHeight);
         ctx.fillStyle = '#c9a84c';
@@ -1276,8 +1339,9 @@
           img.src = ficha.imagen;
           tokenImagesCache[ficha.imagen] = img;
           img.onload = () => markDirty();
+          img.onerror = () => { img._failed = true; markDirty(); };
         }
-        if (img.complete && img.naturalWidth !== 0) {
+        if (img.complete && img.naturalWidth > 0 && !img._failed) {
           ctx.drawImage(img, px, py, tokenWidth, tokenHeight);
         } else {
           drawFallbackToken(ctx, px, py, tokenWidth, tokenHeight, ficha);
@@ -1292,7 +1356,18 @@
         ctx.globalAlpha = 0.4;
       }
 
-      // Aureola / Resplandor animado de Combate si es el turno activo de esta ficha
+      // Borde exterior nítido si está seleccionada (render rápido sin software shadow blur)
+      if (selectedSet.has(ficha.id)) {
+        ctx.save();
+        ctx.strokeStyle = '#f0d060';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius + 3, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Aureola animada de Combate (render rápido con gradiente alfa en lugar de shadowBlur)
       const esTurnoCombate = state.combate && state.combate.activo &&
         state.combate.participantes &&
         state.combate.participantes[state.combate.turnoIndex]?.id === ficha.id;
@@ -1300,38 +1375,34 @@
       if (esTurnoCombate) {
         ctx.save();
         const pulse = (Math.sin(Date.now() / 250) + 1) / 2; // 0 a 1 suave
-        const haloR = radius + 6 + pulse * 4;
-        ctx.shadowColor = '#f0d060';
-        ctx.shadowBlur = 14 + pulse * 10;
-        ctx.strokeStyle = '#f0d060';
+        const haloR = radius + 5 + pulse * 3;
+        ctx.strokeStyle = `rgba(240, 208, 96, ${0.75 + pulse * 0.25})`;
         ctx.lineWidth = 3 + pulse * 1.5;
         ctx.beginPath();
         ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
         ctx.stroke();
 
-        ctx.strokeStyle = 'rgba(201, 168, 76, 0.6)';
+        ctx.strokeStyle = `rgba(201, 168, 76, ${0.3 + pulse * 0.3})`;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.arc(cx, cy, haloR + 4, 0, Math.PI * 2);
+        ctx.arc(cx, cy, haloR + 3, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }
 
       // Dibujar Borde Dorado del Token (o del color del aro)
       const colorAro = ficha.color_aro || '#c9a84c';
-      
-      // Si tiene color personalizado, lo hacemos más grueso/aura
       ctx.strokeStyle = colorAro;
       ctx.lineWidth = ficha.color_aro ? 3 : 2;
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Si tiene color_aro, le damos un leve resplandor interior/exterior al aro
+      // Si tiene color_aro personalizado, leve resplandor limpio
       if (ficha.color_aro) {
         ctx.strokeStyle = colorAro;
-        ctx.globalAlpha = 0.5;
-        ctx.lineWidth = 6;
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = 5;
         ctx.beginPath();
         ctx.arc(cx, cy, radius, 0, Math.PI * 2);
         ctx.stroke();
@@ -2007,11 +2078,8 @@
       let imagenPortada = imgUrlEl ? imgUrlEl.value.trim() : '';
       if (imgFileEl && imgFileEl.files && imgFileEl.files[0]) {
         try {
-          imagenPortada = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.readAsDataURL(imgFileEl.files[0]);
-          });
+          const comp = await compressImageFile(imgFileEl.files[0], 800, 500, 0.82);
+          if (comp) imagenPortada = comp;
         } catch (_) {}
       }
 
@@ -2078,17 +2146,14 @@
     });
 
     // Vista previa al seleccionar archivo local de portada
-    dom.editGameImgFile?.addEventListener('change', (e) => {
+    dom.editGameImgFile?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (file) {
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-          if (dom.editGamePreviewImg) {
-            dom.editGamePreviewImg.src = evt.target.result;
-            dom.editGamePreviewImg.style.display = 'block';
-          }
-        };
-        reader.readAsDataURL(file);
+        const compressed = await compressImageFile(file, 800, 500, 0.82);
+        if (dom.editGamePreviewImg && compressed) {
+          dom.editGamePreviewImg.src = compressed;
+          dom.editGamePreviewImg.style.display = 'block';
+        }
       }
     });
 
@@ -2102,11 +2167,8 @@
       let nuevaImagen = dom.editGameImgUrl ? dom.editGameImgUrl.value.trim() : '';
       if (dom.editGameImgFile && dom.editGameImgFile.files && dom.editGameImgFile.files[0]) {
         try {
-          nuevaImagen = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.readAsDataURL(dom.editGameImgFile.files[0]);
-          });
+          const comp = await compressImageFile(dom.editGameImgFile.files[0], 800, 500, 0.82);
+          if (comp) nuevaImagen = comp;
         } catch (_) {}
       }
 
@@ -2335,14 +2397,13 @@
       });
     });
 
-    dom.fichaImgFile?.addEventListener('change', (e) => {
+    dom.fichaImgFile?.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (file) {
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-          dom.fichaImgPreview.src = evt.target.result;
-        };
-        reader.readAsDataURL(file);
+        const compressed = await compressImageFile(file, 400, 400, 0.85);
+        if (dom.fichaImgPreview && compressed) {
+          dom.fichaImgPreview.src = compressed;
+        }
       }
     });
 
@@ -3241,7 +3302,17 @@
     });
   }
 
+  let renderFichasRaf = false;
   function renderFichasList() {
+    if (renderFichasRaf) return;
+    renderFichasRaf = true;
+    requestAnimationFrame(() => {
+      renderFichasRaf = false;
+      renderFichasListInternal();
+    });
+  }
+
+  function renderFichasListInternal() {
     if (!dom.fichasList) return;
     dom.fichasList.innerHTML = '';
     const filter = (dom.filterFichasInput?.value || '').toLowerCase();

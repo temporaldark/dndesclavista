@@ -6,9 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>VTT D&D 5e - Homebrew Tabletop Multijugador</title>
 
-  <!-- Google Fonts: Cinzel para títulos temáticos, Roboto para interfaz -->
+  <!-- Preconexiones para acelerar carga de fuentes e iconos externos -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link
     href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap"
     rel="stylesheet">
@@ -16,12 +17,8 @@
   <!-- FontAwesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
-
   <!-- Estilos Temáticos D&D -->
-  <link rel="stylesheet" href="style.css?v=3.1">
+  <link rel="stylesheet" href="style.css?v=3.2">
 </head>
 
 <body>
@@ -997,9 +994,15 @@
 
   <!-- Cargar Socket.io -->
   <script src="/socket.io/socket.io.js"></script>
-  <script>if (typeof io === 'undefined') document.write('<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"><\/script>');</script>
+  <script>
+    if (typeof io === 'undefined') {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.socket.io/4.6.1/socket.io.min.js';
+      document.head.appendChild(s);
+    }
+  </script>
   <!-- Lógica de la Aplicación -->
-  <script src="app.js?v=3.1"></script>
+  <script src="app.js?v=3.2" defer></script>
 </body>
 
 </html>

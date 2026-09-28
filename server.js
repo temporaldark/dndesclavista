@@ -18,6 +18,7 @@ const {
   deletePartidaFiles
 } = require('./saves_manager');
 
+const compression = require('compression');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -32,17 +33,27 @@ const io = new Server(server, {
   }
 });
 
+// 1. Compresión HTTP GZIP/Deflate para acelerar carga de JS, CSS, HTML y respuestas REST hasta un 85%
+app.use(compression({
+  threshold: 1024 // Comprime todo payload mayor a 1KB
+}));
+
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
-// Servir archivos estáticos deshabilitando caché para asegurar que los scripts siempre estén actualizados
+
+// 2. Servir archivos estáticos con ETag y encabezados de caché eficientes
 app.use(express.static(path.join(__dirname, 'public'), {
-  maxAge: 0,
-  etag: false,
-  lastModified: false,
-  setHeaders: (res) => {
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
+  maxAge: '1d',
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      // HTML siempre valida con ETag para recibir 304 instantáneo o actualizar si cambia
+      res.set('Cache-Control', 'no-cache');
+    } else {
+      // JS, CSS, fuentes e imágenes se benefician de caché del navegador con validación revalidate
+      res.set('Cache-Control', 'public, max-age=86400, must-revalidate');
+    }
   }
 }));
 
@@ -69,22 +80,31 @@ const connectedUsers = new Map();
 
 // Throttling de escaneo de backups en disco para respuestas ultra rápidas
 let lastAutoRestoreTimestamp = 0;
+let isAutoRestoring = false;
 async function autoRestoreFilesThrottled() {
   const now = Date.now();
-  if (now - lastAutoRestoreTimestamp > 30000) { // Máximo cada 30 segundos
+  if (now - lastAutoRestoreTimestamp > 60000 && !isAutoRestoring) { // Máximo cada 60 segundos
     lastAutoRestoreTimestamp = now;
-    await autoRestoreFromFiles();
+    isAutoRestoring = true;
+    try {
+      await autoRestoreFromFiles();
+    } catch (e) {
+      console.warn('[AutoRestore]', e.message);
+    } finally {
+      isAutoRestoring = false;
+    }
   }
 }
 
-// Listar todas las partidas guardadas
+// Listar todas las partidas guardadas (Respuesta instantánea con campos optimizados)
 app.get('/api/partidas', async (req, res) => {
   try {
-    // Sincronizar con archivos de guardado independientes en disco con throttle
-    await autoRestoreFilesThrottled();
+    // Sincronización asíncrona en segundo plano (no bloquea el response HTTP)
+    autoRestoreFilesThrottled().catch(() => {});
 
     const partidas = await dbAll(`
-      SELECT p.*, 
+      SELECT p.id, p.nombre, p.codigo, p.dm_id, p.escena_activa_id, p.fecha_creacion, p.fecha_modificacion,
+             p.config_grid_x, p.config_grid_y, p.config_casilla, p.imagen_portada,
         (SELECT COUNT(DISTINCT f.jugador_id) FROM fichas f WHERE f.partida_id = p.id AND f.jugador_id IS NOT NULL) as total_jugadores
       FROM partidas p 
       ORDER BY p.fecha_modificacion DESC

@@ -339,14 +339,36 @@ async function autoRestoreFromFiles() {
   }
 
   // 2. Escanear todos los archivos independientes partida_*.json
-  const saveFiles = fs.readdirSync(savesDir).filter(f => f.startsWith('partida_') && f.endsWith('.json'));
+  let saveFiles = [];
+  try {
+    saveFiles = (await fs.promises.readdir(savesDir)).filter(f => f.startsWith('partida_') && f.endsWith('.json'));
+  } catch (_) {
+    return;
+  }
   if (saveFiles.length === 0) return;
 
-  let restoredCount = 0;
   for (const filename of saveFiles) {
     try {
       const filePath = path.join(savesDir, filename);
-      const content = fs.readFileSync(filePath, 'utf8');
+      const codeMatch = filename.match(/^partida_([A-Za-z0-9]{6})\.json$/i);
+      const codeFromFilename = codeMatch ? codeMatch[1].toUpperCase() : null;
+
+      // Optimización clave: Si el código ya existe en BD y tiene escenas, no leer ni parsear JSON de 30MB
+      if (codeFromFilename) {
+        const exists = await dbGet(
+          `SELECT id, fecha_modificacion FROM partidas WHERE codigo = ?`,
+          [codeFromFilename]
+        );
+        if (exists) {
+          const escenasDb = await dbGet(`SELECT COUNT(*) as count FROM escenas WHERE partida_id = ?`, [exists.id]);
+          if (escenasDb && escenasDb.count > 0) {
+            continue; // Partida ya existe y está completa, cero I/O de disco
+          }
+        }
+      }
+
+      // Solo si no existe o faltan escenas leemos el archivo de forma asíncrona
+      const content = await fs.promises.readFile(filePath, 'utf8');
       const data = JSON.parse(content);
 
       if (!data || !data.partida || (!data.partida.id && !data.partida.codigo)) continue;
@@ -360,9 +382,7 @@ async function autoRestoreFromFiles() {
       if (!exists) {
         console.log(`⚡ [SavesManager] Partida "${data.partida.nombre}" (${data.partida.codigo}) no encontrada en BD. Restaurando automáticamente...`);
         await importPartidaDataIntoDb(data, false);
-        restoredCount++;
       } else {
-        // Si la base de datos no tiene escenas pero el archivo JSON sí las tiene, o si el archivo JSON es más reciente que la BD
         const escenasDb = await dbGet(`SELECT COUNT(*) as count FROM escenas WHERE partida_id = ?`, [exists.id]);
         const fileHasScenes = (data.escenas && data.escenas.length > 0);
         const fileDate = new Date(data.partida.fecha_modificacion || 0).getTime();
@@ -371,7 +391,6 @@ async function autoRestoreFromFiles() {
         if ((escenasDb?.count === 0 && fileHasScenes) || (fileDate > dbDate + 2000)) {
           console.log(`🔄 [SavesManager] Sincronizando partida "${data.partida.nombre}" (${data.partida.codigo}) con versión más reciente desde archivo JSON...`);
           await importPartidaDataIntoDb(data, true);
-          restoredCount++;
         }
       }
     } catch (err) {
