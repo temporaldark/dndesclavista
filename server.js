@@ -67,11 +67,21 @@ const connectedUsers = new Map();
 
 // --- REST ENDPOINTS ---
 
+// Throttling de escaneo de backups en disco para respuestas ultra rápidas
+let lastAutoRestoreTimestamp = 0;
+async function autoRestoreFilesThrottled() {
+  const now = Date.now();
+  if (now - lastAutoRestoreTimestamp > 30000) { // Máximo cada 30 segundos
+    lastAutoRestoreTimestamp = now;
+    await autoRestoreFromFiles();
+  }
+}
+
 // Listar todas las partidas guardadas
 app.get('/api/partidas', async (req, res) => {
   try {
-    // Sincronizar automáticamente con archivos de guardado independientes en disco
-    await autoRestoreFromFiles();
+    // Sincronizar con archivos de guardado independientes en disco con throttle
+    await autoRestoreFilesThrottled();
 
     const partidas = await dbAll(`
       SELECT p.*, 

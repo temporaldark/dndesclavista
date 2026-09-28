@@ -543,8 +543,10 @@ async function initDb() {
   try { await dbRun(`ALTER TABLE historial_dados ADD COLUMN nombre_ficha TEXT`); } catch (_) {}
   try { await dbRun(`ALTER TABLE mensajes ADD COLUMN nombre_ficha TEXT`); } catch (_) {}
 
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_partidas_codigo ON partidas(codigo)`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_fichas_partida ON fichas(partida_id)`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_fichas_escena ON fichas(escena_id)`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_fichas_partida_escena ON fichas(partida_id, escena_id)`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_escenas_partida ON escenas(partida_id)`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_posiciones_ficha_escena ON posiciones_fichas(ficha_id, escena_id)`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_figuras_escena ON figuras(escena_id)`);

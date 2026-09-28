@@ -844,7 +844,7 @@
         resultado,
         startTime: Date.now()
       });
-      requestAnimationFrame(animateLoop);
+      markDirty();
     });
 
     socket.on('historial_limpiado', () => {
@@ -878,6 +878,11 @@
   }
 
   // --- CANVAS & VTT ENGINE ---
+  let cachedCanvasRect = null;
+  function updateCanvasRect() {
+    if (canvas) cachedCanvasRect = canvas.getBoundingClientRect();
+  }
+
   function markDirty() {
     isDirty = true;
     if (!rafScheduled) {
@@ -889,10 +894,16 @@
   function rafRender() {
     rafScheduled = false;
     const shouldAnimateCombat = state.combate && state.combate.activo && state.combate.participantes && state.combate.participantes.length > 0;
-    if (isDirty || shouldAnimateCombat || activeDiceAnimations.length > 0) {
+    if (activeDiceAnimations.length > 0) {
+      const now = Date.now();
+      activeDiceAnimations = activeDiceAnimations.filter(a => now - a.startTime < 2500);
+    }
+    const hasDiceAnim = activeDiceAnimations.length > 0;
+
+    if (isDirty || shouldAnimateCombat || hasDiceAnim) {
       isDirty = false;
       renderCanvas();
-      if (shouldAnimateCombat || activeDiceAnimations.length > 0) {
+      if (shouldAnimateCombat || hasDiceAnim) {
         rafScheduled = true;
         requestAnimationFrame(rafRender);
       }
@@ -906,6 +917,7 @@
     resizeCanvas();
 
     window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('scroll', updateCanvasRect, { passive: true });
 
     // Eventos de Mouse
     dom.canvasContainer.addEventListener('mousedown', handleMouseDown);
@@ -924,6 +936,7 @@
     if (!dom.canvasWrapper || !canvas) return;
     canvas.width = dom.canvasWrapper.clientWidth;
     canvas.height = dom.canvasWrapper.clientHeight;
+    updateCanvasRect();
     markDirty();
   }
 
@@ -1000,11 +1013,12 @@
     return viewport.tileSize * viewport.zoom;
   }
 
-  // Transforma coordenadas de pantalla a casillas del grid
+  // Transforma coordenadas de pantalla a casillas del grid (con caché de rect para evitar Layout Thrashing)
   function screenToGrid(screenX, screenY) {
-    const rect = canvas.getBoundingClientRect();
-    const x = (screenX - rect.left - viewport.panX) / getTileSize();
-    const y = (screenY - rect.top - viewport.panY) / getTileSize();
+    const rect = cachedCanvasRect || (canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0 });
+    const tileSize = getTileSize();
+    const x = (screenX - rect.left - viewport.panX) / tileSize;
+    const y = (screenY - rect.top - viewport.panY) / tileSize;
     return { x, y };
   }
 
@@ -1196,7 +1210,8 @@
       });
     }
 
-    // 5. Dibujar Fichas / Tokens de Personaje
+    // 5. Dibujar Fichas / Tokens de Personaje (búsqueda de selección O(1) con Set)
+    const selectedSet = new Set(selectedFichasIds);
     const fichasEnEscena = (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id);
     fichasEnEscena.forEach(ficha => {
       // Si la ficha está oculta por el DM: jugadores no la ven en absoluto, DM la ve translúcida
@@ -1227,11 +1242,9 @@
       }
 
       // Borde exterior / resplandor si está seleccionada
-      if (selectedFichasIds.includes(ficha.id)) {
+      if (selectedSet.has(ficha.id)) {
         ctx.shadowColor = '#f0d060';
         ctx.shadowBlur = 15;
-        ctx.shadowColor = '#f0d060';
-        ctx.shadowBlur = 10;
         ctx.beginPath();
         ctx.arc(px + tokenWidth / 2, py + tokenHeight / 2, tokenWidth / 2 + 2, 0, Math.PI * 2);
         ctx.stroke();
@@ -1422,26 +1435,38 @@
     ctx.fillText((ficha.nombre || '?').charAt(0).toUpperCase(), px + w / 2, py + h / 2);
   }
 
-  function animateLoop() {
-    renderCanvas();
-    activeDiceAnimations = activeDiceAnimations.filter(a => Date.now() - a.startTime < 2500);
-    if (activeDiceAnimations.length > 0) {
-      requestAnimationFrame(animateLoop);
-    }
-  }
-
   let lastMoveEmitTime = 0;
+  let debounceSaveFigTimer = null;
+  function debouncedSaveFigure(fig) {
+    if (debounceSaveFigTimer) clearTimeout(debounceSaveFigTimer);
+    debounceSaveFigTimer = setTimeout(() => {
+      if (state.partida?.id && state.escenaActiva?.id && fig) {
+        socket?.emit('guardar_figura', {
+          partidaId: state.partida.id,
+          escenaId: state.escenaActiva.id,
+          figuraData: fig
+        });
+      }
+    }, 250);
+  }
 
   // --- MANEJADORES DE EVENTOS MOUSE / TOUCH EN CANVAS ---
   function handleMouseDown(e) {
+    updateCanvasRect();
     const gridPos = screenToGrid(e.clientX, e.clientY);
 
     if (activeTool === 'move') {
-      // Buscar si hizo clic sobre alguna ficha
-      const clickedFicha = [...(state.fichas || [])].reverse().find(f => {
+      // Buscar si hizo clic sobre alguna ficha (búsqueda inversa eficiente sin copiar array)
+      let clickedFicha = null;
+      const fichasArr = state.fichas || [];
+      for (let i = fichasArr.length - 1; i >= 0; i--) {
+        const f = fichasArr[i];
         const mult = getFichaScaleMult(f);
-        return gridPos.x >= f.x && gridPos.x <= f.x + mult && gridPos.y >= f.y && gridPos.y <= f.y + mult;
-      });
+        if (gridPos.x >= f.x && gridPos.x <= f.x + mult && gridPos.y >= f.y && gridPos.y <= f.y + mult) {
+          clickedFicha = f;
+          break;
+        }
+      }
 
       if (clickedFicha) {
         // Verificar permisos: DM o dueño directo de la ficha
@@ -1716,11 +1741,7 @@
     if (myFig) {
       const scale = e.deltaY < 0 ? 1.1 : 0.9;
       myFig.tamanio = Math.max(0.5, myFig.tamanio * scale);
-      socket?.emit('guardar_figura', {
-        partidaId: state.partida.id,
-        escenaId: state.escenaActiva.id,
-        figuraData: myFig
-      });
+      debouncedSaveFigure(myFig);
       markDirty();
       return;
     }
@@ -1732,7 +1753,7 @@
   function zoomAt(screenX, screenY, factor) {
     const newZoom = Math.max(0.05, Math.min(4.0, viewport.zoom * factor));
     if (newZoom === viewport.zoom) return;
-    const rect = canvas.getBoundingClientRect();
+    const rect = cachedCanvasRect || (canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0 });
     const mouseX = screenX - rect.left;
     const mouseY = screenY - rect.top;
 
@@ -1748,6 +1769,7 @@
   let touchStartDist = 0;
 
   function handleTouchStart(e) {
+    updateCanvasRect();
     if (e.touches.length === 1) {
       const touch = e.touches[0];
       handleMouseDown({ clientX: touch.clientX, clientY: touch.clientY });
@@ -1783,11 +1805,7 @@
 
       if (myFig) {
         myFig.tamanio = Math.max(0.5, myFig.tamanio * factor);
-        socket?.emit('guardar_figura', {
-          partidaId: state.partida.id,
-          escenaId: state.escenaActiva.id,
-          figuraData: myFig
-        });
+        debouncedSaveFigure(myFig);
         markDirty();
       } else {
         zoomAt(midX, midY, factor);
@@ -2271,7 +2289,11 @@
         dom.tabPanes.forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
         const targetPane = document.getElementById(btn.dataset.tab);
-        if (targetPane) targetPane.classList.add('active');
+        if (targetPane) {
+          targetPane.classList.add('active');
+          if (btn.dataset.tab === 'tab-historial') renderHistoryTable();
+          if (btn.dataset.tab === 'tab-chat') scrollChatToBottom();
+        }
       });
     });
 
@@ -3245,6 +3267,8 @@
       dom.btnSortInitiative.classList.toggle('active', sortInitiative);
     }
 
+    const fragment = document.createDocumentFragment();
+
     listToRender.forEach(ficha => {
       if (filter && !ficha.nombre.toLowerCase().includes(filter)) return;
 
@@ -3414,8 +3438,10 @@
         markDirty();
       });
 
-      dom.fichasList.appendChild(card);
+      fragment.appendChild(card);
     });
+
+    dom.fichasList.appendChild(fragment);
   }
 
   function renderTokenSelects() {
@@ -3866,12 +3892,17 @@
   }
 
   function renderHistoryTable() {
+    if (!dom.historyTableBody) return;
+    const tabHistorial = document.getElementById('tab-historial');
+    if (tabHistorial && !tabHistorial.classList.contains('active')) return;
+
     dom.historyTableBody.innerHTML = '';
-    const q = dom.searchHistoryInput.value.toLowerCase();
+    const q = (dom.searchHistoryInput?.value || '').toLowerCase();
     const filtered = (state.historial || []).filter(h => (h.nombre_usuario || '').toLowerCase().includes(q) || (h.nombre_ficha || '').toLowerCase().includes(q));
 
     const startIdx = (historyPage - 1) * historyPerPage;
     const pageItems = filtered.slice(startIdx, startIdx + historyPerPage);
+    const fragment = document.createDocumentFragment();
 
     pageItems.forEach(item => {
       const tr = document.createElement('tr');
@@ -3883,22 +3914,26 @@
         <td style="font-weight:bold; color:#f0d060;">${item.resultado}</td>
         <td style="font-size:0.75rem; color:#94a3b8;">${new Date(item.fecha).toLocaleTimeString()}</td>
       `;
-      dom.historyTableBody.appendChild(tr);
+      fragment.appendChild(tr);
     });
+    dom.historyTableBody.appendChild(fragment);
 
     const totalPages = Math.ceil(filtered.length / historyPerPage) || 1;
-    dom.histPageInfo.textContent = `Página ${historyPage} de ${totalPages}`;
+    if (dom.histPageInfo) dom.histPageInfo.textContent = `Página ${historyPage} de ${totalPages}`;
   }
 
   function renderQuickHistory() {
+    if (!dom.quickDiceHistory) return;
     dom.quickDiceHistory.innerHTML = '';
     const last5 = (state.historial || []).slice(0, 5);
+    const fragment = document.createDocumentFragment();
     last5.forEach(h => {
       const div = document.createElement('div');
       const fichaTag = h.nombre_ficha ? ` <span style="color:#38bdf8; font-size:0.85em;">[${h.nombre_ficha}]</span>` : '';
       div.innerHTML = `<strong>${h.nombre_usuario}</strong>${fichaTag}: ${h.formula} = <strong class="gold-text">${h.resultado}</strong> (${h.tipo})`;
-      dom.quickDiceHistory.appendChild(div);
+      fragment.appendChild(div);
     });
+    dom.quickDiceHistory.appendChild(fragment);
   }
 
   function openEditGameModal(partidaData) {
