@@ -46,6 +46,12 @@ async function exportPartidaData(partidaId) {
   partida.nombre = limpiarNombrePartida(partida.nombre);
 
   const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [partidaId]);
+  // Garantizar que la escena activa apunte a una escena válida (priorizar la que tiene mapa)
+  if (!partida.escena_activa_id || !escenas.some(e => e.id === partida.escena_activa_id)) {
+    const conMapa = escenas.find(e => e.mapa);
+    partida.escena_activa_id = conMapa ? conMapa.id : (escenas[0]?.id || null);
+  }
+
   const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ?`, [partidaId]);
   const figuras = await dbAll(`SELECT f.* FROM figuras f JOIN escenas e ON f.escena_id = e.id WHERE e.partida_id = ?`, [partidaId]);
   const dibujos = await dbAll(`SELECT d.* FROM dibujos d JOIN escenas e ON d.escena_id = e.id WHERE e.partida_id = ?`, [partidaId]);
@@ -210,12 +216,23 @@ async function importPartidaDataIntoDb(data, overrideExisting = false) {
     );
 
     // Insertar escenas
+    let targetEscenaActivaId = null;
     for (const esc of escenas) {
+      if (esc.id === partida.escena_activa_id) {
+        targetEscenaActivaId = esc.id;
+      } else if (!targetEscenaActivaId && esc.mapa) {
+        targetEscenaActivaId = esc.id;
+      }
       await dbRun(
         `INSERT OR REPLACE INTO escenas (id, partida_id, nombre, mapa, config_grid_x, config_grid_y, config_casilla)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [esc.id, partida.id, esc.nombre, esc.mapa || null, esc.config_grid_x || 40, esc.config_grid_y || 40, esc.config_casilla || 5]
       );
+    }
+
+    const finalActivaId = targetEscenaActivaId || partida.escena_activa_id || (escenas[0]?.id || null);
+    if (finalActivaId) {
+      await dbRun(`UPDATE partidas SET escena_activa_id = ? WHERE id = ?`, [finalActivaId, partida.id]);
     }
 
     // Insertar fichas

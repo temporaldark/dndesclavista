@@ -282,6 +282,9 @@ app.get('/api/partidas/:id/export', async (req, res) => {
     if (!partida) return res.status(404).json({ error: 'Partida no encontrada' });
     partida.nombre = limpiarNombrePartida(partida.nombre);
 
+    // Asegurar que si hay timers de guardado pendientes para esta partida, se persistan
+    await savePartidaToFile(id, false);
+
     const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [id]);
     const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ?`, [id]);
     const figuras = await dbAll(`SELECT f.* FROM figuras f JOIN escenas e ON f.escena_id = e.id WHERE e.partida_id = ?`, [id]);
@@ -291,8 +294,14 @@ app.get('/api/partidas/:id/export', async (req, res) => {
     const historial = await dbAll(`SELECT * FROM historial_dados WHERE partida_id = ?`, [id]);
     const galeria = await dbAll(`SELECT * FROM galeria WHERE partida_id = ?`, [id]);
 
+    // Garantizar que la escena activa apunte a una escena válida (priorizar la que tiene mapa)
+    if (!partida.escena_activa_id || !escenas.some(e => e.id === partida.escena_activa_id)) {
+      const conMapa = escenas.find(e => e.mapa);
+      partida.escena_activa_id = conMapa ? conMapa.id : (escenas[0]?.id || null);
+    }
+
     const backup = {
-      version: '1.2.0',
+      version: '2.0.0',
       fechaExport: new Date().toISOString(),
       partida,
       escenas,
@@ -308,7 +317,7 @@ app.get('/api/partidas/:id/export', async (req, res) => {
     const fileName = `sesion_dnd_${(partida.nombre || 'partida').replace(/[^a-zA-Z0-9]/g, '_')}_${partida.codigo}.json`;
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.send(JSON.stringify(backup, null, 2));
+    res.send(JSON.stringify(backup));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -354,12 +363,18 @@ app.post('/api/partidas/import', async (req, res) => {
       );
 
       let firstNewEscenaId = null;
+      let targetEscenaActivaId = null;
 
       // Insertar escenas
       for (const esc of escenas) {
         const newEscenaId = uuidv4();
         escenaIdMap.set(esc.id, newEscenaId);
-        if (!firstNewEscenaId || esc.id === partida.escena_activa_id) {
+        if (esc.id === partida.escena_activa_id) {
+          targetEscenaActivaId = newEscenaId;
+        } else if (!targetEscenaActivaId && esc.mapa) {
+          targetEscenaActivaId = newEscenaId;
+        }
+        if (!firstNewEscenaId) {
           firstNewEscenaId = newEscenaId;
         }
         await dbRun(
@@ -368,9 +383,10 @@ app.post('/api/partidas/import', async (req, res) => {
         );
       }
 
-      // Actualizar escena activa id
-      if (firstNewEscenaId) {
-        await dbRun(`UPDATE partidas SET escena_activa_id = ? WHERE id = ?`, [firstNewEscenaId, newPartidaId]);
+      // Actualizar escena activa id garantizando que mantenga la escena con mapa
+      const finalActivaId = targetEscenaActivaId || firstNewEscenaId;
+      if (finalActivaId) {
+        await dbRun(`UPDATE partidas SET escena_activa_id = ? WHERE id = ?`, [finalActivaId, newPartidaId]);
       }
 
       // Insertar fichas
@@ -686,7 +702,7 @@ io.on('connection', (socket) => {
   socket.on('actualizar_mapa', async ({ partidaId, escenaId, mapaBase64 }) => {
     try {
       await dbRun(`UPDATE escenas SET mapa = ? WHERE id = ?`, [mapaBase64, escenaId]);
-      await dbRun(`UPDATE partidas SET fecha_modificacion = ? WHERE id = ?`, [new Date().toISOString(), partidaId]);
+      await dbRun(`UPDATE partidas SET escena_activa_id = ?, fecha_modificacion = ? WHERE id = ?`, [escenaId, new Date().toISOString(), partidaId]);
       io.to(partidaId).emit('mapa_actualizado', { escenaId, mapa: mapaBase64 });
       scheduleAutoSave(partidaId);
     } catch (err) {
