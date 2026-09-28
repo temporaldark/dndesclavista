@@ -1001,6 +1001,7 @@
     else if (t === 'enorme') scaleMult = 3;
     else if (t === 'gargantua') scaleMult = 4;
     else if (t === 'supergargantua' || t === 'supergargantura' || t === 'colosal') scaleMult = 6;
+    else if (t === 'ultragargantua' || t === 'ultra gargantua' || t === 'ultra-gargantua' || t === 'ultragargantura') scaleMult = 10;
     else scaleMult = 1; // mediano
 
     if (ficha.gigante) scaleMult *= 2;
@@ -1018,6 +1019,7 @@
     if (v === 'enorme') return 'ENORME';
     if (v === 'gargantua') return 'GARGANTÚA';
     if (v === 'supergargantua' || v === 'supergargantura' || v === 'colosal') return 'SUPERGARGANTÚA';
+    if (v === 'ultragargantua' || v === 'ultra gargantua' || v === 'ultra-gargantua' || v === 'ultragargantura') return 'ULTRA GARGANTÚA';
     return v.toUpperCase();
   }
 
@@ -3332,7 +3334,7 @@
           document.getElementById('ficha-nivel').value = ficha.nivel ?? 1;
           document.getElementById('ficha-altura').value = ficha.altura ?? 2;
           const tVal = (ficha.tamanio_base || 'mediano').toLowerCase();
-          document.getElementById('ficha-tamanio').value = (tVal === 'supergargantura') ? 'supergargantua' : tVal;
+          document.getElementById('ficha-tamanio').value = (tVal === 'supergargantura') ? 'supergargantua' : ((tVal === 'ultra gargantua' || tVal === 'ultra-gargantua' || tVal === 'ultragargantura') ? 'ultragargantua' : tVal);
           if (document.getElementById('ficha-color-aro')) document.getElementById('ficha-color-aro').value = ficha.color_aro || '#c9a84c';
           document.getElementById('ficha-notas').value = ficha.notas || '';
 
