@@ -347,6 +347,7 @@ async function autoRestoreFromFiles() {
   }
   if (saveFiles.length === 0) return;
 
+  let restoredCount = 0;
   for (const filename of saveFiles) {
     try {
       const filePath = path.join(savesDir, filename);
@@ -382,6 +383,7 @@ async function autoRestoreFromFiles() {
       if (!exists) {
         console.log(`⚡ [SavesManager] Partida "${data.partida.nombre}" (${data.partida.codigo}) no encontrada en BD. Restaurando automáticamente...`);
         await importPartidaDataIntoDb(data, false);
+        restoredCount++;
       } else {
         const escenasDb = await dbGet(`SELECT COUNT(*) as count FROM escenas WHERE partida_id = ?`, [exists.id]);
         const fileHasScenes = (data.escenas && data.escenas.length > 0);
@@ -391,6 +393,7 @@ async function autoRestoreFromFiles() {
         if ((escenasDb?.count === 0 && fileHasScenes) || (fileDate > dbDate + 2000)) {
           console.log(`🔄 [SavesManager] Sincronizando partida "${data.partida.nombre}" (${data.partida.codigo}) con versión más reciente desde archivo JSON...`);
           await importPartidaDataIntoDb(data, true);
+          restoredCount++;
         }
       }
     } catch (err) {

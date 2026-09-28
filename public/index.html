@@ -994,15 +994,9 @@
 
   <!-- Cargar Socket.io -->
   <script src="/socket.io/socket.io.js"></script>
-  <script>
-    if (typeof io === 'undefined') {
-      const s = document.createElement('script');
-      s.src = 'https://cdn.socket.io/4.6.1/socket.io.min.js';
-      document.head.appendChild(s);
-    }
-  </script>
+  <script>if (typeof io === 'undefined') document.write('<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"><\/script>');</script>
   <!-- Lógica de la Aplicación -->
-  <script src="app.js?v=3.2" defer></script>
+  <script src="app.js?v=3.2"></script>
 </body>
 
 </html>
