@@ -18,7 +18,13 @@ const {
   deletePartidaFiles
 } = require('./saves_manager');
 
-const compression = require('compression');
+let compression = null;
+try {
+  compression = require('compression');
+} catch (_) {
+  console.warn('⚠️ [Servidor] Librería compression no instalada aún en este contenedor. Continuando sin compresión HTTP.');
+}
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -33,10 +39,12 @@ const io = new Server(server, {
   }
 });
 
-// 1. Compresión HTTP GZIP/Deflate para acelerar carga de JS, CSS, HTML y respuestas REST hasta un 85%
-app.use(compression({
-  threshold: 1024 // Comprime todo payload mayor a 1KB
-}));
+// 1. Compresión HTTP GZIP/Deflate opcional (si está disponible en node_modules)
+if (compression) {
+  app.use(compression({
+    threshold: 1024 // Comprime todo payload mayor a 1KB
+  }));
+}
 
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));

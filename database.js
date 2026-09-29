@@ -26,8 +26,12 @@ function getDataDir() {
 }
 
 const dataDir = getDataDir();
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+try {
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+} catch (err) {
+  console.warn('⚠️ [Database] Aviso al verificar directorio de datos:', err.message);
 }
 
 // Almacén asíncrono para gestionar clientes dentro de transacciones de PostgreSQL
@@ -69,7 +73,7 @@ if (isPostgres) {
         user: process.env.PGUSER || 'postgres',
         password: process.env.PGPASSWORD || '',
         database: process.env.PGDATABASE || 'vtt_dnd',
-        ssl: isLocalhost ? false : (process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false),
+        ssl: isSslDisabled ? false : (process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false),
         max: 20
       };
 

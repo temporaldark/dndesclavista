@@ -8,9 +8,13 @@ const savesDir = path.join(dataDir, 'saves');
 const backupsDir = path.join(savesDir, 'backups');
 
 function ensureDirectories() {
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-  if (!fs.existsSync(savesDir)) fs.mkdirSync(savesDir, { recursive: true });
-  if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
+  try {
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    if (!fs.existsSync(savesDir)) fs.mkdirSync(savesDir, { recursive: true });
+    if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
+  } catch (err) {
+    console.warn('⚠️ [SavesManager] Aviso al verificar directorios:', err.message);
+  }
 }
 
 // Mapa de debouncing para no saturar disco en ráfagas de cambios
