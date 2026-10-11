@@ -2854,3 +2854,212 @@ button:hover .icon-swords {
   }
 }
 
+/* ==========================================================================
+   BANNER DE PREPARACIÓN DM (GESTIÓN DE ESCENAS EN PRIVADO)
+   ========================================================================== */
+.staging-banner {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: rgba(18, 14, 28, 0.94);
+  border: 1px solid #f59e0b;
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.35), 0 0 10px rgba(0, 0, 0, 0.7);
+  border-radius: 8px;
+  padding: 8px 16px;
+  backdrop-filter: blur(8px);
+  animation: fadeInDown 0.25s ease;
+  max-width: 95%;
+}
+
+.staging-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-size: 0.88rem;
+  color: #f1f5f9;
+}
+
+.staging-badge {
+  background: linear-gradient(135deg, #b45309, #f59e0b);
+  color: #000;
+  font-weight: 800;
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.staging-hint {
+  color: #94a3b8;
+  font-size: 0.82rem;
+}
+
+.staging-banner-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ESCENAS EN LISTA DM */
+.scene-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(20, 20, 38, 0.7);
+  border: 1px solid rgba(201, 168, 76, 0.25);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  transition: all 0.2s ease;
+}
+
+.scene-item:hover {
+  border-color: rgba(201, 168, 76, 0.5);
+}
+
+.scene-item.active-game {
+  border-left: 4px solid #22c55e;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.scene-item.editing-screen {
+  border-left: 4px solid #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.scene-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scene-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: bold;
+  color: #f8fafc;
+  font-size: 0.9rem;
+}
+
+.scene-badge-tag {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: bold;
+}
+
+.scene-badge-party {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.4);
+}
+
+.scene-badge-editing {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+}
+
+.scene-actions-row {
+  display: flex;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+/* CAPAS / PROPS DECORATIVOS (PNG) */
+.props-quick-grid .btn-quick-prop {
+  padding: 6px 4px;
+  font-size: 0.74rem;
+  border-radius: 4px;
+  min-height: 28px;
+  background: rgba(30, 30, 55, 0.85);
+  border: 1px solid rgba(201, 168, 76, 0.25);
+  color: #f1f5f9;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.props-quick-grid .btn-quick-prop:hover {
+  background: rgba(201, 168, 76, 0.25);
+  border-color: var(--gold-light);
+  transform: translateY(-1px);
+}
+
+.prop-item-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(15, 15, 30, 0.85);
+  border: 1px solid rgba(201, 168, 76, 0.2);
+  border-radius: 5px;
+  font-size: 0.8rem;
+  transition: all 0.15s ease;
+}
+
+.prop-item-card:hover {
+  border-color: rgba(201, 168, 76, 0.45);
+}
+
+.prop-thumb {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.prop-card-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.prop-card-title {
+  font-weight: 600;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.78rem;
+}
+
+.prop-card-sub {
+  font-size: 0.68rem;
+  color: #94a3b8;
+}
+
+.prop-card-actions {
+  display: flex;
+  gap: 3px;
+}
+
+.prop-card-actions button {
+  padding: 2px 5px;
+  font-size: 0.7rem;
+  min-height: 22px;
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+

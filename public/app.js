@@ -12,17 +12,25 @@
   let state = {
     partida: null,
     escenaActiva: null,
+    escenaPreparacion: null, // Escena que el DM está preparando/editando en privado
     escenas: [],
     fichas: [],
     figuras: [],
     dibujos: [],
+    props: [], // Capas / Objetos de utilería (Props) en la escena actual
     mensajes: [],
     historial: [],
     galeria: [],
     combate: { activo: false, ronda: 1, turnoIndex: 0, participantes: [] },
     jugadoresConectados: [],
-    usuario: { id: null, nombre: '', esDM: false, color: '#c9a84c' }
+    usuario: { id: null, nombre: '', esDM: false, color: '#c9a84c' },
+    experimentalPropsEnabled: false
   };
+
+  // Helper para obtener la escena actualmente visualizada en pantalla
+  function getEscenaActual() {
+    return (state.usuario?.esDM && state.escenaPreparacion) ? state.escenaPreparacion : state.escenaActiva;
+  }
 
   // Helper para eliminar cualquier variante o repetición de '(Restaurada)'
   function limpiarNombrePartida(nombre) {
@@ -70,6 +78,12 @@
   let isDraggingFigure = false;
   let selectedFigureId = null;
   let dragOffset = { x: 0, y: 0 }; // Para arrastrar figuras individuales
+
+  // Estado de Capas y Utilería (Props)
+  let propImagesCache = {};
+  let isDraggingProp = false;
+  let selectedPropId = null;
+  let propDragOffset = { x: 0, y: 0 };
 
   let isPanning = false;
   let panStart = { x: 0, y: 0 };
@@ -240,12 +254,19 @@
       btnZoomReset: document.getElementById('btn-zoom-reset'),
       zoomLevelText: document.getElementById('zoom-level-text'),
       measureTooltip: document.getElementById('measure-tooltip'),
+      dmStagingBanner: document.getElementById('dm-staging-banner'),
+      stagingViewingName: document.getElementById('staging-viewing-name'),
+      stagingActiveName: document.getElementById('staging-active-name'),
+      btnStagingActivateAll: document.getElementById('btn-staging-activate-all'),
+      btnStagingReturnActive: document.getElementById('btn-staging-return-active'),
 
       // Herramientas DM
       toolButtons: document.querySelectorAll('.tool-btn'),
       toolOptionsContainer: document.getElementById('tool-options-container'),
       optDraw: document.getElementById('opt-draw'),
       optFigures: document.getElementById('opt-figures'),
+      optProps: document.getElementById('opt-props'),
+      toolProps: document.getElementById('tool-props'),
       drawColor: document.getElementById('draw-color'),
       drawSize: document.getElementById('draw-size'),
       btnClearDrawings: document.getElementById('btn-clear-drawings'),
@@ -295,6 +316,7 @@
 
       // Panel DM
       scenesList: document.getElementById('scenes-list'),
+      btnReagruparFichas: document.getElementById('btn-reagrupar-fichas'),
       dmPlayersList: document.getElementById('dm-players-list'),
       newSceneName: document.getElementById('new-scene-name'),
       btnCreateScene: document.getElementById('btn-create-scene'),
@@ -304,6 +326,18 @@
       gridRowsInput: document.getElementById('grid-rows-input'),
       gridFeetInput: document.getElementById('grid-feet-input'),
       btnApplyGrid: document.getElementById('btn-apply-grid'),
+      checkExperimentalProps: document.getElementById('check-experimental-props'),
+      dmPropsSection: document.getElementById('dm-props-section'),
+      propNameInput: document.getElementById('prop-name-input'),
+      propUrlInput: document.getElementById('prop-url-input'),
+      btnPropFileTrigger: document.getElementById('btn-prop-file-trigger'),
+      propFileInput: document.getElementById('prop-file-input'),
+      propWidthInput: document.getElementById('prop-width-input'),
+      propHeightInput: document.getElementById('prop-height-input'),
+      propRotInput: document.getElementById('prop-rot-input'),
+      propLayerSelect: document.getElementById('prop-layer-select'),
+      btnAddPropSubmit: document.getElementById('btn-add-prop-submit'),
+      dmPropsList: document.getElementById('dm-props-list'),
       btnQuickGallery: document.getElementById('btn-quick-gallery'),
       btnOpenGalleryModal: document.getElementById('btn-open-gallery-modal'),
       modalDmGallery: document.getElementById('modal-dm-gallery'),
@@ -641,9 +675,16 @@
       state.mensajes = data.mensajes || [];
       state.historial = data.historial || [];
       state.galeria = data.galeria || [];
+      state.props = data.props || [];
       state.combate = data.combate || { activo: false, ronda: 1, turnoIndex: 0, participantes: [] };
       state.jugadoresConectados = data.jugadoresConectados || [];
       state.usuario = data.usuario;
+
+      // Cargar preferencia experimental de capas
+      const expSaved = localStorage.getItem('vtt_exp_props_' + (data.partida?.codigo || ''));
+      state.experimentalPropsEnabled = expSaved === 'true';
+      if (dom.checkExperimentalProps) dom.checkExperimentalProps.checked = state.experimentalPropsEnabled;
+      toggleExperimentalPropsUI(state.experimentalPropsEnabled);
 
       // Guardar partida activa en almacenamiento local para no perder contexto ante F5 o recargas
       if (state.partida && state.partida.codigo) {
@@ -658,6 +699,7 @@
       showScreen('vtt');
       updateUIForCurrentGame();
       renderCombatTracker();
+      renderPropsList();
       if (state.escenaActiva && state.escenaActiva.mapa) {
         loadMapImage(state.escenaActiva.mapa);
       } else {
@@ -689,32 +731,140 @@
       alert('❌ Error: ' + msg);
     });
 
-    socket.on('escena_cambiada', ({ escenaActiva, figuras, dibujos, posiciones_fichas }) => {
+    socket.on('escena_cambiada', ({ escenaActiva, figuras, dibujos, posiciones_fichas, props }) => {
       if (!state.escenaActiva || state.escenaActiva.id !== escenaActiva?.id) {
         viewportInitializedForScene = null;
       }
       state.escenaActiva = escenaActiva;
+      state.escenaPreparacion = null; // Al activarse, volvemos a la escena activa
       state.figuras = figuras || [];
       state.dibujos = dibujos || [];
+      state.props = props || [];
       if (dom.currentSceneName) dom.currentSceneName.textContent = escenaActiva.nombre;
       if (dom.gridColsInput) dom.gridColsInput.value = escenaActiva.config_grid_x || 40;
       if (dom.gridRowsInput) dom.gridRowsInput.value = escenaActiva.config_grid_y || 40;
       if (dom.gridFeetInput) dom.gridFeetInput.value = escenaActiva.config_casilla || 5;
-      
+
+      const cols = escenaActiva.config_grid_x || 40;
+      const rows = escenaActiva.config_grid_y || 40;
       const posMap = new Map((posiciones_fichas || []).map(p => [p.ficha_id, p]));
+
+      let playerIdx = 0;
+      state.fichas.forEach(f => {
+        const pos = posMap.get(f.id);
+        if (pos) {
+          if (pos.x < 0 || pos.x >= cols || pos.y < 0 || pos.y >= rows) {
+            f.x = Math.max(1, Math.min(cols - 2, pos.x));
+            f.y = Math.max(1, Math.min(rows - 2, pos.y));
+          } else {
+            f.x = pos.x;
+            f.y = pos.y;
+          }
+        } else if (f.tipo === 'jugador') {
+          // Si el jugador no tenía posición en la nueva escena, ubicarlo ordenadamente al inicio
+          f.x = 2 + (playerIdx % 4);
+          f.y = 2 + Math.floor(playerIdx / 4);
+          playerIdx++;
+        }
+      });
+
+      loadMapImage(escenaActiva.mapa);
+      updateStagingBanner();
+      renderFichasList();
+      renderTokenSelects();
+      renderScenesList();
+      renderPropsList();
+      markDirty();
+    });
+
+    // DM recibe la escena que está preparando/editando en privado
+    socket.on('dm_escena_cargada', ({ escena, figuras, dibujos, posiciones_fichas, props }) => {
+      state.escenaPreparacion = escena;
+      state.figuras = figuras || [];
+      state.dibujos = dibujos || [];
+      state.props = props || [];
+
+      if (dom.gridColsInput) dom.gridColsInput.value = escena.config_grid_x || 40;
+      if (dom.gridRowsInput) dom.gridRowsInput.value = escena.config_grid_y || 40;
+      if (dom.gridFeetInput) dom.gridFeetInput.value = escena.config_casilla || 5;
+
+      const cols = escena.config_grid_x || 40;
+      const rows = escena.config_grid_y || 40;
+      const posMap = new Map((posiciones_fichas || []).map(p => [p.ficha_id, p]));
+
+      let playerIdx = 0;
       state.fichas.forEach(f => {
         const pos = posMap.get(f.id);
         if (pos) {
           f.x = pos.x;
           f.y = pos.y;
+        } else if (f.tipo === 'jugador') {
+          f.x = 2 + (playerIdx % 4);
+          f.y = 2 + Math.floor(playerIdx / 4);
+          playerIdx++;
         }
       });
 
-      loadMapImage(escenaActiva.mapa);
-      renderFichasList();
-      renderTokenSelects();
+      loadMapImage(escena.mapa);
+      updateStagingBanner();
       renderScenesList();
+      renderPropsList();
       markDirty();
+      showToast(`👁️ Preparando escena: ${escena.nombre}`, 'info');
+    });
+
+    // Fichas reagrupadas en la escena
+    socket.on('fichas_reagrupadas', ({ escenaId, fichas }) => {
+      const escCur = getEscenaActual();
+      if (escCur && escCur.id === escenaId) {
+        (fichas || []).forEach(pos => {
+          const f = (state.fichas || []).find(fi => fi.id === pos.fichaId);
+          if (f) {
+            f.x = pos.x;
+            f.y = pos.y;
+          }
+        });
+        showToast('📍 Fichas de jugadores reagrupadas en la escena', 'gold');
+        renderFichasList();
+        markDirty();
+      }
+    });
+
+    // Eventos de Capas / Utilería (Props)
+    socket.on('prop_actualizado', ({ escenaId, prop }) => {
+      const escCur = getEscenaActual();
+      if (escCur && escCur.id === escenaId) {
+        const idx = (state.props || []).findIndex(p => p.id === prop.id);
+        if (idx !== -1) {
+          state.props[idx] = prop;
+        } else {
+          state.props.push(prop);
+        }
+        renderPropsList();
+        markDirty();
+      }
+    });
+
+    socket.on('prop_movido', ({ escenaId, propId, x, y }) => {
+      const escCur = getEscenaActual();
+      if (escCur && escCur.id === escenaId) {
+        const prop = (state.props || []).find(p => p.id === propId);
+        if (prop) {
+          prop.x = x;
+          prop.y = y;
+          markDirty();
+        }
+      }
+    });
+
+    socket.on('prop_eliminado', ({ escenaId, propId }) => {
+      const escCur = getEscenaActual();
+      if (escCur && escCur.id === escenaId) {
+        state.props = (state.props || []).filter(p => p.id !== propId);
+        if (selectedPropId === propId) selectedPropId = null;
+        renderPropsList();
+        markDirty();
+      }
     });
 
     socket.on('partida_actualizada', ({ id, nombre, imagen_portada }) => {
@@ -997,8 +1147,9 @@
   // Centra el viewport en el centro del mapa
   function centerMap() {
     if (!canvas) return;
-    const cols = state.escenaActiva?.config_grid_x || state.partida?.config_grid_x || 40;
-    const rows = state.escenaActiva?.config_grid_y || state.partida?.config_grid_y || 40;
+    const escCur = getEscenaActual();
+    const cols = escCur?.config_grid_x || state.partida?.config_grid_x || 40;
+    const rows = escCur?.config_grid_y || state.partida?.config_grid_y || 40;
     const mapWidth = cols * viewport.tileSize;
     const mapHeight = rows * viewport.tileSize;
     viewport.panX = (canvas.width - mapWidth * viewport.zoom) / 2;
@@ -1006,10 +1157,11 @@
   }
 
   function loadMapImage(src) {
+    const escCur = getEscenaActual();
     if (!src) {
-      // Si la escena activa actual ya tiene mapa en memoria, preservarlo
-      if (state.escenaActiva && state.escenaActiva.mapa) {
-        src = state.escenaActiva.mapa;
+      // Si la escena visible actual ya tiene mapa en memoria, preservarlo
+      if (escCur && escCur.mapa) {
+        src = escCur.mapa;
       } else {
         mapImageLoaded = false;
         mapImage = null;
@@ -1046,9 +1198,9 @@
         }
       }
       
-      if (viewportInitializedForScene !== state.escenaActiva?.id) {
+      if (viewportInitializedForScene !== escCur?.id) {
         if (!isPanning) centerMap(); // Centrar una sola vez al entrar por primera vez a la escena
-        viewportInitializedForScene = state.escenaActiva?.id;
+        viewportInitializedForScene = escCur?.id;
       }
       markDirty();
     };
@@ -1110,22 +1262,96 @@
     return v.toUpperCase();
   }
 
+  // Renderizado de Props / Capas de Utilería
+  function drawSingleProp(prop, screenLeft, screenRight, screenTop, screenBottom, tSize) {
+    if (!prop || !prop.imagen) return;
+    if (prop.oculto && !state.usuario?.esDM) return;
+
+    const wTiles = parseFloat(prop.ancho) || 2;
+    const hTiles = parseFloat(prop.alto) || 2;
+    const px = (parseFloat(prop.x) || 0) * tSize;
+    const py = (parseFloat(prop.y) || 0) * tSize;
+    const wPx = wTiles * tSize;
+    const hPx = hTiles * tSize;
+    const maxDim = Math.max(wTiles, hTiles);
+
+    if (prop.x + maxDim < screenLeft || prop.x - maxDim > screenRight ||
+        prop.y + maxDim < screenTop || prop.y - maxDim > screenBottom) {
+      return;
+    }
+
+    const cx = px + wPx / 2;
+    const cy = py + hPx / 2;
+
+    let img = propImagesCache[prop.imagen];
+    if (!img) {
+      img = new Image();
+      img.src = prop.imagen;
+      img.onload = () => markDirty();
+      propImagesCache[prop.imagen] = img;
+    }
+
+    ctx.save();
+    if (prop.oculto) {
+      ctx.globalAlpha = 0.5;
+    }
+
+    ctx.translate(cx, cy);
+    if (prop.rotacion) {
+      ctx.rotate((parseFloat(prop.rotacion) * Math.PI) / 180);
+    }
+
+    if (img.complete && img.naturalWidth > 0) {
+      ctx.drawImage(img, -wPx / 2, -hPx / 2, wPx, hPx);
+    } else {
+      ctx.fillStyle = 'rgba(201, 168, 76, 0.2)';
+      ctx.fillRect(-wPx / 2, -hPx / 2, wPx, hPx);
+      ctx.strokeStyle = '#c9a84c';
+      ctx.strokeRect(-wPx / 2, -hPx / 2, wPx, hPx);
+    }
+
+    // Si el DM tiene seleccionado este prop: mostrar contorno dorado y botón de giro
+    if (state.usuario?.esDM && selectedPropId === prop.id) {
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(-wPx / 2 - 2, -hPx / 2 - 2, wPx + 4, hPx + 4);
+      ctx.setLineDash([]);
+
+      if (prop.bloqueado) {
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = 'bold 12px Roboto';
+        ctx.textAlign = 'center';
+        ctx.fillText('🔒 Bloqueado', 0, -hPx / 2 - 6);
+      }
+    }
+
+    ctx.restore();
+  }
+
   // Renderizado Principal del Tablero Optimizado
   function renderCanvas() {
     if (!ctx || !canvas) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const cols = state.escenaActiva?.config_grid_x || state.partida?.config_grid_x || 40;
-    const rows = state.escenaActiva?.config_grid_y || state.partida?.config_grid_y || 40;
+    const escCur = getEscenaActual();
+    const cols = escCur?.config_grid_x || state.partida?.config_grid_x || 40;
+    const rows = escCur?.config_grid_y || state.partida?.config_grid_y || 40;
     const tileSize = viewport.tileSize; // Se usa base para no escalar 2 veces
     const scaledTileSize = tileSize * viewport.zoom;
 
-    // Viewport Culling: Casillas visibles en la pantalla actual (+ margen de seguridad)
-    const viewLeft = Math.max(0, Math.floor(-viewport.panX / scaledTileSize) - 1);
-    const viewRight = Math.min(cols, Math.ceil((canvas.width - viewport.panX) / scaledTileSize) + 1);
-    const viewTop = Math.max(0, Math.floor(-viewport.panY / scaledTileSize) - 1);
-    const viewBottom = Math.min(rows, Math.ceil((canvas.height - viewport.panY) / scaledTileSize) + 1);
+    // Viewport Real en Pantalla (sin recortar a 0..cols para que las fichas fuera del mapa no desaparezcan)
+    const screenTileLeft = Math.floor(-viewport.panX / scaledTileSize) - 2;
+    const screenTileRight = Math.ceil((canvas.width - viewport.panX) / scaledTileSize) + 2;
+    const screenTileTop = Math.floor(-viewport.panY / scaledTileSize) - 2;
+    const screenTileBottom = Math.ceil((canvas.height - viewport.panY) / scaledTileSize) + 2;
+
+    // Líneas del Grid recortadas al mapa
+    const gridColStart = Math.max(0, screenTileLeft);
+    const gridColEnd = Math.min(cols, screenTileRight);
+    const gridRowStart = Math.max(0, screenTileTop);
+    const gridRowEnd = Math.min(rows, screenTileBottom);
 
     ctx.save();
     ctx.translate(viewport.panX, viewport.panY);
@@ -1141,33 +1367,39 @@
     const mapWidth = cols * tileSize;
     const mapHeight = rows * tileSize;
 
-    // 1. Dibujar Mapa de Fondo (si existe y no es GIF)
+    // 1. Dibujar Fondo Fuera del Mapa y Mapa de Fondo
     if (mapImage && mapImage.complete && mapImage.naturalWidth > 0) {
       ctx.drawImage(mapImage, 0, 0, mapWidth, mapHeight);
     } else {
-      // Fondo oscuro por defecto
       ctx.fillStyle = '#0d0d22';
       ctx.fillRect(0, 0, mapWidth, mapHeight);
     }
 
-    // 2. Dibujar Grid de Casillas (Solo las líneas visibles en el viewport)
-    const gridStartX = viewLeft * tileSize;
-    const gridEndX = viewRight * tileSize;
-    const gridStartY = viewTop * tileSize;
-    const gridEndY = viewBottom * tileSize;
+    // Borde delimitador dorado del mapa (para ver claramente los límites y saber si un token se salió)
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.45)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, 0, mapWidth, mapHeight);
 
+    // 1.5. Dibujar Capa Suelo de Props (debajo del grid)
+    if (state.props && state.props.length > 0) {
+      state.props.filter(p => p.capa === 'suelo').forEach(prop => {
+        drawSingleProp(prop, screenTileLeft, screenTileRight, screenTileTop, screenTileBottom, tileSize);
+      });
+    }
+
+    // 2. Dibujar Grid de Casillas (Solo las líneas visibles en el viewport dentro de los límites del mapa)
     ctx.strokeStyle = 'rgba(201, 168, 76, 0.18)';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let c = viewLeft; c <= viewRight; c++) {
+    for (let c = gridColStart; c <= gridColEnd; c++) {
       const cx = c * tileSize;
-      ctx.moveTo(cx, gridStartY);
-      ctx.lineTo(cx, gridEndY);
+      ctx.moveTo(cx, gridRowStart * tileSize);
+      ctx.lineTo(cx, gridRowEnd * tileSize);
     }
-    for (let r = viewTop; r <= viewBottom; r++) {
+    for (let r = gridRowStart; r <= gridRowEnd; r++) {
       const ry = r * tileSize;
-      ctx.moveTo(gridStartX, ry);
-      ctx.lineTo(gridEndX, ry);
+      ctx.moveTo(gridColStart * tileSize, ry);
+      ctx.lineTo(gridColEnd * tileSize, ry);
     }
     ctx.stroke();
 
@@ -1278,9 +1510,16 @@
       });
     }
 
-    // 5. Dibujar Fichas / Tokens de Personaje con Viewport Culling y O(1) Selección
+    // 4.5. Dibujar Capa Utilería de Props (debajo de las fichas, sobre figuras y mapa)
+    if (state.props && state.props.length > 0) {
+      state.props.filter(p => !p.capa || p.capa === 'debajo_fichas').forEach(prop => {
+        drawSingleProp(prop, screenTileLeft, screenTileRight, screenTileTop, screenTileBottom, tileSize);
+      });
+    }
+
+    // 5. Dibujar Fichas / Tokens de Personaje con Viewport Culling Real
     const selectedSet = new Set(selectedFichasIds);
-    const fichasEnEscena = (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === state.escenaActiva?.id);
+    const fichasEnEscena = (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === escCur?.id);
     fichasEnEscena.forEach(ficha => {
       // Si la ficha está oculta por el DM: jugadores no la ven en absoluto, DM la ve translúcida
       if (ficha.oculto) {
@@ -1292,9 +1531,9 @@
       // Multiplicador de tamaño (Tiny, Enano, Mediano, Grande, Enorme, Gargantúa, Supergargantúa, Gigante)
       const scaleMult = getFichaScaleMult(ficha);
 
-      // Culling: omitir tokens fuera de la pantalla actual para máximo rendimiento
-      if (ficha.x + scaleMult < viewLeft || ficha.x > viewRight ||
-          ficha.y + scaleMult < viewTop || ficha.y > viewBottom) {
+      // Culling: omitir tokens fuera de la pantalla real visible (incluyendo coordenadas fuera del mapa)
+      if (ficha.x + scaleMult < screenTileLeft || ficha.x > screenTileRight ||
+          ficha.y + scaleMult < screenTileTop || ficha.y > screenTileBottom) {
         return;
       }
 
@@ -1446,6 +1685,26 @@
       }
       ctx.restore();
 
+      // Si la ficha está fuera de los límites del mapa, dibujar aro de advertencia para verla claramente
+      const isOutOfMap = ficha.x < 0 || ficha.x + scaleMult > cols || ficha.y < 0 || ficha.y + scaleMult > rows;
+      if (isOutOfMap) {
+        ctx.save();
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius + 4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = 'bold 11px Roboto';
+        ctx.textAlign = 'center';
+        ctx.shadowColor = '#000000';
+        ctx.shadowBlur = 4;
+        ctx.fillText('⚠️ Fuera de mapa', cx, py + tokenHeight + 14);
+        ctx.restore();
+      }
+
       // Reset alpha for following drawings (like dice animations)
       ctx.globalAlpha = 1.0;
 
@@ -1465,6 +1724,13 @@
         }
       }
     });
+
+    // 5.5. Dibujar Capa Techo de Props (por encima de las fichas)
+    if (state.props && state.props.length > 0) {
+      state.props.filter(p => p.capa === 'encima_fichas').forEach(prop => {
+        drawSingleProp(prop, screenTileLeft, screenTileRight, screenTileTop, screenTileBottom, tileSize);
+      });
+    }
 
     // 6. Línea de Medición de Distancia
     if (activeTool === 'measure' && measureStart && measureCurrent) {
@@ -1511,10 +1777,11 @@
   function debouncedSaveFigure(fig) {
     if (debounceSaveFigTimer) clearTimeout(debounceSaveFigTimer);
     debounceSaveFigTimer = setTimeout(() => {
-      if (state.partida?.id && state.escenaActiva?.id && fig) {
+      const escCur = getEscenaActual();
+      if (state.partida?.id && escCur?.id && fig) {
         socket?.emit('guardar_figura', {
           partidaId: state.partida.id,
-          escenaId: state.escenaActiva.id,
+          escenaId: escCur.id,
           figuraData: fig
         });
       }
@@ -1525,22 +1792,40 @@
   function handleMouseDown(e) {
     updateCanvasRect();
     const gridPos = screenToGrid(e.clientX, e.clientY);
+    const escenaCur = getEscenaActual();
 
-    if (activeTool === 'move') {
-      // Buscar si hizo clic sobre alguna ficha (búsqueda inversa eficiente sin copiar array)
-      let clickedFicha = null;
-      const fichasArr = state.fichas || [];
-      for (let i = fichasArr.length - 1; i >= 0; i--) {
-        const f = fichasArr[i];
+    // Activar manejadores en window para arrastre fluido aunque el puntero salga del canvas
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+
+    if (activeTool === 'move' || activeTool === 'props') {
+      // 1. Buscar si hizo clic sobre alguna ficha visible en la escena actual
+      const fichasEnEscena = (state.fichas || []).filter(f => {
+        if (f.tipo !== 'jugador' && f.escena_id !== escenaCur?.id) return false;
+        if (f.oculto && !state.usuario.esDM && !esDuenioDeFicha(f)) return false;
+        return true;
+      });
+
+      let candidataControlable = null;
+      let candidataGeneral = null;
+
+      for (let i = fichasEnEscena.length - 1; i >= 0; i--) {
+        const f = fichasEnEscena[i];
         const mult = getFichaScaleMult(f);
-        if (gridPos.x >= f.x && gridPos.x <= f.x + mult && gridPos.y >= f.y && gridPos.y <= f.y + mult) {
-          clickedFicha = f;
-          break;
+        const fx = parseFloat(f.x) || 0;
+        const fy = parseFloat(f.y) || 0;
+        if (gridPos.x >= fx && gridPos.x <= fx + mult && gridPos.y >= fy && gridPos.y <= fy + mult) {
+          if (!candidataGeneral) candidataGeneral = f;
+          if (esDuenioDeFicha(f)) {
+            candidataControlable = f;
+            break;
+          }
         }
       }
 
-      if (clickedFicha) {
-        // Verificar permisos: DM o dueño directo de la ficha
+      const clickedFicha = candidataControlable || candidataGeneral;
+
+      if (clickedFicha && activeTool === 'move') {
         const esDuenio = esDuenioDeFicha(clickedFicha);
         if (esDuenio) {
           const isMulti = e.shiftKey || isMultiSelectMode;
@@ -1577,7 +1862,32 @@
           return;
         }
       }
-      // Buscar si hizo clic en figura se hace fuera de este if para que funcione en "figures" también
+
+      // 2. Buscar si hizo clic sobre algún Prop / Utilería
+      if (state.usuario.esDM && (state.props || []).length > 0 && !isDraggingToken) {
+        const clickedProp = (state.props || []).slice().reverse().find(p => {
+          const px = parseFloat(p.x) || 0;
+          const py = parseFloat(p.y) || 0;
+          const pw = parseFloat(p.ancho) || 2;
+          const ph = parseFloat(p.alto) || 2;
+          return gridPos.x >= px && gridPos.x <= px + pw && gridPos.y >= py && gridPos.y <= py + ph;
+        });
+
+        if (clickedProp) {
+          selectedPropId = clickedProp.id;
+          if (!clickedProp.bloqueado) {
+            isDraggingProp = true;
+            propDragOffset = { x: gridPos.x - clickedProp.x, y: gridPos.y - clickedProp.y };
+          }
+          renderPropsList();
+          markDirty();
+          return;
+        } else if (activeTool === 'props') {
+          selectedPropId = null;
+          renderPropsList();
+          markDirty();
+        }
+      }
     } else if (activeTool === 'measure') {
       measureStart = gridPos;
       measureCurrent = gridPos;
@@ -1595,7 +1905,7 @@
           gridPos.y >= fig.y - halfH && gridPos.y <= fig.y + halfH;
       });
 
-      if (clickedFig && !isDraggingToken) {
+      if (clickedFig && !isDraggingToken && !isDraggingProp) {
         const canControl = state.usuario.esDM || clickedFig.creador_id === state.usuario.id;
         if (canControl) {
           selectedFigureId = clickedFig.id;
@@ -1605,7 +1915,6 @@
             dragOffset = { x: gridPos.x - clickedFig.x, y: gridPos.y - clickedFig.y };
           }
 
-          // Poblar la UI con los datos de la figura seleccionada SOLO para dueño o DM
           if (dom.figType) dom.figType.value = clickedFig.tipo;
           if (dom.figSize) dom.figSize.value = clickedFig.ancho !== undefined ? clickedFig.ancho : (clickedFig.tamanio || 1);
           if (dom.figHeight) dom.figHeight.value = clickedFig.alto !== undefined ? clickedFig.alto : (clickedFig.tamanio || 1);
@@ -1618,13 +1927,14 @@
         }
 
         markDirty();
-        return; // Detenemos aquí para no crear figuras nuevas ni hacer pan
+        return;
       }
     }
 
     // Si llegamos aquí y es move, hacemos pan
-    if (activeTool === 'move' && !isDraggingToken && !isDraggingFigure) {
+    if (activeTool === 'move' && !isDraggingToken && !isDraggingFigure && !isDraggingProp) {
       selectedFigureId = null;
+      selectedPropId = null;
       isPanning = true;
       panStart = { x: e.clientX - viewport.panX, y: e.clientY - viewport.panY };
     }
@@ -1650,25 +1960,20 @@
         creador_id: state.usuario.id
       };
 
-      // La nueva figura queda seleccionada para su creador
       selectedFigureId = newFigId;
+      socket?.emit('guardar_figura', { partidaId: state.partida.id, escenaId: escenaCur?.id, figuraData: nuevaFig });
 
-      socket?.emit('guardar_figura', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, figuraData: nuevaFig });
-
-      // Limpiar el campo de etiqueta para que no se herede a siguientes figuras
       if (dom.figLabel) dom.figLabel.value = '';
     } else if (activeTool === 'erase') {
-      // Borrar figura o trazo en ese punto (Dueño o DM)
       const figToDel = (state.figuras || []).find(fig => {
         if (fig.creador_id !== state.usuario.id && !state.usuario.esDM) return false;
         const maxDim = Math.max(fig.ancho || fig.tamanio || 1, fig.alto || fig.tamanio || 1);
         return Math.hypot(fig.x - gridPos.x, fig.y - gridPos.y) <= maxDim;
       });
       if (figToDel) {
-        socket?.emit('eliminar_figura', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, figuraId: figToDel.id });
+        socket?.emit('eliminar_figura', { partidaId: state.partida.id, escenaId: escenaCur?.id, figuraId: figToDel.id });
       }
 
-      // Borrar trazo de dibujo si se hace clic sobre él (DM)
       if (state.usuario?.esDM && Array.isArray(state.dibujos) && state.dibujos.length > 0) {
         const strokeIdx = state.dibujos.findIndex(stroke => {
           if (!stroke.points || !Array.isArray(stroke.points)) return false;
@@ -1679,10 +1984,10 @@
           state.dibujos.splice(strokeIdx, 1);
           markDirty();
           debounceLocalMirrorSave();
-          if (state.partida?.id && state.escenaActiva?.id) {
+          if (state.partida?.id && escenaCur?.id) {
             socket?.emit('guardar_dibujos', {
               partidaId: state.partida.id,
-              escenaId: state.escenaActiva.id,
+              escenaId: escenaCur.id,
               datos: state.dibujos
             });
           }
@@ -1691,8 +1996,21 @@
     }
   }
 
+  function handleWindowMouseMove(e) {
+    if (isDraggingToken || isDraggingFigure || isDraggingProp || isPanning) {
+      handleMouseMove(e);
+    }
+  }
+
+  function handleWindowMouseUp(e) {
+    if (isDraggingToken || isDraggingFigure || isDraggingProp || isPanning) {
+      handleMouseUp();
+    }
+  }
+
   function handleMouseMove(e) {
     const gridPos = screenToGrid(e.clientX, e.clientY);
+    const escenaCur = getEscenaActual();
 
     if (isDraggingToken && selectedFichasIds.length > 0) {
       const now = Date.now();
@@ -1700,16 +2018,16 @@
 
       selectedFichasIds.forEach(id => {
         const ficha = state.fichas.find(f => f.id === id);
-        if (ficha && dragOffsets[id]) {
-          ficha.x = gridPos.x - dragOffsets[id].x;
-          ficha.y = gridPos.y - dragOffsets[id].y;
+        if (ficha) {
+          const offset = dragOffsets[id] || { x: 0.5, y: 0.5 };
+          ficha.x = gridPos.x - offset.x;
+          ficha.y = gridPos.y - offset.y;
           didMove = true;
 
-          // Emitir posición en tiempo real a la sala (throttled cada 40ms)
           if (now - lastMoveEmitTime > 40) {
             socket?.emit('mover_ficha', {
               partidaId: state.partida.id,
-              escenaId: state.escenaActiva.id,
+              escenaId: escenaCur?.id,
               fichaId: ficha.id,
               x: ficha.x,
               y: ficha.y
@@ -1723,6 +2041,24 @@
           lastMoveEmitTime = now;
         }
         markDirty();
+      }
+    } else if (isDraggingProp && selectedPropId) {
+      const prop = (state.props || []).find(p => p.id === selectedPropId);
+      if (prop) {
+        prop.x = gridPos.x - propDragOffset.x;
+        prop.y = gridPos.y - propDragOffset.y;
+        markDirty();
+        const now = Date.now();
+        if (now - lastMoveEmitTime > 40) {
+          lastMoveEmitTime = now;
+          socket?.emit('mover_prop', {
+            partidaId: state.partida.id,
+            escenaId: escenaCur?.id,
+            propId: prop.id,
+            x: prop.x,
+            y: prop.y
+          });
+        }
       }
     } else if (isDraggingFigure && selectedFigureId) {
       const fig = state.figuras.find(f => f.id === selectedFigureId);
@@ -1745,16 +2081,20 @@
   }
 
   function handleMouseUp() {
+    window.removeEventListener('mousemove', handleWindowMouseMove);
+    window.removeEventListener('mouseup', handleWindowMouseUp);
+
+    const escenaCur = getEscenaActual();
+
     if (isDraggingToken && selectedFichasIds.length > 0) {
       selectedFichasIds.forEach(id => {
         const ficha = state.fichas.find(f => f.id === id);
         if (ficha) {
-          // Snap al grid en números enteros más cercanos
           ficha.x = Math.round(ficha.x);
           ficha.y = Math.round(ficha.y);
           socket?.emit('guardar_posicion_ficha', {
             partidaId: state.partida.id,
-            escenaId: state.escenaActiva.id,
+            escenaId: escenaCur?.id,
             fichaId: ficha.id,
             x: ficha.x,
             y: ficha.y
@@ -1763,15 +2103,29 @@
       });
     }
 
+    if (isDraggingProp && selectedPropId) {
+      const prop = (state.props || []).find(p => p.id === selectedPropId);
+      if (prop) {
+        prop.x = Math.round(prop.x * 2) / 2;
+        prop.y = Math.round(prop.y * 2) / 2;
+        socket?.emit('guardar_posicion_prop', {
+          partidaId: state.partida.id,
+          escenaId: escenaCur?.id,
+          propId: prop.id,
+          x: prop.x,
+          y: prop.y
+        });
+      }
+      isDraggingProp = false;
+      markDirty();
+    }
+
     if (isDraggingFigure && selectedFigureId) {
       const fig = state.figuras.find(f => f.id === selectedFigureId);
       if (fig) {
-        // Snap al grid solo para fichas, no para figuras
-        // fig.x = Math.round(fig.x);
-        // fig.y = Math.round(fig.y);
         socket?.emit('guardar_figura', {
           partidaId: state.partida.id,
-          escenaId: state.escenaActiva.id,
+          escenaId: escenaCur?.id,
           figuraData: fig
         });
       }
@@ -1787,12 +2141,13 @@
       });
       socket?.emit('guardar_dibujos', {
         partidaId: state.partida.id,
-        escenaId: state.escenaActiva.id,
+        escenaId: escenaCur?.id,
         datos: state.dibujos
       });
     }
 
     isDraggingToken = false;
+    isDraggingProp = false;
     isPanning = false;
     measureStart = null;
     measureCurrent = null;
@@ -1800,6 +2155,7 @@
     currentStroke = [];
     markDirty();
   }
+
 
   function handleWheel(e) {
     e.preventDefault();
@@ -2272,6 +2628,7 @@
         dom.toolOptionsContainer?.classList.add('hidden');
         dom.optDraw?.classList.add('hidden');
         dom.optFigures?.classList.add('hidden');
+        dom.optProps?.classList.add('hidden');
 
         if (activeTool === 'draw') {
           dom.toolOptionsContainer?.classList.remove('hidden');
@@ -2282,6 +2639,9 @@
           if (!selectedFigureId && dom.figLabel) {
             dom.figLabel.value = '';
           }
+        } else if (activeTool === 'props') {
+          dom.toolOptionsContainer?.classList.remove('hidden');
+          dom.optProps?.classList.remove('hidden');
         }
       });
     });
@@ -2291,16 +2651,19 @@
       state.dibujos = [];
       markDirty();
       debounceLocalMirrorSave();
-      if (state.partida?.id && state.escenaActiva?.id) {
-        socket?.emit('limpiar_dibujos', { partidaId: state.partida.id, escenaId: state.escenaActiva.id });
+      const escenaCur = getEscenaActual();
+      if (state.partida?.id && escenaCur?.id) {
+        socket?.emit('limpiar_dibujos', { partidaId: state.partida.id, escenaId: escenaCur.id });
       }
     });
 
     dom.btnClearFigures?.addEventListener('click', () => {
+      const escenaCur = getEscenaActual();
+      if (!state.partida?.id || !escenaCur?.id) return;
       if (state.usuario.esDM) {
-        socket?.emit('limpiar_figuras', { partidaId: state.partida.id, escenaId: state.escenaActiva.id });
+        socket?.emit('limpiar_figuras', { partidaId: state.partida.id, escenaId: escenaCur.id });
       } else {
-        socket?.emit('limpiar_mis_figuras', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, usuarioId: state.usuario.id });
+        socket?.emit('limpiar_mis_figuras', { partidaId: state.partida.id, escenaId: escenaCur.id, usuarioId: state.usuario.id });
       }
     });
 
@@ -2569,12 +2932,13 @@
 
     dom.mapFileInput?.addEventListener('change', (e) => {
       const file = e.target.files[0];
-      if (file) {
+      const escenaCurId = getEscenaActual()?.id || state.escenaActiva?.id;
+      if (file && escenaCurId) {
         // Si es GIF animado, preservar datos originales para no perder animación
         if (file.type === 'image/gif') {
           const reader = new FileReader();
           reader.onload = (evt) => {
-            socket?.emit('actualizar_mapa', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, mapaBase64: evt.target.result });
+            socket?.emit('actualizar_mapa', { partidaId: state.partida.id, escenaId: escenaCurId, mapaBase64: evt.target.result });
           };
           reader.readAsDataURL(file);
           return;
@@ -2597,7 +2961,7 @@
             ctx.drawImage(img, 0, 0, w, h);
             const resizedBase64 = canvas.toDataURL('image/jpeg', 0.82);
 
-            socket?.emit('actualizar_mapa', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, mapaBase64: resizedBase64 });
+            socket?.emit('actualizar_mapa', { partidaId: state.partida.id, escenaId: escenaCurId, mapaBase64: resizedBase64 });
           };
           img.src = evt.target.result;
         };
@@ -2606,15 +2970,21 @@
     });
 
     dom.btnClearMapBg?.addEventListener('click', () => {
-      socket?.emit('actualizar_mapa', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, mapaBase64: null });
+      const escenaCurId = getEscenaActual()?.id || state.escenaActiva?.id;
+      if (escenaCurId) {
+        socket?.emit('actualizar_mapa', { partidaId: state.partida.id, escenaId: escenaCurId, mapaBase64: null });
+      }
     });
 
     dom.btnApplyGrid?.addEventListener('click', () => {
+      const escenaCurId = getEscenaActual()?.id || state.escenaActiva?.id;
       const gridX = parseInt(dom.gridColsInput.value) || 40;
       const gridY = parseInt(dom.gridRowsInput.value) || 40;
       const casilla = parseInt(dom.gridFeetInput.value) || 5;
 
-      socket?.emit('actualizar_grid', { partidaId: state.partida.id, escenaId: state.escenaActiva.id, gridX, gridY, casilla });
+      if (escenaCurId) {
+        socket?.emit('actualizar_grid', { partidaId: state.partida.id, escenaId: escenaCurId, gridX, gridY, casilla });
+      }
     });
 
     // Guardar Ficha Actual en Galería de Plantillas
@@ -2773,6 +3143,140 @@
       });
 
       closeModal(dom.modalRevelar);
+    });
+
+    // --- ACCIONES DEL BANNER DE PREPARACIÓN DE ESCENAS (DM) ---
+    dom.btnStagingActivateAll?.addEventListener('click', () => {
+      if (state.escenaPreparacion) {
+        activarEscenaParaJugadores(state.escenaPreparacion.id);
+      }
+    });
+
+    dom.btnStagingReturnActive?.addEventListener('click', () => {
+      if (state.escenaActiva) {
+        cargarEscenaEnModoPreparacion(state.escenaActiva.id);
+      }
+    });
+
+    // --- REAGRUPAR FICHAS DENTRO DEL MAPA ---
+    dom.btnReagruparFichas?.addEventListener('click', () => {
+      const escenaCur = getEscenaActual();
+      if (!escenaCur || !state.partida?.id) return;
+      if (confirm(`¿Reagrupar las fichas de los jugadores dentro de los límites del mapa de "${escenaCur.nombre}"?`)) {
+        socket?.emit('reagrupar_fichas', {
+          partidaId: state.partida.id,
+          escenaId: escenaCur.id
+        });
+        showToast('📍 Reagrupando fichas en el mapa...', 'info');
+      }
+    });
+
+    // --- EXPERIMENTAL: CAPAS Y OBJETOS (PROPS) ---
+    dom.checkExperimentalProps?.addEventListener('change', (e) => {
+      toggleExperimentalPropsUI(e.target.checked);
+      showToast(e.target.checked ? '✨ Capas y Objetos activado (Experimental)' : 'Capas y Objetos desactivado', 'info');
+    });
+
+    // Presets rápidos de objetos
+    document.querySelectorAll('.btn-prop-preset').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const preset = btn.dataset.preset;
+        const name = btn.dataset.name;
+        const w = btn.dataset.w;
+        const h = btn.dataset.h;
+        const layer = btn.dataset.layer;
+
+        if (dom.propNameInput) dom.propNameInput.value = name || 'Objeto';
+        if (dom.propWidthInput) dom.propWidthInput.value = w || 2;
+        if (dom.propHeightInput) dom.propHeightInput.value = h || 2;
+        if (dom.propLayerSelect) dom.propLayerSelect.value = layer || 'debajo_fichas';
+        if (dom.propUrlInput && preset) {
+          dom.propUrlInput.value = getPropPresetSvg(preset);
+        }
+        showToast(`Preset "${name}" seleccionado. Ajusta tamaño/capa y pulsa Colocar.`, 'info');
+      });
+    });
+
+    // Subida de imagen para prop
+    dom.btnPropFileTrigger?.addEventListener('click', () => {
+      dom.propFileInput?.click();
+    });
+
+    dom.propFileInput?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        if (dom.propUrlInput) dom.propUrlInput.value = dataUrl;
+        if (dom.propNameInput && !dom.propNameInput.value) {
+          dom.propNameInput.value = file.name.replace(/\.[^/.]+$/, '');
+        }
+        showToast('Imagen del objeto cargada correctamente.', 'info');
+      } catch (err) {
+        showToast('Error al leer el archivo de imagen', 'danger');
+      }
+    });
+
+    // Guardar / Colocar Prop
+    dom.btnAddPropSubmit?.addEventListener('click', () => {
+      const name = (dom.propNameInput?.value || '').trim() || 'Objeto en Mesa';
+      const url = (dom.propUrlInput?.value || '').trim();
+      const w = Math.max(0.5, parseFloat(dom.propWidthInput?.value) || 2);
+      const h = Math.max(0.5, parseFloat(dom.propHeightInput?.value) || 2);
+      const rot = parseInt(dom.propRotInput?.value) || 0;
+      const layer = dom.propLayerSelect?.value || 'debajo_fichas';
+      const escenaCur = getEscenaActual();
+
+      if (!url) {
+        showToast('Por favor selecciona un preset o introduce una imagen/URL.', 'warning');
+        return;
+      }
+      if (!escenaCur || !state.partida?.id) {
+        showToast('No hay escena disponible para colocar el objeto.', 'warning');
+        return;
+      }
+
+      // Centrar en pantalla actual o (2, 2)
+      let spawnX = 2;
+      let spawnY = 2;
+      if (canvas) {
+        const centerPos = screenToGrid(canvas.width / 2, canvas.height / 2);
+        spawnX = Math.max(0, Math.round(centerPos.x - w / 2));
+        spawnY = Math.max(0, Math.round(centerPos.y - h / 2));
+      }
+
+      const propData = {
+        id: 'prop_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        escena_id: escenaCur.id,
+        nombre: name,
+        imagen: url,
+        x: spawnX,
+        y: spawnY,
+        ancho: w,
+        alto: h,
+        rotacion: rot,
+        capa: layer,
+        bloqueado: 0,
+        oculto: 0
+      };
+
+      socket?.emit('guardar_prop', {
+        partidaId: state.partida.id,
+        escenaId: escenaCur.id,
+        propData
+      });
+
+      showToast(`✨ Objeto "${name}" colocado en el mapa.`, 'success');
+      activeTool = 'props';
+      dom.toolButtons?.forEach(b => b.classList.toggle('active', b.dataset.tool === 'props'));
+      dom.toolOptionsContainer?.classList.remove('hidden');
+      dom.optProps?.classList.remove('hidden');
+      markDirty();
     });
   }
 
@@ -3317,7 +3821,7 @@
     dom.fichasList.innerHTML = '';
     const filter = (dom.filterFichasInput?.value || '').toLowerCase();
 
-    const escenaActualId = state.escenaActiva?.id;
+    const escenaActualId = getEscenaActual()?.id;
     let listToRender = [...(state.fichas || [])].filter(f => {
       const tipo = (f.tipo || 'jugador').toLowerCase();
       if (tipo === 'jugador') return true;
@@ -3386,6 +3890,7 @@
           </div>
         </div>
         <div class="ficha-actions">
+          <button class="btn btn-sm btn-secondary btn-center-ficha" title="Centrar cámara en esta ficha"><i class="fa-solid fa-crosshairs"></i></button>
           ${tieneNotasVisibles ? `<button class="btn btn-sm btn-secondary btn-ver-notas" title="Ver rasgos, hechizos y notas"><i class="fa-solid fa-scroll gold-text"></i> Notas</button>` : ''}
           ${esPropietario ? `<button class="btn btn-sm ${ficha.gigante ? 'btn-gold' : 'btn-secondary'} btn-gigante" title="${ficha.gigante ? 'Volver a tamaño normal' : 'Aumentar a tamaño gigante'}"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> ${ficha.gigante ? 'Normal' : 'Gigante'}</button>` : ''}
           ${state.usuario.esDM ? `<button class="btn btn-sm ${ficha.oculto ? 'btn-warning' : 'btn-secondary'} btn-toggle-oculto" title="${ficha.oculto ? 'Mostrar en mapa a jugadores' : 'Ocultar en mapa a jugadores'}"><i class="fa-solid ${ficha.oculto ? 'fa-eye' : 'fa-eye-slash'}"></i> ${ficha.oculto ? 'Mostrar' : 'Ocultar'}</button>` : ''}
@@ -3394,6 +3899,11 @@
           ${(state.usuario.esDM || esPropietario) ? '<button class="btn btn-sm btn-danger btn-del-ficha" title="Eliminar ficha"><i class="fa-solid fa-trash"></i></button>' : ''}
         </div>
       `;
+
+      card.querySelector('.btn-center-ficha')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        centerOnToken(ficha.id);
+      });
 
       function abrirModalNotas() {
         dom.enlargedGifImg.src = avatarSrc;
@@ -3599,40 +4109,252 @@
     openModal(modal);
   }
 
+  function updateStagingBanner() {
+    if (!dom.dmStagingBanner) return;
+    if (state.usuario?.esDM && state.escenaPreparacion) {
+      dom.dmStagingBanner.classList.remove('hidden');
+      if (dom.stagingViewingName) dom.stagingViewingName.textContent = state.escenaPreparacion.nombre || 'Escena';
+      if (dom.stagingActiveName) dom.stagingActiveName.textContent = state.escenaActiva?.nombre || 'Escena activa';
+      if (dom.currentSceneName) dom.currentSceneName.textContent = `[DM] ${state.escenaPreparacion.nombre}`;
+    } else {
+      dom.dmStagingBanner.classList.add('hidden');
+      if (dom.currentSceneName) dom.currentSceneName.textContent = state.escenaActiva?.nombre || 'Escena Principal';
+    }
+  }
+
+  function cargarEscenaEnModoPreparacion(escenaId) {
+    if (!state.usuario?.esDM || !state.partida?.id) return;
+    if (escenaId === state.escenaActiva?.id) {
+      state.escenaPreparacion = null;
+      updateStagingBanner();
+      centerMap();
+      loadMapImage();
+      renderScenesList();
+      renderPropsList();
+      renderFichasList();
+      markDirty();
+      showToast(`Mostrando escena activa: ${state.escenaActiva.nombre}`, 'info');
+      return;
+    }
+    socket?.emit('dm_ver_escena', { partidaId: state.partida.id, escenaId });
+  }
+
+  function activarEscenaParaJugadores(escenaId) {
+    if (!state.usuario?.esDM || !state.partida?.id) return;
+    const posicionesActuales = (state.fichas || []).map(f => ({
+      fichaId: f.id,
+      x: f.x,
+      y: f.y
+    }));
+    state.escenaPreparacion = null;
+    socket?.emit('cambiar_escena', {
+      partidaId: state.partida.id,
+      escenaId,
+      escenaAnteriorId: state.escenaActiva?.id,
+      posicionesActuales
+    });
+  }
+
   function renderScenesList() {
+    if (!dom.scenesList) return;
     dom.scenesList.innerHTML = '';
+    const escenaActual = getEscenaActual();
+    const escenaActivaId = state.escenaActiva?.id;
+    const escenaPrepId = state.escenaPreparacion?.id;
+
     (state.escenas || []).forEach(sc => {
+      const isPartyActive = sc.id === escenaActivaId;
+      const isBeingEdited = Boolean(escenaPrepId && sc.id === escenaPrepId);
+      const isShowingNow = sc.id === escenaActual?.id;
+
       const item = document.createElement('div');
-      item.className = `scene-item ${sc.id === state.escenaActiva?.id ? 'active' : ''}`;
+      item.className = `scene-item ${isPartyActive ? 'active-game' : ''} ${isShowingNow ? 'editing-screen' : ''}`;
+
+      let badgesHtml = '';
+      if (isPartyActive) {
+        badgesHtml += `<span class="scene-badge-party" title="Aquí se encuentran los jugadores"><i class="fa-solid fa-users"></i> En Juego</span>`;
+      }
+      if (isBeingEdited) {
+        badgesHtml += `<span class="scene-badge-editing" title="Estás editando esta escena en privado"><i class="fa-solid fa-eye"></i> En Pantalla (DM)</span>`;
+      }
+
+      let actionsHtml = '';
+      if (isPartyActive && !escenaPrepId) {
+        actionsHtml = `
+          <button class="btn btn-sm btn-outline" disabled title="Esta escena está en pantalla y activa para jugadores"><i class="fa-solid fa-check"></i> Activa</button>
+        `;
+      } else if (isPartyActive && escenaPrepId) {
+        actionsHtml = `
+          <button class="btn btn-sm btn-secondary btn-return-scene" title="Regresar a ver la escena donde juegan los demás"><i class="fa-solid fa-arrow-turn-down"></i> Ver Activa</button>
+        `;
+      } else {
+        actionsHtml = `
+          <button class="btn btn-sm ${isShowingNow ? 'btn-gold' : 'btn-info'} btn-stage-scene" title="Ver y preparar mapa/props sin mover a los jugadores"><i class="fa-solid fa-eye"></i> ${isShowingNow ? 'Editando' : 'Gestionar'}</button>
+          <button class="btn btn-sm btn-primary btn-load-scene" title="Activar esta escena para todos los jugadores"><i class="fa-solid fa-play"></i> Activar</button>
+        `;
+      }
+
+      actionsHtml += `<button class="btn btn-sm btn-danger btn-del-scene" title="Eliminar escena"><i class="fa-solid fa-trash"></i></button>`;
+
       item.innerHTML = `
-        <span>🎬 ${sc.nombre}</span>
+        <div class="scene-item-title">
+          <span class="scene-name-text">🎬 ${sc.nombre}</span>
+          ${badgesHtml}
+        </div>
         <div class="actions">
-          <button class="btn btn-sm btn-primary btn-load-scene">Activar</button>
-          <button class="btn btn-sm btn-danger btn-del-scene"><i class="fa-solid fa-trash"></i></button>
+          ${actionsHtml}
         </div>
       `;
 
-      item.querySelector('.btn-load-scene').addEventListener('click', () => {
-        const posicionesActuales = (state.fichas || []).map(f => ({
-          fichaId: f.id,
-          x: f.x,
-          y: f.y
-        }));
-        socket?.emit('cambiar_escena', {
-          partidaId: state.partida.id,
-          escenaId: sc.id,
-          escenaAnteriorId: state.escenaActiva?.id,
-          posicionesActuales
-        });
+      item.querySelector('.btn-return-scene')?.addEventListener('click', () => {
+        cargarEscenaEnModoPreparacion(escenaActivaId);
       });
 
-      item.querySelector('.btn-del-scene').addEventListener('click', () => {
-        if (confirm(`¿Eliminar la escena ${sc.nombre}?`)) {
+      item.querySelector('.btn-stage-scene')?.addEventListener('click', () => {
+        cargarEscenaEnModoPreparacion(sc.id);
+      });
+
+      item.querySelector('.btn-load-scene')?.addEventListener('click', () => {
+        activarEscenaParaJugadores(sc.id);
+      });
+
+      item.querySelector('.btn-del-scene')?.addEventListener('click', () => {
+        if (confirm(`¿Eliminar la escena "${sc.nombre}"?`)) {
           socket?.emit('eliminar_escena', { partidaId: state.partida.id, escenaId: sc.id });
         }
       });
 
       dom.scenesList.appendChild(item);
+    });
+  }
+
+  // --- EXPERIMENTAL: CAPAS Y OBJETOS (PROPS) ---
+  function getPropPresetSvg(presetId) {
+    const svgs = {
+      carro: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="200" height="100"><rect x="10" y="8" width="30" height="14" rx="4" fill="#1e293b"/><rect x="160" y="8" width="30" height="14" rx="4" fill="#1e293b"/><rect x="10" y="78" width="30" height="14" rx="4" fill="#1e293b"/><rect x="160" y="78" width="30" height="14" rx="4" fill="#1e293b"/><rect x="25" y="15" width="150" height="70" rx="16" fill="#854d0e" stroke="#ca8a04" stroke-width="3"/><rect x="50" y="24" width="90" height="52" rx="8" fill="#1c1917" stroke="#78350f" stroke-width="2"/><path d="M55,30 L135,30 L125,70 L65,70 Z" fill="#38bdf8" opacity="0.45"/><circle cx="170" cy="32" r="6" fill="#fef08a"/><circle cx="170" cy="68" r="6" fill="#fef08a"/></svg>`,
+      arbol: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><circle cx="50" cy="50" r="46" fill="#14532d" opacity="0.85"/><circle cx="38" cy="40" r="28" fill="#166534"/><circle cx="62" cy="42" r="26" fill="#15803d"/><circle cx="48" cy="62" r="27" fill="#22c55e" opacity="0.9"/><circle cx="50" cy="50" r="9" fill="#78350f"/></svg>`,
+      cajas: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect x="6" y="6" width="42" height="42" rx="4" fill="#78350f" stroke="#b45309" stroke-width="3"/><line x1="6" y1="6" x2="48" y2="48" stroke="#b45309" stroke-width="2"/><rect x="52" y="12" width="42" height="42" rx="4" fill="#92400e" stroke="#d97706" stroke-width="3"/><line x1="52" y1="54" x2="94" y2="12" stroke="#d97706" stroke-width="2"/><rect x="24" y="50" width="46" height="44" rx="4" fill="#451a03" stroke="#92400e" stroke-width="3"/><line x1="24" y1="50" x2="70" y2="94" stroke="#92400e" stroke-width="2"/></svg>`,
+      mesa: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 100" width="150" height="100"><rect x="10" y="12" width="130" height="76" rx="10" fill="#78350f" stroke="#d97706" stroke-width="4"/><line x1="10" y1="36" x2="140" y2="36" stroke="#451a03" stroke-width="2"/><line x1="10" y1="64" x2="140" y2="64" stroke="#451a03" stroke-width="2"/><circle cx="45" cy="50" r="12" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/><circle cx="105" cy="50" r="12" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/><circle cx="75" cy="50" r="8" fill="#ca8a04"/></svg>`,
+      sangre: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><path d="M50,15 C65,18 78,32 72,48 C85,55 92,70 78,82 C65,92 45,95 32,85 C18,75 15,58 26,45 C15,35 25,20 40,22 Z" fill="#991b1b" opacity="0.85"/><circle cx="78" cy="25" r="5" fill="#7f1d1d" opacity="0.8"/><circle cx="20" cy="72" r="4" fill="#7f1d1d" opacity="0.8"/><circle cx="85" cy="78" r="3" fill="#7f1d1d" opacity="0.8"/></svg>`,
+      crater: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><circle cx="50" cy="50" r="45" fill="#18181b" stroke="#71717a" stroke-width="3" stroke-dasharray="6,4"/><circle cx="50" cy="50" r="32" fill="#27272a"/><circle cx="50" cy="50" r="18" fill="#09090b"/><path d="M50,5 L50,25 M95,50 L75,50 M50,95 L50,75 M5,50 L25,50" stroke="#52525b" stroke-width="3"/></svg>`,
+      carpa: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><polygon points="50,10 90,85 10,85" fill="#475569" stroke="#94a3b8" stroke-width="3"/><polygon points="50,10 50,85 10,85" fill="#334155"/><polygon points="50,45 65,85 35,85" fill="#0f172a"/></svg>`,
+      puerta: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 100" width="50" height="100"><rect x="5" y="5" width="40" height="90" rx="4" fill="#5c2c16" stroke="#b45309" stroke-width="4"/><line x1="5" y1="35" x2="45" y2="35" stroke="#b45309" stroke-width="3"/><line x1="5" y1="65" x2="45" y2="65" stroke="#b45309" stroke-width="3"/><circle cx="38" cy="50" r="4" fill="#fbbf24"/></svg>`
+    };
+    const raw = svgs[presetId] || svgs.carro;
+    return 'data:image/svg+xml;utf8,' + encodeURIComponent(raw);
+  }
+
+  function toggleExperimentalPropsUI(enabled) {
+    state.experimentalPropsEnabled = Boolean(enabled);
+    if (dom.checkExperimentalProps) dom.checkExperimentalProps.checked = state.experimentalPropsEnabled;
+    try {
+      localStorage.setItem('vtt_exp_props', state.experimentalPropsEnabled ? 'true' : 'false');
+      if (state.partida?.codigo) {
+        localStorage.setItem('vtt_exp_props_' + state.partida.codigo, state.experimentalPropsEnabled ? 'true' : 'false');
+      }
+    } catch (_) {}
+
+    if (state.usuario?.esDM && state.experimentalPropsEnabled) {
+      dom.toolProps?.classList.remove('hidden');
+      dom.dmPropsSection?.classList.remove('hidden');
+      renderPropsList();
+    } else {
+      dom.toolProps?.classList.add('hidden');
+      dom.dmPropsSection?.classList.add('hidden');
+      if (activeTool === 'props') {
+        activeTool = 'select';
+        dom.toolButtons?.forEach(b => b.classList.toggle('active', b.dataset.tool === 'select'));
+        dom.toolOptionsContainer?.classList.add('hidden');
+        dom.optProps?.classList.add('hidden');
+      }
+    }
+    markDirty();
+  }
+
+  function renderPropsList() {
+    if (!dom.dmPropsList) return;
+    dom.dmPropsList.innerHTML = '';
+    const currentSceneId = getEscenaActual()?.id;
+    const sceneProps = (state.props || []).filter(p => !currentSceneId || p.escena_id === currentSceneId);
+
+    if (sceneProps.length === 0) {
+      dom.dmPropsList.innerHTML = '<div style="color:var(--text-muted); font-size:0.85rem; padding:8px; text-align:center;">No hay objetos colocados en esta escena.</div>';
+      return;
+    }
+
+    sceneProps.forEach(prop => {
+      const card = document.createElement('div');
+      card.className = `prop-item-card ${selectedPropId === prop.id ? 'selected' : ''}`;
+      const layerNames = {
+        'suelo': 'Suelo (Fondo)',
+        'debajo_fichas': 'Debajo de Fichas',
+        'encima_fichas': 'Encima de Fichas'
+      };
+      const layerName = layerNames[prop.capa] || prop.capa;
+
+      card.innerHTML = `
+        <div class="prop-item-header">
+          <img src="${prop.imagen}" class="prop-thumb" alt="${prop.nombre}">
+          <div class="prop-item-info">
+            <div class="prop-name">${prop.nombre}</div>
+            <div class="prop-meta">${prop.ancho}x${prop.alto} casillas | ${layerName}</div>
+          </div>
+        </div>
+        <div class="prop-actions">
+          <button class="btn btn-sm ${prop.bloqueado ? 'btn-warning' : 'btn-secondary'} btn-prop-lock" title="${prop.bloqueado ? 'Desbloquear movimiento' : 'Bloquear posición'}">
+            <i class="fa-solid ${prop.bloqueado ? 'fa-lock' : 'fa-lock-open'}"></i>
+          </button>
+          <button class="btn btn-sm btn-secondary btn-prop-locate" title="Centrar cámara en este objeto">
+            <i class="fa-solid fa-crosshairs"></i>
+          </button>
+          <button class="btn btn-sm btn-danger btn-prop-del" title="Eliminar objeto">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </div>
+      `;
+
+      card.querySelector('.btn-prop-lock')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        prop.bloqueado = prop.bloqueado ? 0 : 1;
+        socket?.emit('guardar_prop', {
+          partidaId: state.partida.id,
+          escenaId: currentSceneId,
+          propData: prop
+        });
+        renderPropsList();
+        markDirty();
+      });
+
+      card.querySelector('.btn-prop-locate')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (canvas) {
+          const tileSize = getTileSize();
+          viewport.panX = canvas.width / 2 - ((prop.x + prop.ancho / 2) * tileSize);
+          viewport.panY = canvas.height / 2 - ((prop.y + prop.alto / 2) * tileSize);
+          selectedPropId = prop.id;
+          renderPropsList();
+          markDirty();
+        }
+      });
+
+      card.querySelector('.btn-prop-del')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (confirm(`¿Eliminar el objeto "${prop.nombre}"?`)) {
+          socket?.emit('eliminar_prop', {
+            partidaId: state.partida.id,
+            escenaId: currentSceneId,
+            propId: prop.id
+          });
+        }
+      });
+
+      card.addEventListener('click', () => {
+        selectedPropId = (selectedPropId === prop.id) ? null : prop.id;
+        renderPropsList();
+        markDirty();
+      });
+
+      dom.dmPropsList.appendChild(card);
     });
   }
 

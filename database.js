@@ -351,6 +351,23 @@ async function initDb() {
       )
     `);
 
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS capas_props (
+        id TEXT PRIMARY KEY,
+        escena_id TEXT NOT NULL REFERENCES escenas(id) ON DELETE CASCADE,
+        nombre TEXT DEFAULT 'Objeto',
+        imagen TEXT NOT NULL,
+        x REAL DEFAULT 0,
+        y REAL DEFAULT 0,
+        ancho REAL DEFAULT 2,
+        alto REAL DEFAULT 2,
+        rotacion REAL DEFAULT 0,
+        capa TEXT DEFAULT 'debajo_fichas',
+        bloqueado INTEGER DEFAULT 0,
+        oculto INTEGER DEFAULT 0
+      )
+    `);
+
     // Migraciones automáticas seguras en PostgreSQL
     try { await dbRun(`ALTER TABLE figuras ADD COLUMN IF NOT EXISTS ancho REAL DEFAULT 1`); } catch (_) {}
     try { await dbRun(`ALTER TABLE figuras ADD COLUMN IF NOT EXISTS alto REAL DEFAULT 1`); } catch (_) {}
@@ -374,6 +391,7 @@ async function initDb() {
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_mensajes_partida ON mensajes(partida_id)`);
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_historial_partida ON historial_dados(partida_id)`);
     await dbRun(`CREATE INDEX IF NOT EXISTS idx_galeria_partida ON galeria(partida_id)`);
+    await dbRun(`CREATE INDEX IF NOT EXISTS idx_capas_props_escena ON capas_props(escena_id)`);
 
     console.log('✅ Base de datos PostgreSQL inicializada con esquemas e índices.');
     return;
@@ -537,6 +555,24 @@ async function initDb() {
     )
   `);
 
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS capas_props (
+      id TEXT PRIMARY KEY,
+      escena_id TEXT NOT NULL,
+      nombre TEXT DEFAULT 'Objeto',
+      imagen TEXT NOT NULL,
+      x REAL DEFAULT 0,
+      y REAL DEFAULT 0,
+      ancho REAL DEFAULT 2,
+      alto REAL DEFAULT 2,
+      rotacion REAL DEFAULT 0,
+      capa TEXT DEFAULT 'debajo_fichas',
+      bloqueado BOOLEAN DEFAULT 0,
+      oculto BOOLEAN DEFAULT 0,
+      FOREIGN KEY (escena_id) REFERENCES escenas(id) ON DELETE CASCADE
+    )
+  `);
+
   try { await dbRun(`ALTER TABLE partidas ADD COLUMN imagen_portada TEXT`); } catch (_) {}
   try { await dbRun(`ALTER TABLE partidas ADD COLUMN datos_combate TEXT`); } catch (_) {}
   try { await dbRun(`ALTER TABLE fichas ADD COLUMN color_aro TEXT DEFAULT '#c9a84c'`); } catch (_) {}
@@ -557,6 +593,7 @@ async function initDb() {
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_mensajes_partida ON mensajes(partida_id)`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_historial_partida ON historial_dados(partida_id)`);
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_galeria_partida ON galeria(partida_id)`);
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_capas_props_escena ON capas_props(escena_id)`);
 
   console.log('✅ Base de datos SQLite inicializada correctamente con modo WAL e índices');
 }

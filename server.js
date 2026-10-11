@@ -579,6 +579,7 @@ io.on('connection', (socket) => {
       const figuras = escenaActiva ? await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaActiva.id]) : [];
       const dibujoRow = escenaActiva ? await dbGet(`SELECT datos FROM dibujos WHERE escena_id = ?`, [escenaActiva.id]) : null;
       const dibujos = dibujoRow ? JSON.parse(dibujoRow.datos || '[]') : [];
+      const props = escenaActiva ? await dbAll(`SELECT * FROM capas_props WHERE escena_id = ?`, [escenaActiva.id]) : [];
       const mensajes = await dbAll(`SELECT * FROM mensajes WHERE partida_id = ? ORDER BY fecha ASC LIMIT 100`, [partida.id]);
       const historial = await dbAll(`SELECT * FROM historial_dados WHERE partida_id = ? ORDER BY fecha DESC LIMIT 100`, [partida.id]);
       const galeria = esDM ? await dbAll(`SELECT * FROM galeria WHERE partida_id = ?`, [partida.id]) : [];
@@ -588,8 +589,8 @@ io.on('connection', (socket) => {
       if (!connectedUsers.has(partida.id)) {
         connectedUsers.set(partida.id, new Map());
       }
-      connectedUsers.get(partida.id).set(usuarioId, {
-        id: usuarioId,
+      connectedUsers.get(partida.id).set(effectiveUserId, {
+        id: effectiveUserId,
         nombre: nombreUsuario,
         esDM,
         color: colorUsuario,
@@ -614,12 +615,13 @@ io.on('connection', (socket) => {
         fichas,
         figuras,
         dibujos,
+        props,
         mensajes,
         historial,
         galeria,
         combate,
         jugadoresConectados,
-        usuario: { id: usuarioId, nombre: nombreUsuario, esDM, color: colorUsuario }
+        usuario: { id: effectiveUserId, nombre: nombreUsuario, esDM, color: colorUsuario }
       });
 
       // Emitir lista de jugadores actualizada a toda la sala
@@ -627,7 +629,7 @@ io.on('connection', (socket) => {
 
       // Notificar a la sala
       io.to(partida.id).emit('usuario_conectado', {
-        id: usuarioId,
+        id: effectiveUserId,
         nombre: nombreUsuario,
         esDM,
         color: colorUsuario
@@ -701,12 +703,64 @@ io.on('connection', (socket) => {
       const dibujoRow = await dbGet(`SELECT datos FROM dibujos WHERE escena_id = ?`, [escenaId]);
       const dibujos = dibujoRow ? JSON.parse(dibujoRow.datos || '[]') : [];
       const posiciones_fichas = await dbAll(`SELECT * FROM posiciones_fichas WHERE escena_id = ?`, [escenaId]);
+      const props = await dbAll(`SELECT * FROM capas_props WHERE escena_id = ?`, [escenaId]);
 
       // 3. Emitir a la sala
-      io.to(partidaId).emit('escena_cambiada', { escenaActiva, figuras, dibujos, posiciones_fichas });
+      io.to(partidaId).emit('escena_cambiada', { escenaActiva, figuras, dibujos, posiciones_fichas, props });
       scheduleAutoSave(partidaId);
     } catch (err) {
       console.error('Error al cambiar de escena:', err);
+    }
+  });
+
+  // DM visualiza/prepara una escena en privado sin mover a los jugadores
+  socket.on('dm_ver_escena', async ({ partidaId, escenaId }) => {
+    try {
+      const escena = await dbGet(`SELECT * FROM escenas WHERE id = ?`, [escenaId]);
+      if (!escena) return;
+      const figuras = await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaId]);
+      const dibujoRow = await dbGet(`SELECT datos FROM dibujos WHERE escena_id = ?`, [escenaId]);
+      const dibujos = dibujoRow ? JSON.parse(dibujoRow.datos || '[]') : [];
+      const posiciones_fichas = await dbAll(`SELECT * FROM posiciones_fichas WHERE escena_id = ?`, [escenaId]);
+      const props = await dbAll(`SELECT * FROM capas_props WHERE escena_id = ?`, [escenaId]);
+      socket.emit('dm_escena_cargada', { escena, figuras, dibujos, posiciones_fichas, props });
+    } catch (err) {
+      console.error('Error en dm_ver_escena:', err);
+    }
+  });
+
+  // Reagrupar todas las fichas de jugadores ordenadamente en la escena activa/actual
+  socket.on('reagrupar_fichas', async ({ partidaId, escenaId }) => {
+    try {
+      const escena = await dbGet(`SELECT * FROM escenas WHERE id = ?`, [escenaId]);
+      const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ? AND tipo = 'jugador'`, [partidaId]);
+      if (!escena || !fichas.length) return;
+
+      const cols = escena.config_grid_x || 40;
+      const rows = escena.config_grid_y || 40;
+      const startX = Math.max(1, Math.min(cols - 4, 3));
+      const startY = Math.max(1, Math.min(rows - 4, 3));
+      const perRow = Math.max(4, Math.floor(Math.sqrt(fichas.length) * 2));
+
+      const updated = [];
+      await dbTransaction(async () => {
+        for (let i = 0; i < fichas.length; i++) {
+          const f = fichas[i];
+          const newX = startX + (i % perRow);
+          const newY = startY + Math.floor(i / perRow);
+          await dbRun(`UPDATE fichas SET x = ?, y = ? WHERE id = ?`, [newX, newY, f.id]);
+          await dbRun(
+            `INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`,
+            [f.id, escenaId, newX, newY]
+          );
+          updated.push({ fichaId: f.id, x: newX, y: newY });
+        }
+      });
+
+      io.to(partidaId).emit('fichas_reagrupadas', { escenaId, fichas: updated });
+      scheduleAutoSave(partidaId);
+    } catch (err) {
+      console.error('Error en reagrupar_fichas:', err);
     }
   });
 
@@ -740,7 +794,7 @@ io.on('connection', (socket) => {
   socket.on('actualizar_mapa', async ({ partidaId, escenaId, mapaBase64 }) => {
     try {
       await dbRun(`UPDATE escenas SET mapa = ? WHERE id = ?`, [mapaBase64, escenaId]);
-      await dbRun(`UPDATE partidas SET escena_activa_id = ?, fecha_modificacion = ? WHERE id = ?`, [escenaId, new Date().toISOString(), partidaId]);
+      await dbRun(`UPDATE partidas SET fecha_modificacion = ? WHERE id = ?`, [new Date().toISOString(), partidaId]);
       io.to(partidaId).emit('mapa_actualizado', { escenaId, mapa: mapaBase64 });
       scheduleAutoSave(partidaId);
     } catch (err) {
@@ -755,14 +809,77 @@ io.on('connection', (socket) => {
         `UPDATE escenas SET config_grid_x = ?, config_grid_y = ?, config_casilla = ? WHERE id = ?`,
         [gridX, gridY, casilla, escenaId]
       );
-      await dbRun(
-        `UPDATE partidas SET config_grid_x = ?, config_grid_y = ?, config_casilla = ?, fecha_modificacion = ? WHERE id = ?`,
-        [gridX, gridY, casilla, new Date().toISOString(), partidaId]
-      );
+      const partida = await dbGet(`SELECT escena_activa_id FROM partidas WHERE id = ?`, [partidaId]);
+      if (partida && partida.escena_activa_id === escenaId) {
+        await dbRun(
+          `UPDATE partidas SET config_grid_x = ?, config_grid_y = ?, config_casilla = ?, fecha_modificacion = ? WHERE id = ?`,
+          [gridX, gridY, casilla, new Date().toISOString(), partidaId]
+        );
+      }
       io.to(partidaId).emit('grid_actualizado', { escenaId, gridX, gridY, casilla });
       scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
+    }
+  });
+
+  // Guardar o actualizar Prop / Objeto de Capa (DM)
+  socket.on('guardar_prop', async ({ partidaId, escenaId, propData }) => {
+    try {
+      const propId = propData.id || uuidv4();
+      const {
+        nombre = 'Objeto',
+        imagen,
+        x = 0,
+        y = 0,
+        ancho = 2,
+        alto = 2,
+        rotacion = 0,
+        capa = 'debajo_fichas',
+        bloqueado = 0,
+        oculto = 0
+      } = propData;
+
+      if (!imagen) return;
+
+      await dbRun(
+        `INSERT OR REPLACE INTO capas_props (id, escena_id, nombre, imagen, x, y, ancho, alto, rotacion, capa, bloqueado, oculto)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [propId, escenaId, nombre, imagen, x, y, ancho, alto, rotacion, capa, bloqueado ? 1 : 0, oculto ? 1 : 0]
+      );
+
+      const propGuardado = await dbGet(`SELECT * FROM capas_props WHERE id = ?`, [propId]);
+      io.to(partidaId).emit('prop_actualizado', { escenaId, prop: propGuardado });
+      scheduleAutoSave(partidaId);
+    } catch (err) {
+      console.error('Error en guardar_prop:', err);
+    }
+  });
+
+  // Mover Prop en tiempo real (Throttled)
+  socket.on('mover_prop', ({ partidaId, escenaId, propId, x, y }) => {
+    socket.to(partidaId).emit('prop_movido', { escenaId, propId, x, y });
+  });
+
+  // Guardar posición final del Prop
+  socket.on('guardar_posicion_prop', async ({ partidaId, escenaId, propId, x, y }) => {
+    try {
+      await dbRun(`UPDATE capas_props SET x = ?, y = ? WHERE id = ?`, [x, y, propId]);
+      io.to(partidaId).emit('prop_movido', { escenaId, propId, x, y });
+      scheduleAutoSave(partidaId);
+    } catch (err) {
+      console.error('Error en guardar_posicion_prop:', err);
+    }
+  });
+
+  // Eliminar Prop (DM)
+  socket.on('eliminar_prop', async ({ partidaId, escenaId, propId }) => {
+    try {
+      await dbRun(`DELETE FROM capas_props WHERE id = ?`, [propId]);
+      io.to(partidaId).emit('prop_eliminado', { escenaId, propId });
+      scheduleAutoSave(partidaId);
+    } catch (err) {
+      console.error('Error en eliminar_prop:', err);
     }
   });
 

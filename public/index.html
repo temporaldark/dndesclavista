@@ -140,6 +140,9 @@
           </svg>
           <span>Rondas</span>
         </button>
+        <button id="tool-props" class="tool-btn dm-only hidden" data-tool="props" title="Utilería y Capas (PNGs)">
+          <i class="fa-solid fa-layer-group"></i> <span>Capas</span>
+        </button>
       </div>
 
       <!-- Opciones dinámicas de herramienta activa -->
@@ -150,6 +153,11 @@
           <label>Grosor: <input type="range" id="draw-size" min="2" max="20" value="4"></label>
           <button id="btn-clear-drawings" class="btn btn-danger btn-sm dm-only"><i class="fa-solid fa-trash"></i>
             Limpiar Dibujos</button>
+        </div>
+
+        <!-- Opciones de Utilería / Capas (DM) -->
+        <div id="opt-props" class="tool-sub-options hidden">
+          <span style="font-size: 0.8rem; color: #cbd5e1;"><i class="fa-solid fa-layer-group gold-text"></i> Arrastra un objeto en el tablero para moverlo. Clic para editar.</span>
         </div>
 
         <!-- Opciones de Figuras (Hechizos y Áreas para Jugadores y DM) -->
@@ -222,6 +230,18 @@
         </div>
         <div id="combat-track-list" class="combat-track-list">
           <!-- Participantes ordenados por iniciativa -->
+        </div>
+      </div>
+
+      <!-- BANNER DE MODO PREPARACIÓN DM (Gestionar Escenas sin mover a los jugadores) -->
+      <div id="dm-staging-banner" class="staging-banner hidden">
+        <div class="staging-banner-content">
+          <span class="staging-badge"><i class="fa-solid fa-eye"></i> MODO PREPARACIÓN DM</span>
+          <span id="staging-banner-text">Preparando escena: <strong id="staging-viewing-name">--</strong> <span class="staging-hint">(Los jugadores siguen en <strong id="staging-active-name">--</strong>)</span></span>
+          <div class="staging-banner-actions">
+            <button id="btn-staging-activate-all" class="btn btn-sm btn-gold" title="Hacer que todos los jugadores pasen a esta escena"><i class="fa-solid fa-rocket"></i> Activar para Jugadores</button>
+            <button id="btn-staging-return-active" class="btn btn-sm btn-secondary" title="Volver a ver la escena donde están jugando los jugadores"><i class="fa-solid fa-arrow-turn-down-left"></i> Volver a Escena Activa</button>
+          </div>
         </div>
       </div>
 
@@ -433,6 +453,9 @@
               <input type="file" id="map-file-input" accept="image/png, image/jpeg, image/webp, image/gif" class="hidden">
               <button id="btn-clear-map-bg" class="btn btn-danger btn-sm btn-block mt-5"><i
                   class="fa-solid fa-trash"></i> Eliminar Imagen de Fondo</button>
+              <button id="btn-reagrupar-fichas" type="button" class="btn btn-gold btn-sm btn-block mt-5" title="Reunir todas las fichas de los jugadores en la escena visible para que no se pierdan">
+                <i class="fa-solid fa-arrows-to-dot"></i> Reagrupar Fichas de Jugadores
+              </button>
             </div>
           </div>
 
@@ -454,6 +477,56 @@
                   value="5"></label>
               <button id="btn-apply-grid" class="btn btn-gold btn-block"><i class="fa-solid fa-check"></i> Aplicar
                 Cambios de Grid</button>
+            </div>
+          </div>
+
+          <!-- Capas y Objetos de Utilería (Función Experimental: Props PNG) -->
+          <div id="dm-props-section" class="dm-section hidden">
+            <h4><i class="fa-solid fa-layer-group gold-text"></i> Capas de Utilería (Props PNG)</h4>
+            <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 8px;">
+              Coloca imágenes temáticas sobre el tablero (vehículos, árboles, muebles, efectos).
+            </p>
+
+            <label class="input-label" style="font-size: 0.78rem;">Insertar Elemento Rápido:</label>
+            <div class="props-quick-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 10px;">
+              <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="carro" title="Automóvil / Carro">🚗 Auto</button>
+              <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="arbol" title="Árbol / Naturaleza">🌲 Árbol</button>
+              <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="cajas" title="Cajas / Barriles">📦 Cajas</button>
+              <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="mesa" title="Mesa / Mueble">🪑 Mesa</button>
+              <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="sangre" title="Mancha de Sangre">🩸 Sangre</button>
+              <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="crater" title="Cráter / Escombros">💥 Cráter</button>
+              <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="carpa" title="Carpa / Campamento">⛺ Carpa</button>
+              <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="puerta" title="Puerta / Carreta">🚪 Puerta</button>
+            </div>
+
+            <div class="prop-form-box" style="display: flex; flex-direction: column; gap: 6px; background: rgba(0,0,0,0.25); padding: 8px; border-radius: 6px; border: 1px solid rgba(201,168,76,0.2);">
+              <input type="text" id="prop-name-input" placeholder="Nombre (ej: Automóvil)" value="Automóvil" class="form-control" style="font-size: 0.82rem;">
+              <div style="display: flex; gap: 5px;">
+                <input type="text" id="prop-url-input" placeholder="URL de imagen PNG o sube archivo..." class="form-control" style="font-size: 0.82rem; flex: 1;">
+                <button type="button" id="btn-prop-file-trigger" class="btn btn-secondary btn-sm" title="Subir archivo PNG"><i class="fa-solid fa-file-image"></i></button>
+                <input type="file" id="prop-file-input" accept="image/*,.png,.webp" class="hidden">
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;">
+                <label style="font-size: 0.75rem; color: #cbd5e1;">Ancho: <input type="number" id="prop-width-input" value="2" min="0.5" max="50" step="0.5" style="width: 100%; font-size: 0.8rem;"></label>
+                <label style="font-size: 0.75rem; color: #cbd5e1;">Alto: <input type="number" id="prop-height-input" value="4" min="0.5" max="50" step="0.5" style="width: 100%; font-size: 0.8rem;"></label>
+                <label style="font-size: 0.75rem; color: #cbd5e1;">Giro (°): <input type="number" id="prop-rot-input" value="0" min="0" max="360" step="15" style="width: 100%; font-size: 0.8rem;"></label>
+              </div>
+              <label style="font-size: 0.75rem; color: #cbd5e1; margin-top: 2px;">
+                Capa de Dibujo:
+                <select id="prop-layer-select" class="form-control" style="font-size: 0.8rem; margin-top: 2px;">
+                  <option value="debajo_fichas">🛋️ Utilería (Bajo las fichas, sobre mapa)</option>
+                  <option value="suelo">🌾 Suelo (Fondo absoluto, bajo grid)</option>
+                  <option value="encima_fichas">☁️ Techo (Sobre las fichas)</option>
+                </select>
+              </label>
+              <button type="button" id="btn-add-prop-submit" class="btn btn-gold btn-block btn-sm" style="margin-top: 4px;">
+                <i class="fa-solid fa-plus"></i> Colocar en Tablero
+              </button>
+            </div>
+
+            <label style="font-size: 0.78rem; font-weight: bold; color: var(--gold-light); margin-top: 8px; display: block;">Objetos en esta escena:</label>
+            <div id="dm-props-list" class="props-list-container" style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">
+              <div style="font-size: 0.78rem; color: #64748b; padding: 4px;">No hay objetos colocados aún.</div>
             </div>
           </div>
 
@@ -483,6 +556,17 @@
             <button type="button" id="btn-dm-delete-session" class="btn btn-danger btn-block" style="margin-top: 8px;" title="Eliminar definitivamente esta sesión">
               <i class="fa-solid fa-trash"></i> Eliminar Esta Sesión
             </button>
+
+            <!-- Función Experimental: Capas y Utilería -->
+            <div class="experimental-toggle-box" style="margin-top: 12px; padding: 10px; background: rgba(201, 168, 76, 0.08); border: 1px dashed rgba(201, 168, 76, 0.35); border-radius: 6px;">
+              <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--gold-light); font-weight: bold; font-size: 0.83rem; margin-bottom: 4px;">
+                <span><i class="fa-solid fa-flask-vial gold-text"></i> Función Experimental: Capas de Utilería</span>
+                <input type="checkbox" id="check-experimental-props" style="transform: scale(1.2); cursor: pointer;">
+              </label>
+              <p style="font-size: 0.74rem; color: #94a3b8; margin: 0;">
+                Permite colocar imágenes PNG (vehículos, árboles, obstáculos) en la mesa con soporte de capas.
+              </p>
+            </div>
           </div>
 
           <!-- Respaldar / Restaurar Sesión en Archivos Separados -->

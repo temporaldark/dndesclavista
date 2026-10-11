@@ -63,6 +63,7 @@ async function exportPartidaData(partidaId) {
   const mensajes = await dbAll(`SELECT * FROM mensajes WHERE partida_id = ? ORDER BY fecha ASC LIMIT 500`, [partidaId]);
   const historial = await dbAll(`SELECT * FROM historial_dados WHERE partida_id = ? ORDER BY fecha DESC LIMIT 500`, [partidaId]);
   const galeria = await dbAll(`SELECT * FROM galeria WHERE partida_id = ?`, [partidaId]);
+  const props = await dbAll(`SELECT p.* FROM capas_props p JOIN escenas e ON p.escena_id = e.id WHERE e.partida_id = ?`, [partidaId]);
 
   return {
     version: '2.0.0',
@@ -73,6 +74,7 @@ async function exportPartidaData(partidaId) {
     posiciones_fichas,
     figuras,
     dibujos,
+    props,
     mensajes,
     historial,
     galeria
@@ -187,7 +189,8 @@ async function saveAllPartidasImmediate() {
 async function importPartidaDataIntoDb(data, overrideExisting = false) {
   if (!data || !data.partida) throw new Error('Datos de partida inválidos.');
 
-  const { partida, escenas = [], fichas = [], posiciones_fichas = [], figuras = [], dibujos = [], mensajes = [], historial = [], galeria = [] } = data;
+  const { partida, escenas = [], fichas = [], posiciones_fichas = [], figuras = [], dibujos = [], mensajes = [], historial = [], galeria = [], props = [], capas_props = [] } = data;
+  const allProps = (props && props.length > 0) ? props : capas_props;
 
   await dbTransaction(async () => {
     // Si ya existe y se permite sobrescribir, eliminar primero
@@ -304,6 +307,15 @@ async function importPartidaDataIntoDb(data, overrideExisting = false) {
       await dbRun(
         `INSERT OR REPLACE INTO galeria (id, partida_id, nombre, datos) VALUES (?, ?, ?, ?)`,
         [g.id, partida.id, g.nombre, typeof g.datos === 'object' ? JSON.stringify(g.datos) : g.datos]
+      );
+    }
+
+    // Insertar capas_props
+    for (const p of allProps) {
+      await dbRun(
+        `INSERT OR REPLACE INTO capas_props (id, escena_id, nombre, imagen, x, y, ancho, alto, rotacion, capa, bloqueado, oculto)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [p.id, p.escena_id, p.nombre || 'Objeto', p.imagen, p.x || 0, p.y || 0, p.ancho || 2, p.alto || 2, p.rotacion || 0, p.capa || 'debajo_fichas', p.bloqueado ? 1 : 0, p.oculto ? 1 : 0]
       );
     }
   });
