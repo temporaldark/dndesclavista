@@ -779,7 +779,14 @@
 
     // DM recibe la escena que está preparando/editando en privado
     socket.on('dm_escena_cargada', ({ escena, figuras, dibujos, posiciones_fichas, props }) => {
-      state.escenaPreparacion = escena;
+      const esRetornoActiva = Boolean(state.escenaActiva && escena.id === state.escenaActiva.id);
+      if (esRetornoActiva) {
+        state.escenaPreparacion = null;
+        state.escenaActiva = escena;
+      } else {
+        state.escenaPreparacion = escena;
+      }
+
       state.figuras = figuras || [];
       state.dibujos = dibujos || [];
       state.props = props || [];
@@ -805,12 +812,19 @@
         }
       });
 
+      viewportInitializedForScene = null;
       loadMapImage(escena.mapa);
+      centerMap();
       updateStagingBanner();
       renderScenesList();
       renderPropsList();
+      renderFichasList();
       markDirty();
-      showToast(`👁️ Preparando escena: ${escena.nombre}`, 'info');
+      if (esRetornoActiva) {
+        showToast(`Volviste a la escena activa: ${escena.nombre}`, 'info');
+      } else {
+        showToast(`👁️ Preparando escena: ${escena.nombre}`, 'info');
+      }
     });
 
     // Fichas reagrupadas en la escena
@@ -883,34 +897,42 @@
     });
 
     socket.on('mapa_actualizado', ({ escenaId, mapa }) => {
-      if (state.escenaActiva && state.escenaActiva.id === escenaId) {
-        state.escenaActiva.mapa = mapa;
+      const esc = (state.escenas || []).find(e => e.id === escenaId);
+      if (esc) esc.mapa = mapa;
+      if (state.escenaActiva?.id === escenaId) state.escenaActiva.mapa = mapa;
+      if (state.escenaPreparacion?.id === escenaId) state.escenaPreparacion.mapa = mapa;
+
+      const escCur = getEscenaActual();
+      if (escCur && escCur.id === escenaId) {
         loadMapImage(mapa);
         markDirty();
-      }
-      // Actualizar también en el listado general de escenas para que no se pierda al exportar
-      const esc = (state.escenas || []).find(e => e.id === escenaId);
-      if (esc) {
-        esc.mapa = mapa;
       }
     });
 
     socket.on('grid_actualizado', ({ escenaId, gridX, gridY, casilla }) => {
-      if (state.partida) {
-        state.partida.config_grid_x = gridX;
-        state.partida.config_grid_y = gridY;
-        state.partida.config_casilla = casilla;
-      }
-      const esc = state.escenas.find(e => e.id === escenaId);
+      const esc = (state.escenas || []).find(e => e.id === escenaId);
       if (esc) {
         esc.config_grid_x = gridX;
         esc.config_grid_y = gridY;
         esc.config_casilla = casilla;
       }
-      if (state.escenaActiva && state.escenaActiva.id === escenaId) {
+      if (state.escenaActiva?.id === escenaId) {
         state.escenaActiva.config_grid_x = gridX;
         state.escenaActiva.config_grid_y = gridY;
         state.escenaActiva.config_casilla = casilla;
+        if (state.partida) {
+          state.partida.config_grid_x = gridX;
+          state.partida.config_grid_y = gridY;
+          state.partida.config_casilla = casilla;
+        }
+      }
+      if (state.escenaPreparacion?.id === escenaId) {
+        state.escenaPreparacion.config_grid_x = gridX;
+        state.escenaPreparacion.config_grid_y = gridY;
+        state.escenaPreparacion.config_casilla = casilla;
+      }
+      const escCur = getEscenaActual();
+      if (escCur && escCur.id === escenaId) {
         if (dom.gridColsInput) dom.gridColsInput.value = gridX;
         if (dom.gridRowsInput) dom.gridRowsInput.value = gridY;
         if (dom.gridFeetInput) dom.gridFeetInput.value = casilla;
@@ -3177,24 +3199,102 @@
       showToast(e.target.checked ? '✨ Capas y Objetos activado (Experimental)' : 'Capas y Objetos desactivado', 'info');
     });
 
-    // Presets rápidos de objetos
-    document.querySelectorAll('.btn-prop-preset').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const preset = btn.dataset.preset;
-        const name = btn.dataset.name;
-        const w = btn.dataset.w;
-        const h = btn.dataset.h;
-        const layer = btn.dataset.layer;
+    const presetMeta = {
+      carro: { name: 'Automóvil / Carroza', w: 4, h: 2, layer: 'encima_fichas' },
+      arbol: { name: 'Árbol Frondoso', w: 3, h: 3, layer: 'debajo_fichas' },
+      cajas: { name: 'Cajas de Suministros', w: 2, h: 2, layer: 'debajo_fichas' },
+      mesa: { name: 'Mesa de Taberna', w: 3, h: 2, layer: 'debajo_fichas' },
+      sangre: { name: 'Mancha de Sangre', w: 2, h: 2, layer: 'suelo' },
+      crater: { name: 'Cráter de Explosión', w: 3, h: 3, layer: 'suelo' },
+      carpa: { name: 'Carpa de Campamento', w: 4, h: 4, layer: 'debajo_fichas' },
+      puerta: { name: 'Puerta Reforzada', w: 1, h: 2, layer: 'debajo_fichas' }
+    };
 
-        if (dom.propNameInput) dom.propNameInput.value = name || 'Objeto';
-        if (dom.propWidthInput) dom.propWidthInput.value = w || 2;
-        if (dom.propHeightInput) dom.propHeightInput.value = h || 2;
-        if (dom.propLayerSelect) dom.propLayerSelect.value = layer || 'debajo_fichas';
-        if (dom.propUrlInput && preset) {
-          dom.propUrlInput.value = getPropPresetSvg(preset);
-        }
-        showToast(`Preset "${name}" seleccionado. Ajusta tamaño/capa y pulsa Colocar.`, 'info');
+    // Función unificada para crear y colocar prop en el mapa
+    window.crearYColocarProp = function(name, url, w, h, layer, rot = 0) {
+      const escenaCur = getEscenaActual();
+      if (!escenaCur || !state.partida?.id) {
+        showToast('No hay escena disponible para colocar el objeto.', 'warning');
+        return;
+      }
+      if (!url) {
+        showToast('Por favor selecciona un diseño o introduce una imagen.', 'warning');
+        return;
+      }
+
+      let spawnX = 2;
+      let spawnY = 2;
+      if (canvas) {
+        const centerPos = screenToGrid(canvas.width / 2, canvas.height / 2);
+        spawnX = Math.max(0, Math.round(centerPos.x - (w || 2) / 2));
+        spawnY = Math.max(0, Math.round(centerPos.y - (h || 2) / 2));
+      }
+
+      const propData = {
+        id: 'prop_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        escena_id: escenaCur.id,
+        nombre: name || 'Objeto en Mesa',
+        imagen: url,
+        x: spawnX,
+        y: spawnY,
+        ancho: parseFloat(w) || 2,
+        alto: parseFloat(h) || 2,
+        rotacion: parseInt(rot) || 0,
+        capa: layer || 'debajo_fichas',
+        bloqueado: 0,
+        oculto: 0
+      };
+
+      socket?.emit('guardar_prop', {
+        partidaId: state.partida.id,
+        escenaId: escenaCur.id,
+        propData
       });
+
+      selectedPropId = propData.id;
+      showToast(`✨ "${propData.nombre}" colocado en el tablero.`, 'success');
+      activeTool = 'props';
+      dom.toolButtons?.forEach(b => b.classList.toggle('active', b.dataset.tool === 'props'));
+      dom.toolOptionsContainer?.classList.remove('hidden');
+      dom.optProps?.classList.remove('hidden');
+      markDirty();
+    };
+
+    // Presets rápidos de objetos (en panel lateral y en barra de herramientas superior)
+    document.querySelectorAll('.btn-quick-prop, .btn-prop-preset').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const presetKey = btn.dataset.preset;
+        const meta = presetMeta[presetKey] || { name: 'Objeto', w: 2, h: 2, layer: 'debajo_fichas' };
+        const name = btn.dataset.name || meta.name;
+        const w = parseFloat(btn.dataset.w || meta.w);
+        const h = parseFloat(btn.dataset.h || meta.h);
+        const layer = btn.dataset.layer || meta.layer;
+        const svgUrl = getPropPresetSvg(presetKey);
+
+        if (dom.propNameInput) dom.propNameInput.value = name;
+        if (dom.propWidthInput) dom.propWidthInput.value = w;
+        if (dom.propHeightInput) dom.propHeightInput.value = h;
+        if (dom.propLayerSelect) dom.propLayerSelect.value = layer;
+        if (dom.propUrlInput) dom.propUrlInput.value = svgUrl;
+
+        // Si se hace clic desde la toolbar rápida de arriba: colocar directamente en la mesa
+        if (btn.closest('#opt-props')) {
+          window.crearYColocarProp(name, svgUrl, w, h, layer, 0);
+        } else {
+          showToast(`Preset "${name}" seleccionado. Pulsa "Colocar en Tablero" o ajústalo.`, 'info');
+        }
+      });
+    });
+
+    // Botón en toolbar para saltar a los ajustes de capas
+    document.getElementById('btn-toolbar-open-props')?.addEventListener('click', () => {
+      const dmTabBtn = document.querySelector('.tab-btn[data-tab="tab-dm"]');
+      if (dmTabBtn) dmTabBtn.click();
+      const propsSec = document.getElementById('dm-props-section');
+      if (propsSec) {
+        propsSec.classList.remove('hidden');
+        propsSec.scrollIntoView({ behavior: 'smooth' });
+      }
     });
 
     // Subida de imagen para prop
@@ -3222,7 +3322,7 @@
       }
     });
 
-    // Guardar / Colocar Prop
+    // Guardar / Colocar Prop desde el formulario
     dom.btnAddPropSubmit?.addEventListener('click', () => {
       const name = (dom.propNameInput?.value || '').trim() || 'Objeto en Mesa';
       const url = (dom.propUrlInput?.value || '').trim();
@@ -3230,53 +3330,13 @@
       const h = Math.max(0.5, parseFloat(dom.propHeightInput?.value) || 2);
       const rot = parseInt(dom.propRotInput?.value) || 0;
       const layer = dom.propLayerSelect?.value || 'debajo_fichas';
-      const escenaCur = getEscenaActual();
 
       if (!url) {
         showToast('Por favor selecciona un preset o introduce una imagen/URL.', 'warning');
         return;
       }
-      if (!escenaCur || !state.partida?.id) {
-        showToast('No hay escena disponible para colocar el objeto.', 'warning');
-        return;
-      }
 
-      // Centrar en pantalla actual o (2, 2)
-      let spawnX = 2;
-      let spawnY = 2;
-      if (canvas) {
-        const centerPos = screenToGrid(canvas.width / 2, canvas.height / 2);
-        spawnX = Math.max(0, Math.round(centerPos.x - w / 2));
-        spawnY = Math.max(0, Math.round(centerPos.y - h / 2));
-      }
-
-      const propData = {
-        id: 'prop_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-        escena_id: escenaCur.id,
-        nombre: name,
-        imagen: url,
-        x: spawnX,
-        y: spawnY,
-        ancho: w,
-        alto: h,
-        rotacion: rot,
-        capa: layer,
-        bloqueado: 0,
-        oculto: 0
-      };
-
-      socket?.emit('guardar_prop', {
-        partidaId: state.partida.id,
-        escenaId: escenaCur.id,
-        propData
-      });
-
-      showToast(`✨ Objeto "${name}" colocado en el mapa.`, 'success');
-      activeTool = 'props';
-      dom.toolButtons?.forEach(b => b.classList.toggle('active', b.dataset.tool === 'props'));
-      dom.toolOptionsContainer?.classList.remove('hidden');
-      dom.optProps?.classList.remove('hidden');
-      markDirty();
+      window.crearYColocarProp(name, url, w, h, layer, rot);
     });
   }
 
@@ -4124,18 +4184,6 @@
 
   function cargarEscenaEnModoPreparacion(escenaId) {
     if (!state.usuario?.esDM || !state.partida?.id) return;
-    if (escenaId === state.escenaActiva?.id) {
-      state.escenaPreparacion = null;
-      updateStagingBanner();
-      centerMap();
-      loadMapImage();
-      renderScenesList();
-      renderPropsList();
-      renderFichasList();
-      markDirty();
-      showToast(`Mostrando escena activa: ${state.escenaActiva.nombre}`, 'info');
-      return;
-    }
     socket?.emit('dm_ver_escena', { partidaId: state.partida.id, escenaId });
   }
 
@@ -4197,11 +4245,11 @@
       actionsHtml += `<button class="btn btn-sm btn-danger btn-del-scene" title="Eliminar escena"><i class="fa-solid fa-trash"></i></button>`;
 
       item.innerHTML = `
-        <div class="scene-item-title">
-          <span class="scene-name-text">🎬 ${sc.nombre}</span>
+        <div class="scene-header-row">
+          <span class="scene-title-wrap">🎬 ${sc.nombre}</span>
           ${badgesHtml}
         </div>
-        <div class="actions">
+        <div class="scene-actions-row">
           ${actionsHtml}
         </div>
       `;
@@ -4254,16 +4302,17 @@
       }
     } catch (_) {}
 
+    const propsSec = document.getElementById('dm-props-section');
     if (state.usuario?.esDM && state.experimentalPropsEnabled) {
       dom.toolProps?.classList.remove('hidden');
-      dom.dmPropsSection?.classList.remove('hidden');
+      if (propsSec) propsSec.classList.remove('hidden');
       renderPropsList();
     } else {
       dom.toolProps?.classList.add('hidden');
-      dom.dmPropsSection?.classList.add('hidden');
+      if (propsSec) propsSec.classList.add('hidden');
       if (activeTool === 'props') {
-        activeTool = 'select';
-        dom.toolButtons?.forEach(b => b.classList.toggle('active', b.dataset.tool === 'select'));
+        activeTool = 'move';
+        dom.toolButtons?.forEach(b => b.classList.toggle('active', b.dataset.tool === 'move'));
         dom.toolOptionsContainer?.classList.add('hidden');
         dom.optProps?.classList.add('hidden');
       }

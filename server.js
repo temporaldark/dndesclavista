@@ -842,11 +842,19 @@ io.on('connection', (socket) => {
 
       if (!imagen) return;
 
-      await dbRun(
-        `INSERT OR REPLACE INTO capas_props (id, escena_id, nombre, imagen, x, y, ancho, alto, rotacion, capa, bloqueado, oculto)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [propId, escenaId, nombre, imagen, x, y, ancho, alto, rotacion, capa, bloqueado ? 1 : 0, oculto ? 1 : 0]
-      );
+      const existe = await dbGet(`SELECT id FROM capas_props WHERE id = ?`, [propId]);
+      if (existe) {
+        await dbRun(
+          `UPDATE capas_props SET escena_id = ?, nombre = ?, imagen = ?, x = ?, y = ?, ancho = ?, alto = ?, rotacion = ?, capa = ?, bloqueado = ?, oculto = ? WHERE id = ?`,
+          [escenaId, nombre, imagen, x, y, ancho, alto, rotacion, capa, bloqueado ? 1 : 0, oculto ? 1 : 0, propId]
+        );
+      } else {
+        await dbRun(
+          `INSERT INTO capas_props (id, escena_id, nombre, imagen, x, y, ancho, alto, rotacion, capa, bloqueado, oculto)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [propId, escenaId, nombre, imagen, x, y, ancho, alto, rotacion, capa, bloqueado ? 1 : 0, oculto ? 1 : 0]
+        );
+      }
 
       const propGuardado = await dbGet(`SELECT * FROM capas_props WHERE id = ?`, [propId]);
       io.to(partidaId).emit('prop_actualizado', { escenaId, prop: propGuardado });

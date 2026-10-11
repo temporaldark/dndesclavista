@@ -3019,13 +3019,23 @@ button:hover .icon-swords {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.prop-item-header,
 .prop-card-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prop-item-info {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
 }
 
+.prop-name,
 .prop-card-title {
   font-weight: 600;
   color: #f8fafc;
@@ -3035,16 +3045,19 @@ button:hover .icon-swords {
   font-size: 0.78rem;
 }
 
+.prop-meta,
 .prop-card-sub {
   font-size: 0.68rem;
   color: #94a3b8;
 }
 
+.prop-actions,
 .prop-card-actions {
   display: flex;
   gap: 3px;
 }
 
+.prop-actions button,
 .prop-card-actions button {
   padding: 2px 5px;
   font-size: 0.7rem;
