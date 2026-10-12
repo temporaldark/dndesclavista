@@ -486,14 +486,17 @@
 
   function esDuenioDeFicha(ficha) {
     if (!ficha) return false;
-    if (state.usuario.esDM) return true;
+    if (state.usuario?.esDM) return true;
 
-    const uId = (state.usuario.id || '').toLowerCase().trim();
-    const uName = (state.usuario.nombre || '').toLowerCase().trim();
+    const uId = (state.usuario?.id || '').toLowerCase().trim();
+    const uName = (state.usuario?.nombre || '').toLowerCase().trim();
     const fJugadorId = (ficha.jugador_id || '').toLowerCase().trim();
 
     if (fJugadorId && (fJugadorId === uId || fJugadorId === uName || fJugadorId === 'usr_' + uName.replace(/[^a-z0-9]/g, '_'))) return true;
-    if (ficha.tipo === 'jugador' && (!ficha.jugador_id || ficha.jugador_id === '')) return true;
+
+    const tipoLower = (ficha.tipo || '').toLowerCase().trim();
+    const esTipoJugador = !tipoLower || tipoLower === 'jugador' || tipoLower === 'personaje' || tipoLower === 'pj';
+    if (esTipoJugador && (!fJugadorId || fJugadorId === '')) return true;
 
     return false;
   }
@@ -752,18 +755,22 @@
       let playerIdx = 0;
       state.fichas.forEach(f => {
         const pos = posMap.get(f.id);
+        const tipoLower = (f.tipo || '').toLowerCase().trim();
+        const esJugador = !tipoLower || tipoLower === 'jugador' || tipoLower === 'personaje' || tipoLower === 'pj';
+
         if (pos) {
           if (pos.x < 0 || pos.x >= cols || pos.y < 0 || pos.y >= rows) {
-            f.x = Math.max(1, Math.min(cols - 2, pos.x));
-            f.y = Math.max(1, Math.min(rows - 2, pos.y));
+            f.x = Math.max(1, Math.min(cols - 2, 2 + (playerIdx % 4)));
+            f.y = Math.max(1, Math.min(rows - 2, 2 + Math.floor(playerIdx / 4)));
+            playerIdx++;
           } else {
             f.x = pos.x;
             f.y = pos.y;
           }
-        } else if (f.tipo === 'jugador') {
-          // Si el jugador no tenía posición en la nueva escena, ubicarlo ordenadamente al inicio
-          f.x = 2 + (playerIdx % 4);
-          f.y = 2 + Math.floor(playerIdx / 4);
+        } else if (esJugador) {
+          // Si el jugador no tenía posición en la nueva escena, ubicarlo ordenadamente al inicio dentro del mapa
+          f.x = Math.max(1, Math.min(cols - 2, 2 + (playerIdx % 4)));
+          f.y = Math.max(1, Math.min(rows - 2, 2 + Math.floor(playerIdx / 4)));
           playerIdx++;
         }
       });
@@ -802,12 +809,21 @@
       let playerIdx = 0;
       state.fichas.forEach(f => {
         const pos = posMap.get(f.id);
+        const tipoLower = (f.tipo || '').toLowerCase().trim();
+        const esJugador = !tipoLower || tipoLower === 'jugador' || tipoLower === 'personaje' || tipoLower === 'pj';
+
         if (pos) {
-          f.x = pos.x;
-          f.y = pos.y;
-        } else if (f.tipo === 'jugador') {
-          f.x = 2 + (playerIdx % 4);
-          f.y = 2 + Math.floor(playerIdx / 4);
+          if (pos.x < 0 || pos.x >= cols || pos.y < 0 || pos.y >= rows) {
+            f.x = Math.max(1, Math.min(cols - 2, 2 + (playerIdx % 4)));
+            f.y = Math.max(1, Math.min(rows - 2, 2 + Math.floor(playerIdx / 4)));
+            playerIdx++;
+          } else {
+            f.x = pos.x;
+            f.y = pos.y;
+          }
+        } else if (esJugador) {
+          f.x = Math.max(1, Math.min(cols - 2, 2 + (playerIdx % 4)));
+          f.y = Math.max(1, Math.min(rows - 2, 2 + Math.floor(playerIdx / 4)));
           playerIdx++;
         }
       });
@@ -1308,8 +1324,13 @@
     let img = propImagesCache[prop.imagen];
     if (!img) {
       img = new Image();
-      img.src = prop.imagen;
+      let src = prop.imagen;
+      if (src && typeof src === 'string' && src.trim().startsWith('<svg')) {
+        src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(src.trim());
+      }
+      img.src = src;
       img.onload = () => markDirty();
+      img.onerror = () => { img._failed = true; markDirty(); };
       propImagesCache[prop.imagen] = img;
     }
 
@@ -1323,13 +1344,19 @@
       ctx.rotate((parseFloat(prop.rotacion) * Math.PI) / 180);
     }
 
-    if (img.complete && img.naturalWidth > 0) {
+    if (img.complete && img.naturalWidth > 0 && !img._failed) {
       ctx.drawImage(img, -wPx / 2, -hPx / 2, wPx, hPx);
     } else {
-      ctx.fillStyle = 'rgba(201, 168, 76, 0.2)';
+      ctx.fillStyle = 'rgba(201, 168, 76, 0.25)';
       ctx.fillRect(-wPx / 2, -hPx / 2, wPx, hPx);
       ctx.strokeStyle = '#c9a84c';
+      ctx.lineWidth = 1.5;
       ctx.strokeRect(-wPx / 2, -hPx / 2, wPx, hPx);
+      ctx.fillStyle = '#f0d060';
+      ctx.font = 'bold 12px Roboto';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(prop.nombre || 'Objeto', 0, 0);
     }
 
     // Si el DM tiene seleccionado este prop: mostrar contorno dorado y botón de giro
@@ -1464,8 +1491,8 @@
         const largoCasillas = fig.alto !== undefined ? parseFloat(fig.alto) : (parseFloat(fig.tamanio) || 1);
         const maxRadius = Math.max(anchoCasillas, largoCasillas) + 1;
         // Culling: saltar figuras fuera de la pantalla
-        if (fig.x + maxRadius < viewLeft || fig.x - maxRadius > viewRight ||
-            fig.y + maxRadius < viewTop || fig.y - maxRadius > viewBottom) {
+        if (fig.x + maxRadius < screenTileLeft || fig.x - maxRadius > screenTileRight ||
+            fig.y + maxRadius < screenTileTop || fig.y - maxRadius > screenTileBottom) {
           return;
         }
 
@@ -1541,7 +1568,11 @@
 
     // 5. Dibujar Fichas / Tokens de Personaje con Viewport Culling Real
     const selectedSet = new Set(selectedFichasIds);
-    const fichasEnEscena = (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === escCur?.id);
+    const fichasEnEscena = (state.fichas || []).filter(f => {
+      const tipoLower = (f.tipo || '').toLowerCase().trim();
+      const esJugador = !tipoLower || tipoLower === 'jugador' || tipoLower === 'personaje' || tipoLower === 'pj';
+      return esJugador || f.escena_id === escCur?.id;
+    });
     fichasEnEscena.forEach(ficha => {
       // Si la ficha está oculta por el DM: jugadores no la ven en absoluto, DM la ve translúcida
       if (ficha.oculto) {
@@ -1823,7 +1854,9 @@
     if (activeTool === 'move' || activeTool === 'props') {
       // 1. Buscar si hizo clic sobre alguna ficha visible en la escena actual
       const fichasEnEscena = (state.fichas || []).filter(f => {
-        if (f.tipo !== 'jugador' && f.escena_id !== escenaCur?.id) return false;
+        const tipoLower = (f.tipo || '').toLowerCase().trim();
+        const esJugador = !tipoLower || tipoLower === 'jugador' || tipoLower === 'personaje' || tipoLower === 'pj';
+        if (!esJugador && f.escena_id !== escenaCur?.id) return false;
         if (f.oculto && !state.usuario.esDM && !esDuenioDeFicha(f)) return false;
         return true;
       });
@@ -1836,7 +1869,8 @@
         const mult = getFichaScaleMult(f);
         const fx = parseFloat(f.x) || 0;
         const fy = parseFloat(f.y) || 0;
-        if (gridPos.x >= fx && gridPos.x <= fx + mult && gridPos.y >= fy && gridPos.y <= fy + mult) {
+        const pad = 0.25;
+        if (gridPos.x >= fx - pad && gridPos.x <= fx + mult + pad && gridPos.y >= fy - pad && gridPos.y <= fy + mult + pad) {
           if (!candidataGeneral) candidataGeneral = f;
           if (esDuenioDeFicha(f)) {
             candidataControlable = f;
@@ -1847,7 +1881,7 @@
 
       const clickedFicha = candidataControlable || candidataGeneral;
 
-      if (clickedFicha && activeTool === 'move') {
+      if (clickedFicha) {
         const esDuenio = esDuenioDeFicha(clickedFicha);
         if (esDuenio) {
           const isMulti = e.shiftKey || isMultiSelectMode;
@@ -3183,14 +3217,15 @@
     // --- REAGRUPAR FICHAS DENTRO DEL MAPA ---
     dom.btnReagruparFichas?.addEventListener('click', () => {
       const escenaCur = getEscenaActual();
-      if (!escenaCur || !state.partida?.id) return;
-      if (confirm(`¿Reagrupar las fichas de los jugadores dentro de los límites del mapa de "${escenaCur.nombre}"?`)) {
-        socket?.emit('reagrupar_fichas', {
-          partidaId: state.partida.id,
-          escenaId: escenaCur.id
-        });
-        showToast('📍 Reagrupando fichas en el mapa...', 'info');
+      if (!escenaCur || !state.partida?.id) {
+        showToast('⚠️ No hay escena activa para reagrupar fichas', 'warning');
+        return;
       }
+      socket?.emit('reagrupar_fichas', {
+        partidaId: state.partida.id,
+        escenaId: escenaCur.id
+      });
+      showToast('📍 Reagrupando fichas de jugadores en el mapa...', 'info');
     });
 
     // --- EXPERIMENTAL: CAPAS Y OBJETOS (PROPS) ---
@@ -3277,12 +3312,8 @@
         if (dom.propLayerSelect) dom.propLayerSelect.value = layer;
         if (dom.propUrlInput) dom.propUrlInput.value = svgUrl;
 
-        // Si se hace clic desde la toolbar rápida de arriba: colocar directamente en la mesa
-        if (btn.closest('#opt-props')) {
-          window.crearYColocarProp(name, svgUrl, w, h, layer, 0);
-        } else {
-          showToast(`Preset "${name}" seleccionado. Pulsa "Colocar en Tablero" o ajústalo.`, 'info');
-        }
+        // Colocar directamente en la mesa al hacer clic tanto desde panel como desde toolbar
+        window.crearYColocarProp(name, svgUrl, w, h, layer, 0);
       });
     });
 

@@ -733,14 +733,37 @@ io.on('connection', (socket) => {
   socket.on('reagrupar_fichas', async ({ partidaId, escenaId }) => {
     try {
       const escena = await dbGet(`SELECT * FROM escenas WHERE id = ?`, [escenaId]);
-      const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ? AND tipo = 'jugador'`, [partidaId]);
-      if (!escena || !fichas.length) return;
+      if (!escena) return;
+
+      // Buscar fichas de jugadores (o con tipo personaje/pj/null/vacío)
+      let fichas = await dbAll(
+        `SELECT * FROM fichas WHERE partida_id = ? AND (tipo = 'jugador' OR tipo IS NULL OR tipo = '' OR LOWER(tipo) = 'personaje' OR LOWER(tipo) = 'pj')`,
+        [partidaId]
+      );
+
+      // Primer fallback: si no hay con tipo jugador, buscar todas las fichas que no sean monstruos
+      if (!fichas || !fichas.length) {
+        fichas = await dbAll(
+          `SELECT * FROM fichas WHERE partida_id = ? AND (LOWER(tipo) NOT IN ('monstruo', 'enemigo') OR tipo IS NULL)`,
+          [partidaId]
+        );
+      }
+
+      // Segundo fallback: si no hay ninguna clasificada, reagrupar todas las fichas de la partida
+      if (!fichas || !fichas.length) {
+        fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ?`, [partidaId]);
+      }
+
+      if (!fichas || !fichas.length) {
+        socket.emit('error_servidor', 'No hay fichas disponibles para reagrupar.');
+        return;
+      }
 
       const cols = escena.config_grid_x || 40;
       const rows = escena.config_grid_y || 40;
       const startX = Math.max(1, Math.min(cols - 4, 3));
       const startY = Math.max(1, Math.min(rows - 4, 3));
-      const perRow = Math.max(4, Math.floor(Math.sqrt(fichas.length) * 2));
+      const perRow = Math.max(3, Math.floor(Math.sqrt(fichas.length) * 2));
 
       const updated = [];
       await dbTransaction(async () => {
@@ -748,7 +771,7 @@ io.on('connection', (socket) => {
           const f = fichas[i];
           const newX = startX + (i % perRow);
           const newY = startY + Math.floor(i / perRow);
-          await dbRun(`UPDATE fichas SET x = ?, y = ? WHERE id = ?`, [newX, newY, f.id]);
+          await dbRun(`UPDATE fichas SET x = ?, y = ?, escena_id = ? WHERE id = ?`, [newX, newY, escenaId, f.id]);
           await dbRun(
             `INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`,
             [f.id, escenaId, newX, newY]
