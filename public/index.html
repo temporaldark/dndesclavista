@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <!-- Estilos Temáticos D&D -->
-  <link rel="stylesheet" href="style.css?v=3.5.0">
+  <link rel="stylesheet" href="style.css?v=3.6.1">
 </head>
 
 <body>
@@ -632,6 +632,12 @@
               <option value="monstruo">🐉 Monstruo</option>
             </select>
           </div>
+          <div class="form-group flex-1" id="group-ficha-propietario">
+            <label>Dueño / Jugador Asignado</label>
+            <select id="ficha-jugador-id" class="form-select">
+              <option value="">-- Sin asignar (Solo DM) --</option>
+            </select>
+          </div>
         </div>
 
         <div class="form-row">
@@ -837,7 +843,7 @@
         <div class="form-group">
           <label>Imagen de Portada (Opcional)</label>
           <input type="file" id="create-game-img-file" accept="image/*" class="form-control mb-5">
-          <input type="url" id="create-game-img-url" placeholder="O pega un enlace de imagen (https://...)">
+          <input type="text" id="create-game-img-url" placeholder="O pega un enlace de imagen (https://...)">
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary btn-close-modal">Cancelar</button>
@@ -863,7 +869,7 @@
         <div class="form-group">
           <label>Imagen de Portada</label>
           <input type="file" id="edit-game-img-file" accept="image/*" class="form-control mb-5">
-          <input type="url" id="edit-game-img-url" placeholder="O pega un enlace de imagen (https://...)">
+          <input type="text" id="edit-game-img-url" placeholder="O pega un enlace de imagen (https://...)">
         </div>
         <div class="form-group" id="edit-game-preview-group" style="text-align: center;">
           <label style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 4px;">Vista Previa de Portada:</label>
@@ -1084,7 +1090,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script>if (typeof io === 'undefined') document.write('<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"><\/script>');</script>
   <!-- Lógica de la Aplicación -->
-  <script src="app.js?v=3.5.0"></script>
+  <script src="app.js?v=3.6.2"></script>
 </body>
 
 </html>

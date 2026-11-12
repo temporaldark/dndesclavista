@@ -517,6 +517,34 @@ app.post('/api/partidas/import', async (req, res) => {
   }
 });
 
+// Cache en memoria para verificación ultrarrápida de propiedad de fichas
+const tokenOwnerCache = new Map();
+
+function cacheFichaOwner(ficha) {
+  if (ficha && ficha.id) {
+    tokenOwnerCache.set(ficha.id, {
+      id: ficha.id,
+      jugador_id: ficha.jugador_id || null,
+      nombre: ficha.nombre || ''
+    });
+  }
+}
+
+function puedeMoverFicha(socket, ficha) {
+  if (!ficha) return false;
+  if (socket.data?.esDM) return true;
+  const usuarioId = (socket.data?.usuarioId || '').toLowerCase().trim();
+  const nombreUsuario = (socket.data?.nombreUsuario || '').toLowerCase().trim();
+  const fJugadorId = (ficha.jugador_id || '').toLowerCase().trim();
+  if (fJugadorId && (fJugadorId === usuarioId || fJugadorId === nombreUsuario || fJugadorId === 'usr_' + nombreUsuario.replace(/[^a-z0-9]/g, '_'))) {
+    return true;
+  }
+  if (ficha.nombre && ficha.nombre.toLowerCase().trim() === nombreUsuario) {
+    return true;
+  }
+  return false;
+}
+
 // --- SOCKET.IO HANDLERS ---
 
 io.on('connection', (socket) => {
@@ -569,6 +597,7 @@ io.on('connection', (socket) => {
       if (escenaActiva) {
         const posiciones = await dbAll(`SELECT * FROM posiciones_fichas WHERE escena_id = ?`, [escenaActiva.id]);
         fichas.forEach(f => {
+          cacheFichaOwner(f);
           const pos = posiciones.find(p => p.ficha_id === f.id);
           if (pos) {
             f.x = pos.x;
@@ -732,6 +761,10 @@ io.on('connection', (socket) => {
   // Reagrupar todas las fichas de jugadores ordenadamente en la escena activa/actual
   socket.on('reagrupar_fichas', async ({ partidaId, escenaId }) => {
     try {
+      if (!socket.data?.esDM) {
+        console.warn(`[Seguridad] Usuario '${socket.data?.nombreUsuario}' intentó reagrupar fichas sin permisos de DM.`);
+        return;
+      }
       const escena = await dbGet(`SELECT * FROM escenas WHERE id = ?`, [escenaId]);
       if (!escena) return;
 
@@ -914,14 +947,35 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Mover ficha en tiempo real (Broadcast ultrarrápido sin I/O de disco)
-  socket.on('mover_ficha', ({ partidaId, escenaId, fichaId, x, y }) => {
+  // Mover ficha en tiempo real (Broadcast ultrarrápido con verificación de dueño y caché)
+  socket.on('mover_ficha', async ({ partidaId, escenaId, fichaId, x, y }) => {
+    if (!socket.data?.esDM) {
+      let ficha = tokenOwnerCache.get(fichaId);
+      if (!ficha) {
+        ficha = await dbGet(`SELECT id, nombre, tipo, jugador_id FROM fichas WHERE id = ?`, [fichaId]);
+        if (ficha) cacheFichaOwner(ficha);
+      }
+      if (!puedeMoverFicha(socket, ficha)) {
+        return;
+      }
+    }
     socket.to(partidaId).emit('ficha_movida', { fichaId, x, y });
   });
 
   // Guardar posición final de la ficha en base de datos (al soltar el ratón / touch)
   socket.on('guardar_posicion_ficha', async ({ partidaId, escenaId, fichaId, x, y }) => {
     try {
+      if (!socket.data?.esDM) {
+        let ficha = tokenOwnerCache.get(fichaId);
+        if (!ficha) {
+          ficha = await dbGet(`SELECT id, nombre, tipo, jugador_id FROM fichas WHERE id = ?`, [fichaId]);
+          if (ficha) cacheFichaOwner(ficha);
+        }
+        if (!puedeMoverFicha(socket, ficha)) {
+          console.warn(`[Seguridad] Usuario '${socket.data?.nombreUsuario}' intentó mover ficha no autorizada '${ficha?.nombre || fichaId}'`);
+          return;
+        }
+      }
       await dbRun(`UPDATE fichas SET x = ?, y = ? WHERE id = ?`, [x, y, fichaId]);
       if (escenaId) {
         await dbRun(`INSERT OR REPLACE INTO posiciones_fichas (ficha_id, escena_id, x, y) VALUES (?, ?, ?, ?)`, [fichaId, escenaId, x, y]);
@@ -944,7 +998,7 @@ io.on('connection', (socket) => {
         iniciativa, nivel, altura, tamanioBase, tamanio_base, color_aro, notas, x = 5, y = 5, revelado
       } = payload;
 
-      const ownerId = jugador_id || jugadorId || socket.data?.usuarioId;
+      const ownerId = jugador_id || jugadorId || (socket.data?.esDM ? null : socket.data?.usuarioId);
 
       const defaultRevelado = JSON.stringify({
         global: { imagen: false, nombre: false, hp: false, ac: false, notas: false },
@@ -969,6 +1023,7 @@ io.on('connection', (socket) => {
       }
 
       const nuevaFicha = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [id]);
+      cacheFichaOwner(nuevaFicha);
       io.to(partidaId).emit('ficha_creada', nuevaFicha);
       scheduleAutoSave(partidaId);
     } catch (err) {
@@ -983,10 +1038,18 @@ io.on('connection', (socket) => {
       const current = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [fichaData.id]);
       if (!current) return;
 
+      // Verificación de seguridad: si no es DM, sólo puede actualizar si es el dueño
+      if (!socket.data?.esDM && !puedeMoverFicha(socket, current)) {
+        console.warn(`[Seguridad] Usuario '${socket.data?.nombreUsuario}' no autorizado para actualizar ficha '${current.nombre}'`);
+        return;
+      }
+
       const {
         id,
         nombre = current.nombre,
         tipo = current.tipo,
+        jugador_id,
+        jugadorId,
         imagen = current.imagen,
         fuerza = current.fuerza,
         destreza = current.destreza,
@@ -1009,6 +1072,11 @@ io.on('connection', (socket) => {
         oculto
       } = fichaData;
 
+      // Solo el DM puede reasignar el jugador_id de una ficha
+      const finalJugadorId = socket.data?.esDM
+        ? (jugador_id !== undefined ? jugador_id : (jugadorId !== undefined ? jugadorId : current.jugador_id))
+        : current.jugador_id;
+
       const finalRevelado = revelado !== undefined
         ? (typeof revelado === 'object' ? JSON.stringify(revelado) : revelado)
         : current.revelado;
@@ -1016,11 +1084,12 @@ io.on('connection', (socket) => {
       const finalOculto = oculto !== undefined ? (oculto ? 1 : 0) : current.oculto;
 
       await dbRun(
-        `UPDATE fichas SET nombre = ?, tipo = ?, imagen = ?, fuerza = ?, destreza = ?, constitucion = ?, inteligencia = ?, sabiduria = ?, carisma = ?, hp_actual = ?, hp_maximo = ?, ac = ?, velocidad = ?, iniciativa = ?, nivel = ?, altura = ?, tamanio_base = ?, color_aro = ?, gigante = ?, notas = ?, revelado = ?, oculto = ? WHERE id = ?`,
-        [nombre, tipo, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro || '#c9a84c', finalGigante, notas, finalRevelado, finalOculto, id]
+        `UPDATE fichas SET nombre = ?, tipo = ?, jugador_id = ?, imagen = ?, fuerza = ?, destreza = ?, constitucion = ?, inteligencia = ?, sabiduria = ?, carisma = ?, hp_actual = ?, hp_maximo = ?, ac = ?, velocidad = ?, iniciativa = ?, nivel = ?, altura = ?, tamanio_base = ?, color_aro = ?, gigante = ?, notas = ?, revelado = ?, oculto = ? WHERE id = ?`,
+        [nombre, tipo, finalJugadorId, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro || '#c9a84c', finalGigante, notas, finalRevelado, finalOculto, id]
       );
 
       const fichaActualizada = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [id]);
+      cacheFichaOwner(fichaActualizada);
       io.to(partidaId).emit('ficha_actualizada', fichaActualizada);
       scheduleAutoSave(partidaId);
     } catch (err) {
@@ -1086,7 +1155,7 @@ io.on('connection', (socket) => {
       // Permitir eliminación si el usuario es DM o dueño asignado de la ficha
       const esDuenio = esDM ||
         (fJugadorId && (fJugadorId === usuarioId || fJugadorId === nombreUsuario || fJugadorId === 'usr_' + nombreUsuario.replace(/[^a-z0-9]/g, '_'))) ||
-        (ficha.tipo === 'jugador' && (!ficha.jugador_id || ficha.jugador_id === ''));
+        (ficha.nombre && ficha.nombre.toLowerCase().trim() === nombreUsuario);
 
       if (!esDuenio) {
         console.warn(`[Seguridad] Usuario '${socket.data?.nombreUsuario}' no autorizado para eliminar ficha '${ficha.nombre}'`);
@@ -1095,6 +1164,7 @@ io.on('connection', (socket) => {
 
       await dbRun(`DELETE FROM fichas WHERE id = ?`, [fichaId]);
       await dbRun(`DELETE FROM posiciones_fichas WHERE ficha_id = ?`, [fichaId]);
+      tokenOwnerCache.delete(fichaId);
       io.to(partidaId).emit('ficha_eliminada', fichaId);
       scheduleAutoSave(partidaId);
     } catch (err) {

@@ -8,6 +8,7 @@
 
   // --- ESTADO GLOBAL CLIENTE ---
   let socket = null;
+  let dom = {};
 
   let state = {
     partida: null,
@@ -157,8 +158,9 @@
   }
 
   // --- INICIALIZACIÓN ---
-  window.addEventListener('DOMContentLoaded', () => {
-    // Generar o cargar usuario id local basado en nombre de usuario si existe
+  function startApp() {
+    try {
+      // Generar o cargar usuario id local basado en nombre de usuario si existe
     let savedUsername = localStorage.getItem('vtt_username');
     let savedUserId = localStorage.getItem('vtt_user_id');
     if (savedUsername) {
@@ -198,11 +200,12 @@
         setTimeout(() => dom.joinUsernameInput?.focus(), 150);
       }
     }
-  });
+  } catch (err) {
+    console.error('❌ Error durante inicialización startApp():', err);
+  }
+}
 
   // --- ELEMENTOS DOM ---
-  let dom = {};
-
   function initDOM() {
     dom = {
       // Pantallas
@@ -386,6 +389,8 @@
       fichaImgFile: document.getElementById('ficha-img-file'),
       fichaImagenUrl: document.getElementById('ficha-imagen-url'),
       fichaImgPreview: document.getElementById('ficha-img-preview'),
+      fichaJugadorId: document.getElementById('ficha-jugador-id'),
+      groupFichaPropietario: document.getElementById('group-ficha-propietario'),
 
       modalGifView: document.getElementById('modal-gif-view'),
       enlargedGifImg: document.getElementById('enlarged-gif-img'),
@@ -494,11 +499,46 @@
 
     if (fJugadorId && (fJugadorId === uId || fJugadorId === uName || fJugadorId === 'usr_' + uName.replace(/[^a-z0-9]/g, '_'))) return true;
 
-    const tipoLower = (ficha.tipo || '').toLowerCase().trim();
-    const esTipoJugador = !tipoLower || tipoLower === 'jugador' || tipoLower === 'personaje' || tipoLower === 'pj';
-    if (esTipoJugador && (!fJugadorId || fJugadorId === '')) return true;
+    // Si el nombre de la ficha coincide con el nombre de usuario del jugador conectado
+    if (ficha.nombre && ficha.nombre.toLowerCase().trim() === uName) return true;
 
     return false;
+  }
+
+  function populateFichaOwnerSelect(currentOwnerId) {
+    const select = dom.fichaJugadorId || document.getElementById('ficha-jugador-id');
+    const group = dom.groupFichaPropietario || document.getElementById('group-ficha-propietario');
+    if (!select || !group) return;
+
+    if (!state.usuario?.esDM) {
+      group.style.display = 'none';
+      return;
+    }
+
+    group.style.display = '';
+    select.innerHTML = '<option value="">-- Sin asignar (Solo DM) --</option>';
+
+    const playersMap = new Map();
+    (state.jugadoresConectados || []).forEach(j => {
+      if (j && j.id && !j.esDM) {
+        playersMap.set(j.id, j.nombre || j.id);
+      }
+    });
+
+    (state.fichas || []).forEach(f => {
+      if (f && f.jugador_id && !playersMap.has(f.jugador_id)) {
+        playersMap.set(f.jugador_id, f.jugador_id);
+      }
+    });
+
+    playersMap.forEach((pName, pId) => {
+      const opt = document.createElement('option');
+      opt.value = pId;
+      opt.textContent = `${pName} (${pId})`;
+      select.appendChild(opt);
+    });
+
+    select.value = currentOwnerId || '';
   }
 
   function getFichaVisibility(ficha) {
@@ -556,9 +596,12 @@
     // Helper: emite cuando el socket esté conectado
     window._emitWhenReady = function(event, data) {
       if (!socket) { initSocket(); }
-      if (socket.connected) {
+      if (socket && !socket.connected) {
+        try { socket.connect(); } catch (_) {}
+      }
+      if (socket && socket.connected) {
         socket.emit(event, data);
-      } else {
+      } else if (socket) {
         socket.once('connect', () => socket.emit(event, data));
       }
     };
@@ -1885,14 +1928,22 @@
         const esDuenio = esDuenioDeFicha(clickedFicha);
         if (esDuenio) {
           const isMulti = e.shiftKey || isMultiSelectMode;
-          if (!isMulti && !selectedFichasIds.includes(clickedFicha.id)) {
+          if (!isMulti) {
             selectedFichasIds = [clickedFicha.id];
-          } else if (isMulti) {
+          } else {
             if (selectedFichasIds.includes(clickedFicha.id)) {
               selectedFichasIds = selectedFichasIds.filter(id => id !== clickedFicha.id);
             } else {
               selectedFichasIds.push(clickedFicha.id);
             }
+          }
+
+          // Para jugadores normales, filtrar que solo estén fichas que posean
+          if (!state.usuario?.esDM) {
+            selectedFichasIds = selectedFichasIds.filter(id => {
+              const f = (state.fichas || []).find(fi => fi.id === id);
+              return f && esDuenioDeFicha(f);
+            });
           }
           
           updateMultiSelectBadge();
@@ -1952,8 +2003,8 @@
       currentStroke = [{ x: gridPos.x, y: gridPos.y }];
     }
 
-    // Lógica para seleccionar figuras compartida entre 'move' y 'figures'
-    if (activeTool === 'move' || activeTool === 'figures') {
+    // Lógica para seleccionar y crear figuras exclusiva de herramienta 'figures'
+    if (activeTool === 'figures') {
       const clickedFig = (state.figuras || []).find(fig => {
         const halfW = ((fig.ancho !== undefined ? fig.ancho : (fig.tamanio * 2)) || 2) / 2;
         const halfH = ((fig.alto !== undefined ? fig.alto : (fig.tamanio * 2)) || 2) / 2;
@@ -1965,11 +2016,8 @@
         const canControl = state.usuario.esDM || clickedFig.creador_id === state.usuario.id;
         if (canControl) {
           selectedFigureId = clickedFig.id;
-
-          if (activeTool === 'move') {
-            isDraggingFigure = true;
-            dragOffset = { x: gridPos.x - clickedFig.x, y: gridPos.y - clickedFig.y };
-          }
+          isDraggingFigure = true;
+          dragOffset = { x: gridPos.x - clickedFig.x, y: gridPos.y - clickedFig.y };
 
           if (dom.figType) dom.figType.value = clickedFig.tipo;
           if (dom.figSize) dom.figSize.value = clickedFig.ancho !== undefined ? clickedFig.ancho : (clickedFig.tamanio || 1);
@@ -1985,18 +2033,8 @@
         markDirty();
         return;
       }
-    }
 
-    // Si llegamos aquí y es move, hacemos pan
-    if (activeTool === 'move' && !isDraggingToken && !isDraggingFigure && !isDraggingProp) {
-      selectedFigureId = null;
-      selectedPropId = null;
-      isPanning = true;
-      panStart = { x: e.clientX - viewport.panX, y: e.clientY - viewport.panY };
-    }
-
-    // Si llegamos aquí y es figures, creamos una nueva
-    if (activeTool === 'figures') {
+      // Si no hizo clic sobre una figura existente y estamos en 'figures', creamos una nueva
       figureStart = gridPos;
       const newFigId = 'fig_' + Math.random().toString(36).substr(2, 9);
       const anchoVal = parseFloat(dom.figSize.value) || 1;
@@ -2020,6 +2058,16 @@
       socket?.emit('guardar_figura', { partidaId: state.partida.id, escenaId: escenaCur?.id, figuraData: nuevaFig });
 
       if (dom.figLabel) dom.figLabel.value = '';
+      markDirty();
+      return;
+    }
+
+    // Si llegamos aquí y es move, hacemos pan sin ser bloqueado por figuras
+    if (activeTool === 'move' && !isDraggingToken && !isDraggingFigure && !isDraggingProp) {
+      selectedFigureId = null;
+      selectedPropId = null;
+      isPanning = true;
+      panStart = { x: e.clientX - viewport.panX, y: e.clientY - viewport.panY };
     } else if (activeTool === 'erase') {
       const figToDel = (state.figuras || []).find(fig => {
         if (fig.creador_id !== state.usuario.id && !state.usuario.esDM) return false;
@@ -2075,6 +2123,7 @@
       selectedFichasIds.forEach(id => {
         const ficha = state.fichas.find(f => f.id === id);
         if (ficha) {
+          if (!state.usuario?.esDM && !esDuenioDeFicha(ficha)) return;
           const offset = dragOffsets[id] || { x: 0.5, y: 0.5 };
           ficha.x = gridPos.x - offset.x;
           ficha.y = gridPos.y - offset.y;
@@ -2146,6 +2195,7 @@
       selectedFichasIds.forEach(id => {
         const ficha = state.fichas.find(f => f.id === id);
         if (ficha) {
+          if (!state.usuario?.esDM && !esDuenioDeFicha(ficha)) return;
           ficha.x = Math.round(ficha.x);
           ficha.y = Math.round(ficha.y);
           socket?.emit('guardar_posicion_ficha', {
@@ -2215,20 +2265,6 @@
 
   function handleWheel(e) {
     e.preventDefault();
-    const gridPos = screenToGrid(e.clientX, e.clientY);
-    const myFig = (state.figuras || []).find(fig =>
-      (fig.creador_id === state.usuario.id || state.usuario.esDM) &&
-      Math.hypot(fig.x - gridPos.x, fig.y - gridPos.y) <= fig.tamanio
-    );
-
-    if (myFig) {
-      const scale = e.deltaY < 0 ? 1.1 : 0.9;
-      myFig.tamanio = Math.max(0.5, myFig.tamanio * scale);
-      debouncedSaveFigure(myFig);
-      markDirty();
-      return;
-    }
-
     const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
     zoomAt(e.clientX, e.clientY, zoomFactor);
   }
@@ -2272,27 +2308,16 @@
     } else if (e.touches.length === 2) {
       const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
       const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      const gridPos = screenToGrid(midX, midY);
-
-      const myFig = (state.figuras || []).find(fig =>
-        (fig.creador_id === state.usuario.id || state.usuario.esDM) &&
-        Math.hypot(fig.x - gridPos.x, fig.y - gridPos.y) <= fig.tamanio
-      );
 
       const dist = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
         e.touches[0].clientY - e.touches[1].clientY
       );
-      const factor = dist / touchStartDist;
-      touchStartDist = dist;
-
-      if (myFig) {
-        myFig.tamanio = Math.max(0.5, myFig.tamanio * factor);
-        debouncedSaveFigure(myFig);
-        markDirty();
-      } else {
+      if (touchStartDist > 0) {
+        const factor = dist / touchStartDist;
         zoomAt(midX, midY, factor);
       }
+      touchStartDist = dist;
     }
   }
 
@@ -2447,7 +2472,18 @@
     }
 
     // Modal Crear / Unirse / Importar Partida
-    dom.btnCreateGameModal?.addEventListener('click', () => openModal(dom.modalCreateGame));
+    dom.btnCreateGameModal?.addEventListener('click', () => {
+      openModal(dom.modalCreateGame);
+      const dmNameEl = document.getElementById('create-dm-name');
+      if (dmNameEl && !dmNameEl.value.trim()) {
+        dmNameEl.value = localStorage.getItem('vtt_username') || 'Dungeon Master';
+      }
+      const titleEl = document.getElementById('create-game-title');
+      if (titleEl) {
+        setTimeout(() => titleEl.focus(), 150);
+      }
+    });
+
     dom.btnJoinGameModal?.addEventListener('click', () => {
       loadJoinModalSessionsList();
       openModal(dom.modalJoinGame);
@@ -2484,8 +2520,8 @@
       const imgUrlEl = document.getElementById('create-game-img-url') || document.getElementById('new-game-image');
       const imgFileEl = document.getElementById('create-game-img-file');
       
-      const nombre = titleEl ? titleEl.value.trim() : 'Nueva Partida';
-      const dmName = dmNameEl && dmNameEl.value.trim() ? dmNameEl.value.trim() : (localStorage.getItem('vtt_username') || 'Dungeon Master');
+      const nombre = (titleEl && titleEl.value.trim()) ? titleEl.value.trim() : 'Nueva Partida';
+      const dmName = (dmNameEl && dmNameEl.value.trim()) ? dmNameEl.value.trim() : (localStorage.getItem('vtt_username') || 'Dungeon Master');
       
       let imagenPortada = imgUrlEl ? imgUrlEl.value.trim() : '';
       if (imgFileEl && imgFileEl.files && imgFileEl.files[0]) {
@@ -2500,6 +2536,12 @@
       state.usuario.id = deterministicId;
       state.usuario.nombre = dmName;
       localStorage.setItem('vtt_user_id', deterministicId);
+
+      const submitBtn = dom.formCreateGame.querySelector('button[type="submit"]');
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creando...';
+      }
 
       try {
         const res = await fetch('/api/partidas', {
@@ -2516,6 +2558,11 @@
         joinGameDirect(data.codigo, dmName);
       } catch (err) {
         alert('Error al crear la partida: ' + err.message);
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = 'Crear Partida';
+        }
       }
     });
 
@@ -2784,6 +2831,7 @@
       document.getElementById('ficha-id').value = '';
       dom.fichaImgPreview.src = 'https://via.placeholder.com/100?text=Avatar';
       dom.modalFichaTitle.textContent = 'Crear Nueva Ficha de Personaje';
+      populateFichaOwnerSelect('');
 
       // Ocultar opciones de NPC/Monstruo si no es DM
       const fichaTipo = document.getElementById('ficha-tipo');
@@ -2834,11 +2882,21 @@
       e.preventDefault();
       const id = document.getElementById('ficha-id').value;
       const existingFicha = id ? state.fichas.find(f => f.id === id) : null;
+      const ownerSelect = dom.fichaJugadorId || document.getElementById('ficha-jugador-id');
+      const assignedOwner = ownerSelect ? ownerSelect.value : '';
+      let finalJugadorId = null;
+      if (state.usuario?.esDM) {
+        finalJugadorId = assignedOwner || null;
+      } else {
+        finalJugadorId = (existingFicha && existingFicha.jugador_id) ? existingFicha.jugador_id : state.usuario?.id;
+      }
+
       const fichaData = {
         id: id || undefined,
         nombre: document.getElementById('ficha-nombre').value,
         tipo: document.getElementById('ficha-tipo').value,
-        jugadorId: state.usuario.id,
+        jugadorId: finalJugadorId,
+        jugador_id: finalJugadorId,
         imagen: dom.fichaImgPreview.src,
         fuerza: parseNumberSafe(document.getElementById('ficha-fue').value, 10),
         destreza: parseNumberSafe(document.getElementById('ficha-des').value, 10),
@@ -4034,6 +4092,7 @@
           document.getElementById('ficha-id').value = ficha.id;
           document.getElementById('ficha-nombre').value = ficha.nombre;
           document.getElementById('ficha-tipo').value = ficha.tipo;
+          populateFichaOwnerSelect(ficha.jugador_id);
           dom.fichaImgPreview.src = ficha.imagen || 'https://via.placeholder.com/100?text=Avatar';
           document.getElementById('ficha-fue').value = ficha.fuerza ?? 10;
           document.getElementById('ficha-des').value = ficha.destreza ?? 10;
@@ -4086,6 +4145,14 @@
       card.addEventListener('click', (e) => {
         if (e.target.closest('button') || e.target.closest('img')) return;
         
+        // Si no es DM y la ficha no es suya, no permitir seleccionarla para mover
+        if (!state.usuario?.esDM && !esDuenioDeFicha(ficha)) {
+          if (dom.diceTokenSelect) {
+            dom.diceTokenSelect.value = ficha.id;
+          }
+          return;
+        }
+
         const isMulti = e.shiftKey || isMultiSelectMode;
         if (isMulti) {
           if (selectedFichasIds.includes(ficha.id)) {
@@ -4095,6 +4162,13 @@
           }
         } else {
           selectedFichasIds = [ficha.id];
+        }
+
+        if (!state.usuario?.esDM) {
+          selectedFichasIds = selectedFichasIds.filter(id => {
+            const f = (state.fichas || []).find(fi => fi.id === id);
+            return f && esDuenioDeFicha(f);
+          });
         }
         
         updateMultiSelectBadge();
@@ -4883,18 +4957,14 @@
           </div>
         `;
 
-        const handleEnterGame = () => {
-          const savedUsername = localStorage.getItem('vtt_username') || state.usuario.nombre;
-          if (savedUsername && savedUsername.trim()) {
-            joinGameDirect(p.codigo, savedUsername.trim());
-          } else {
-            if (dom.joinCodeInput) dom.joinCodeInput.value = p.codigo;
-            if (dom.joinUsernameInput) {
-              dom.joinUsernameInput.value = '';
-              openModal(dom.modalJoinGame);
-              setTimeout(() => dom.joinUsernameInput.focus(), 150);
-            }
+        const handleEnterGame = (e) => {
+          if (e) e.stopPropagation();
+          let username = (localStorage.getItem('vtt_username') || state.usuario?.nombre || '').trim();
+          if (!username) {
+            username = 'Dungeon Master';
+            localStorage.setItem('vtt_username', username);
           }
+          joinGameDirect(p.codigo, username);
         };
 
         const btnLoad = card.querySelector('.btn-load-game');
@@ -4909,6 +4979,11 @@
           cardImg.style.cursor = 'pointer';
           cardImg.addEventListener('click', handleEnterGame);
         }
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('button')) return;
+          handleEnterGame(e);
+        });
 
         const btnEdit = card.querySelector('.btn-edit-game');
         if (btnEdit) {
@@ -5417,6 +5492,14 @@
     showSaveIndicator('🟢 Entrando...');
     showVttLoading(`Entrando a la partida (${codigo})...`);
 
+    // Asegurar que el socket esté inicializado y conectado
+    if (!socket) {
+      initSocket();
+    }
+    if (socket && !socket.connected) {
+      try { socket.connect(); } catch (_) {}
+    }
+
     // Emitir unirse_partida garantizando socket activo
     if (typeof window._emitWhenReady === 'function') {
       window._emitWhenReady('unirse_partida', {
@@ -5445,6 +5528,13 @@
     } else {
       dom.multiSelectCount.classList.add('hidden');
     }
+  }
+
+  // --- ARRANQUE SEGURO DE LA APLICACIÓN ---
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', startApp);
+  } else {
+    startApp();
   }
 
 })();
