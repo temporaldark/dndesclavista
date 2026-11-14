@@ -6,14 +6,96 @@ const { dbRun, dbAll, dbGet, dbTransaction, dataDir } = require('./database');
 // Directorios de guardado (usa dataDir unificado de database.js)
 const savesDir = path.join(dataDir, 'saves');
 const backupsDir = path.join(savesDir, 'backups');
+const uploadsDir = path.join(dataDir, 'uploads');
+const mapsDir = path.join(uploadsDir, 'mapas');
 
 function ensureDirectories() {
   try {
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
     if (!fs.existsSync(savesDir)) fs.mkdirSync(savesDir, { recursive: true });
     if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+    if (!fs.existsSync(mapsDir)) fs.mkdirSync(mapsDir, { recursive: true });
   } catch (err) {
     console.warn('⚠️ [SavesManager] Aviso al verificar directorios:', err.message);
+  }
+}
+
+// Helper para guardar mapas en disco desacoplados del WebSocket y de la BD
+async function guardarMapaEnDisco(escenaId, mapaInput) {
+  if (!mapaInput || typeof mapaInput !== 'string') return null;
+
+  ensureDirectories();
+
+  // Si ya es una URL relativa (/api/escenas/... o /uploads/...) o externa, mantenerla
+  if (mapaInput.startsWith('/api/escenas/') || mapaInput.startsWith('/uploads/') || mapaInput.startsWith('http://') || mapaInput.startsWith('https://')) {
+    return mapaInput;
+  }
+
+  // Si es Base64 (data:image/...)
+  if (mapaInput.startsWith('data:image/')) {
+    const match = mapaInput.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
+    if (!match) return mapaInput;
+    const mime = match[1];
+    const ext = mime.includes('webp') ? 'webp' : (mime.includes('png') ? 'png' : (mime.includes('gif') ? 'gif' : 'jpg'));
+    const filename = `${escenaId}.${ext}`;
+    const filepath = path.join(mapsDir, filename);
+    const buffer = Buffer.from(match[2], 'base64');
+    await fs.promises.writeFile(filepath, buffer);
+    return `/api/escenas/${escenaId}/mapa?v=${Date.now()}`;
+  }
+
+  return mapaInput;
+}
+
+// Helper para eliminar mapa de disco cuando el DM lo quita
+async function eliminarMapaDeDisco(escenaId) {
+  const exts = ['webp', 'png', 'jpg', 'jpeg', 'gif'];
+  for (const ext of exts) {
+    const filepath = path.join(mapsDir, `${escenaId}.${ext}`);
+    if (fs.existsSync(filepath)) {
+      try { await fs.promises.unlink(filepath); } catch (_) {}
+    }
+  }
+}
+
+// Helper para leer un mapa de disco y devolverlo como Base64 (usado para exportaciones portables .json)
+async function obtenerMapaComoBase64(escenaId) {
+  try {
+    const exts = ['webp', 'png', 'jpg', 'jpeg', 'gif'];
+    for (const ext of exts) {
+      const filepath = path.join(mapsDir, `${escenaId}.${ext}`);
+      if (fs.existsSync(filepath)) {
+        const buf = await fs.promises.readFile(filepath);
+        const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
+        return `data:${mime};base64,${buf.toString('base64')}`;
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+// Migración transparente de mapas antiguos guardados en Base64 en la base de datos
+async function migrarMapasExistentes() {
+  try {
+    ensureDirectories();
+    const escenasConBase64 = await dbAll(`SELECT id, mapa FROM escenas WHERE mapa LIKE 'data:image/%'`);
+    if (escenasConBase64 && escenasConBase64.length > 0) {
+      console.log(`⚡ [Optimización] Migrando ${escenasConBase64.length} mapas Base64 a archivos WebP/binarios en disco...`);
+      for (const row of escenasConBase64) {
+        try {
+          const newUrl = await guardarMapaEnDisco(row.id, row.mapa);
+          if (newUrl && newUrl !== row.mapa) {
+            await dbRun(`UPDATE escenas SET mapa = ? WHERE id = ?`, [newUrl, row.id]);
+          }
+        } catch (e) {
+          console.warn(`Error al migrar mapa de escena ${row.id}:`, e.message);
+        }
+      }
+      console.log(`✅ [Optimización] Migración completada. Base de datos liberada de Base64 pesados.`);
+    }
+  } catch (err) {
+    console.warn('Advertencia en migrarMapasExistentes:', err.message);
   }
 }
 
@@ -230,10 +312,16 @@ async function importPartidaDataIntoDb(data, overrideExisting = false) {
       } else if (!targetEscenaActivaId && esc.mapa) {
         targetEscenaActivaId = esc.id;
       }
+
+      let finalMapa = esc.mapa || null;
+      if (finalMapa && typeof finalMapa === 'string' && finalMapa.startsWith('data:image/')) {
+        finalMapa = await guardarMapaEnDisco(esc.id, finalMapa);
+      }
+
       await dbRun(
         `INSERT OR REPLACE INTO escenas (id, partida_id, nombre, mapa, config_grid_x, config_grid_y, config_casilla)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [esc.id, partida.id, esc.nombre, esc.mapa || null, esc.config_grid_x || 40, esc.config_grid_y || 40, esc.config_casilla || 5]
+        [esc.id, partida.id, esc.nombre, finalMapa, esc.config_grid_x || 40, esc.config_grid_y || 40, esc.config_casilla || 5]
       );
     }
 
@@ -539,6 +627,12 @@ function deletePartidaFiles(partidaId, codigo) {
 
 module.exports = {
   ensureDirectories,
+  uploadsDir,
+  mapsDir,
+  guardarMapaEnDisco,
+  eliminarMapaDeDisco,
+  migrarMapasExistentes,
+  obtenerMapaComoBase64,
   exportPartidaData,
   savePartidaToFile,
   scheduleAutoSave,

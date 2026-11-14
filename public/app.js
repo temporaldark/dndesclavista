@@ -147,7 +147,17 @@
           offCanvas.height = h;
           const offCtx = offCanvas.getContext('2d');
           offCtx.drawImage(img, 0, 0, w, h);
-          resolve(offCanvas.toDataURL('image/jpeg', quality));
+          let resDataUrl = null;
+          try {
+            const webpUrl = offCanvas.toDataURL('image/webp', quality);
+            if (webpUrl && webpUrl.startsWith('data:image/webp')) {
+              resDataUrl = webpUrl;
+            }
+          } catch (_) {}
+          if (!resDataUrl) {
+            resDataUrl = offCanvas.toDataURL('image/jpeg', quality);
+          }
+          resolve(resDataUrl);
         };
         img.onerror = () => resolve(e.target.result);
         img.src = e.target.result;
@@ -1256,7 +1266,7 @@
     }
 
     // Si ya está exactamente la misma imagen cargada en memoria, evitar parpadeos
-    if (mapImage && mapImage.src === src && mapImageLoaded) {
+    if (mapImage && (mapImage.src === src || (src && mapImage.src.endsWith(src))) && mapImageLoaded) {
       markDirty();
       return;
     }
@@ -1266,7 +1276,8 @@
       mapImage = img;
       mapImageLoaded = true;
       
-      if (src.startsWith('data:image/gif')) {
+      const isGif = typeof src === 'string' && (src.startsWith('data:image/gif') || src.toLowerCase().includes('.gif'));
+      if (isGif) {
         if (dom.mapBgImg) {
           dom.mapBgImg.src = src;
           dom.mapBgImg.classList.remove('hidden');
@@ -3073,7 +3084,16 @@
             canvas.width = w; canvas.height = h;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, w, h);
-            const resizedBase64 = canvas.toDataURL('image/jpeg', 0.82);
+            let resizedBase64 = null;
+            try {
+              const webpData = canvas.toDataURL('image/webp', 0.82);
+              if (webpData && webpData.startsWith('data:image/webp')) {
+                resizedBase64 = webpData;
+              }
+            } catch (_) {}
+            if (!resizedBase64) {
+              resizedBase64 = canvas.toDataURL('image/jpeg', 0.82);
+            }
 
             socket?.emit('actualizar_mapa', { partidaId: state.partida.id, escenaId: escenaCurId, mapaBase64: resizedBase64 });
           };

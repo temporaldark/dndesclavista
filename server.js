@@ -4,6 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { dbRun, dbAll, dbGet, dbTransaction, initDb, checkpointDb, dataDir, isPostgres } = require('./database');
 const {
@@ -15,7 +16,13 @@ const {
   listBackupsForPartida,
   restoreSnapshotFile,
   limpiarNombrePartida,
-  deletePartidaFiles
+  deletePartidaFiles,
+  uploadsDir,
+  mapsDir,
+  guardarMapaEnDisco,
+  eliminarMapaDeDisco,
+  migrarMapasExistentes,
+  obtenerMapaComoBase64
 } = require('./saves_manager');
 
 let compression = null;
@@ -64,6 +71,72 @@ app.use(express.static(path.join(__dirname, 'public'), {
     }
   }
 }));
+
+// Servir archivos estáticos de uploads (mapas e imágenes desacopladas en disco)
+app.use('/uploads', express.static(uploadsDir, {
+  maxAge: '7d',
+  etag: true,
+  lastModified: true,
+  setHeaders: (res) => {
+    res.set('Cache-Control', 'public, max-age=604800, must-revalidate');
+  }
+}));
+
+// Endpoint HTTP optimizado para streaming de mapas de escenas con soporte de ETag y Cache-Control
+app.get('/api/escenas/:id/mapa', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!fs.existsSync(mapsDir)) {
+      fs.mkdirSync(mapsDir, { recursive: true });
+    }
+    const files = fs.readdirSync(mapsDir);
+    const prefix = `${id}.`;
+    const matchedFile = files.find(f => f.startsWith(prefix));
+
+    if (matchedFile) {
+      const fullPath = path.join(mapsDir, matchedFile);
+      const ext = path.extname(matchedFile).toLowerCase();
+      let contentType = 'image/webp';
+      if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+      else if (ext === '.png') contentType = 'image/png';
+      else if (ext === '.gif') contentType = 'image/gif';
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=604800, must-revalidate');
+      return res.sendFile(fullPath);
+    }
+
+    // Fallback: verificar si aún está almacenado en SQLite/Postgres como base64
+    const escena = await dbGet(`SELECT mapa FROM escenas WHERE id = ?`, [id]);
+    if (escena && escena.mapa) {
+      if (escena.mapa.startsWith('data:')) {
+        // Migrar en caliente a disco para acelerar próximas peticiones
+        const newUrl = await guardarMapaEnDisco(id, escena.mapa);
+        if (newUrl) {
+          await dbRun(`UPDATE escenas SET mapa = ? WHERE id = ?`, [newUrl, id]);
+        }
+        const matches = escena.mapa.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          const contentType = matches[1];
+          const buffer = Buffer.from(matches[2], 'base64');
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          return res.send(buffer);
+        }
+      } else if (escena.mapa.startsWith('/uploads/')) {
+        const localPath = path.join(dataDir, escena.mapa.replace(/^\//, ''));
+        if (fs.existsSync(localPath)) {
+          return res.sendFile(localPath);
+        }
+      }
+    }
+
+    return res.status(404).send('Mapa no encontrado');
+  } catch (err) {
+    console.error('Error al servir mapa de escena:', err);
+    return res.status(500).send('Error interno al servir el mapa');
+  }
+});
 
 // Función para generar código alfanumérico único de 6 caracteres
 function generarCodigoPartida() {
@@ -324,6 +397,12 @@ app.get('/api/partidas/:id/export', async (req, res) => {
     await savePartidaToFile(id, false);
 
     const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [id]);
+    for (const esc of escenas) {
+      if (esc.mapa && esc.mapa.startsWith('/api/escenas/')) {
+        const b64 = await obtenerMapaComoBase64(esc.id);
+        if (b64) esc.mapa = b64;
+      }
+    }
     const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ?`, [id]);
     const figuras = await dbAll(`SELECT f.* FROM figuras f JOIN escenas e ON f.escena_id = e.id WHERE e.partida_id = ?`, [id]);
     const dibujos = await dbAll(`SELECT d.* FROM dibujos d JOIN escenas e ON d.escena_id = e.id WHERE e.partida_id = ?`, [id]);
@@ -415,9 +494,13 @@ app.post('/api/partidas/import', async (req, res) => {
         if (!firstNewEscenaId) {
           firstNewEscenaId = newEscenaId;
         }
+        let finalMapa = esc.mapa || null;
+        if (finalMapa && finalMapa.startsWith('data:image/')) {
+          finalMapa = await guardarMapaEnDisco(newEscenaId, finalMapa);
+        }
         await dbRun(
           `INSERT INTO escenas (id, partida_id, nombre, mapa, config_grid_x, config_grid_y, config_casilla) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [newEscenaId, newPartidaId, esc.nombre, esc.mapa || null, esc.config_grid_x || partida.config_grid_x || 40, esc.config_grid_y || partida.config_grid_y || 40, esc.config_casilla || partida.config_casilla || 5]
+          [newEscenaId, newPartidaId, esc.nombre, finalMapa, esc.config_grid_x || partida.config_grid_x || 40, esc.config_grid_y || partida.config_grid_y || 40, esc.config_casilla || partida.config_casilla || 5]
         );
       }
 
@@ -837,6 +920,7 @@ io.on('connection', (socket) => {
   // Eliminar escena (DM)
   socket.on('eliminar_escena', async ({ partidaId, escenaId }) => {
     try {
+      await eliminarMapaDeDisco(escenaId);
       await dbRun(`DELETE FROM escenas WHERE id = ?`, [escenaId]);
       const escenas = await dbAll(`SELECT id, partida_id, nombre, config_grid_x, config_grid_y, config_casilla FROM escenas WHERE partida_id = ?`, [partidaId]);
       io.to(partidaId).emit('escenas_actualizadas', escenas);
@@ -849,9 +933,17 @@ io.on('connection', (socket) => {
   // Actualizar imagen de mapa de una escena (DM)
   socket.on('actualizar_mapa', async ({ partidaId, escenaId, mapaBase64 }) => {
     try {
-      await dbRun(`UPDATE escenas SET mapa = ? WHERE id = ?`, [mapaBase64, escenaId]);
+      let finalMapa = mapaBase64;
+      if (mapaBase64) {
+        // Guardar la imagen en disco y reemplazar el payload pesado por una URL liviana con streaming HTTP
+        const urlDisco = await guardarMapaEnDisco(escenaId, mapaBase64);
+        if (urlDisco) finalMapa = urlDisco;
+      } else {
+        await eliminarMapaDeDisco(escenaId);
+      }
+      await dbRun(`UPDATE escenas SET mapa = ? WHERE id = ?`, [finalMapa, escenaId]);
       await dbRun(`UPDATE partidas SET fecha_modificacion = ? WHERE id = ?`, [new Date().toISOString(), partidaId]);
-      io.to(partidaId).emit('mapa_actualizado', { escenaId, mapa: mapaBase64 });
+      io.to(partidaId).emit('mapa_actualizado', { escenaId, mapa: finalMapa });
       scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
@@ -1741,6 +1833,8 @@ async function bootstrap() {
   ensureDirectories();
   // Auto-restaurar partidas desde /data/saves/ si faltan en la base de datos (por caída o reinicio de contenedor)
   await autoRestoreFromFiles();
+  // Migrar mapas antiguos en Base64 a archivos desacoplados en disco
+  await migrarMapasExistentes();
 
   server.listen(PORT, HOST, () => {
     console.log(`
