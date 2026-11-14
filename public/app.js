@@ -168,52 +168,73 @@
   }
 
   // --- INICIALIZACIÓN ---
+  function updateLobbyUserDisplay() {
+    const currentName = (localStorage.getItem('vtt_username') || state.usuario?.nombre || '').trim();
+    if (dom && dom.lobbyUsernameDisplay) {
+      if (currentName) {
+        dom.lobbyUsernameDisplay.textContent = currentName;
+        dom.lobbyUsernameDisplay.style.color = 'var(--gold-light)';
+      } else {
+        dom.lobbyUsernameDisplay.textContent = 'Sin definir (Haz clic en Cambiar Nombre)';
+        dom.lobbyUsernameDisplay.style.color = '#94a3b8';
+      }
+    }
+  }
+
   function startApp() {
     try {
       // Generar o cargar usuario id local basado en nombre de usuario si existe
-    let savedUsername = localStorage.getItem('vtt_username');
-    let savedUserId = localStorage.getItem('vtt_user_id');
-    if (savedUsername) {
-      savedUserId = 'usr_' + savedUsername.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
-      localStorage.setItem('vtt_user_id', savedUserId);
-    } else if (!savedUserId) {
-      savedUserId = 'usr_' + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem('vtt_user_id', savedUserId);
-    }
-    state.usuario.id = savedUserId;
-    if (savedUsername) state.usuario.nombre = savedUsername;
-
-    initDOM();
-    initCanvas();
-    initSocket();
-    loadGamesList();
-    setupAutoSave();
-
-    // Auto-reanudar sesión activa si existe
-    const activeCode = localStorage.getItem('vtt_active_game_code');
-    const activeUser = state.usuario.nombre || localStorage.getItem('vtt_username');
-    if (activeCode && activeUser) {
-      console.log('🔄 Reanudando automáticamente sesión activa:', activeCode);
-      joinGameDirect(activeCode, activeUser);
-    }
-
-    // Soporte para unirse mediante parámetro URL (ej: /?codigo=ABC123 o /?code=ABC123)
-    const urlParams = new URLSearchParams(window.location.search);
-    const codeFromUrl = urlParams.get('codigo') || urlParams.get('code') || urlParams.get('partida');
-    if (codeFromUrl) {
-      const cleanUrlCode = codeFromUrl.toUpperCase().trim();
-      if (activeUser) {
-        joinGameDirect(cleanUrlCode, activeUser);
-      } else {
-        if (dom.joinCodeInput) dom.joinCodeInput.value = cleanUrlCode;
-        openModal(dom.modalJoinGame);
-        setTimeout(() => dom.joinUsernameInput?.focus(), 150);
+      let savedUsername = localStorage.getItem('vtt_username');
+      // Si el nombre guardado es el antiguo fallback 'Dungeon Master' y no fue elegido explícitamente, limpiarlo
+      if (savedUsername === 'Dungeon Master' && !localStorage.getItem('vtt_username_explicit')) {
+        savedUsername = null;
+        localStorage.removeItem('vtt_username');
+        localStorage.removeItem('vtt_user_id');
       }
+
+      let savedUserId = localStorage.getItem('vtt_user_id');
+      if (savedUsername) {
+        savedUserId = 'usr_' + savedUsername.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+        localStorage.setItem('vtt_user_id', savedUserId);
+      } else if (!savedUserId) {
+        savedUserId = 'usr_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('vtt_user_id', savedUserId);
+      }
+      state.usuario.id = savedUserId;
+      if (savedUsername) state.usuario.nombre = savedUsername;
+
+      initDOM();
+      initCanvas();
+      initSocket();
+      updateLobbyUserDisplay();
+      loadGamesList();
+      setupAutoSave();
+
+      // Auto-reanudar sesión activa si existe
+      const activeCode = localStorage.getItem('vtt_active_game_code');
+      const activeUser = state.usuario.nombre || localStorage.getItem('vtt_username');
+      if (activeCode && activeUser) {
+        console.log('🔄 Reanudando automáticamente sesión activa:', activeCode);
+        joinGameDirect(activeCode, activeUser);
+      }
+
+      // Soporte para unirse mediante parámetro URL (ej: /?codigo=ABC123 o /?code=ABC123)
+      const urlParams = new URLSearchParams(window.location.search);
+      const codeFromUrl = urlParams.get('codigo') || urlParams.get('code') || urlParams.get('partida');
+      if (codeFromUrl) {
+        const cleanUrlCode = codeFromUrl.toUpperCase().trim();
+        if (activeUser) {
+          joinGameDirect(cleanUrlCode, activeUser);
+        } else {
+          if (dom.joinCodeInput) dom.joinCodeInput.value = cleanUrlCode;
+          openModal(dom.modalJoinGame);
+          setTimeout(() => dom.joinUsernameInput?.focus(), 150);
+        }
+      }
+    } catch (err) {
+      console.error('❌ Error durante inicialización startApp():', err);
     }
-  } catch (err) {
-    console.error('❌ Error durante inicialización startApp():', err);
   }
-}
 
   // --- ELEMENTOS DOM ---
   function initDOM() {
@@ -441,6 +462,11 @@
       editGamePreviewImg: document.getElementById('edit-game-preview-img'),
       btnDmEditSession: document.getElementById('btn-dm-edit-session'),
       codeBadge: document.getElementById('code-badge'),
+      modalChangeUser: document.getElementById('modal-change-user'),
+      formChangeUser: document.getElementById('form-change-user'),
+      inputChangeUsername: document.getElementById('input-change-username'),
+      lobbyUsernameDisplay: document.getElementById('lobby-username-display'),
+      btnLobbyChangeUser: document.getElementById('btn-lobby-change-user'),
 
       // Combat Tracker
       combatTrackerBar: document.getElementById('combat-tracker-bar'),
@@ -1085,6 +1111,17 @@
     socket.on('update_dm_status', ({ esDM }) => {
       state.usuario.esDM = esDM;
       updateUIForCurrentGame();
+    });
+
+    socket.on('usuario_actualizado', (user) => {
+      if (user && user.id) {
+        state.usuario = { ...state.usuario, ...user };
+        localStorage.setItem('vtt_username', user.nombre);
+        localStorage.setItem('vtt_username_explicit', '1');
+        localStorage.setItem('vtt_user_id', user.id);
+        updateUIForCurrentGame();
+        updateLobbyUserDisplay();
+      }
     });
 
     // Lista de jugadores conectados (para menú de visibilidad)
@@ -2487,7 +2524,9 @@
       openModal(dom.modalCreateGame);
       const dmNameEl = document.getElementById('create-dm-name');
       if (dmNameEl && !dmNameEl.value.trim()) {
-        dmNameEl.value = localStorage.getItem('vtt_username') || 'Dungeon Master';
+        const saved = localStorage.getItem('vtt_username');
+        dmNameEl.value = saved || '';
+        dmNameEl.placeholder = 'Tu nombre de Dungeon Master (ej: DM Arturo)';
       }
       const titleEl = document.getElementById('create-game-title');
       if (titleEl) {
@@ -2591,8 +2630,62 @@
         return;
       }
 
+      localStorage.setItem('vtt_username', nombreUsuario);
+      localStorage.setItem('vtt_username_explicit', '1');
+      updateLobbyUserDisplay();
       closeModal(dom.modalJoinGame);
       joinGameDirect(codigo, nombreUsuario);
+    });
+
+    // Modal Cambiar Nombre de Usuario / Perfil
+    dom.btnLobbyChangeUser?.addEventListener('click', () => {
+      openModal(dom.modalChangeUser);
+      setTimeout(() => {
+        if (dom.inputChangeUsername) {
+          dom.inputChangeUsername.value = localStorage.getItem('vtt_username') || state.usuario?.nombre || '';
+          dom.inputChangeUsername.focus();
+        }
+      }, 100);
+    });
+
+    dom.userRoleBadge?.addEventListener('click', () => {
+      openModal(dom.modalChangeUser);
+      setTimeout(() => {
+        if (dom.inputChangeUsername) {
+          dom.inputChangeUsername.value = state.usuario?.nombre || localStorage.getItem('vtt_username') || '';
+          dom.inputChangeUsername.focus();
+        }
+      }, 100);
+    });
+
+    dom.formChangeUser?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const newName = (dom.inputChangeUsername?.value || '').trim();
+      if (!newName) {
+        alert('Por favor introduce un nombre válido.');
+        return;
+      }
+
+      localStorage.setItem('vtt_username', newName);
+      localStorage.setItem('vtt_username_explicit', '1');
+      const deterministicId = 'usr_' + newName.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+      state.usuario.id = deterministicId;
+      state.usuario.nombre = newName;
+      localStorage.setItem('vtt_user_id', deterministicId);
+
+      updateLobbyUserDisplay();
+
+      // Si estamos en una partida activa, emitir al servidor
+      if (socket && socket.connected && state.partida?.id) {
+        socket.emit('cambiar_nombre_usuario', { nuevoNombre: newName });
+      }
+
+      if (dom.userRoleText) {
+        dom.userRoleText.textContent = state.usuario.esDM ? `DM: ${newName}` : newName;
+      }
+
+      closeModal(dom.modalChangeUser);
+      showToast(`👤 Nombre guardado: ${newName}`, 'gold');
     });
 
     // Modificar datos de la sesión (DM en partida)
@@ -3917,11 +4010,11 @@
     if (dom.currentSceneName) dom.currentSceneName.textContent = state.escenaActiva?.nombre || 'Escena';
 
     if (state.usuario?.esDM) {
-      if (dom.userRoleBadge) dom.userRoleBadge.className = 'role-badge dm';
-      if (dom.userRoleText) dom.userRoleText.textContent = 'Dungeon Master';
+      if (dom.userRoleBadge) dom.userRoleBadge.className = 'role-badge dm clickable';
+      if (dom.userRoleText) dom.userRoleText.textContent = `DM: ${state.usuario.nombre || 'Dungeon Master'}`;
       document.querySelectorAll('.dm-only').forEach(el => el.classList.remove('hidden'));
     } else {
-      if (dom.userRoleBadge) dom.userRoleBadge.className = 'role-badge';
+      if (dom.userRoleBadge) dom.userRoleBadge.className = 'role-badge clickable';
       if (dom.userRoleText) dom.userRoleText.textContent = state.usuario?.nombre || 'Jugador';
       document.querySelectorAll('.dm-only').forEach(el => el.classList.add('hidden'));
     }
@@ -4981,8 +5074,12 @@
           if (e) e.stopPropagation();
           let username = (localStorage.getItem('vtt_username') || state.usuario?.nombre || '').trim();
           if (!username) {
-            username = 'Dungeon Master';
-            localStorage.setItem('vtt_username', username);
+            if (dom.joinCodeInput) dom.joinCodeInput.value = p.codigo;
+            if (dom.joinUsernameInput) dom.joinUsernameInput.value = '';
+            loadJoinModalSessionsList();
+            openModal(dom.modalJoinGame);
+            setTimeout(() => dom.joinUsernameInput?.focus(), 150);
+            return;
           }
           joinGameDirect(p.codigo, username);
         };
@@ -5123,7 +5220,7 @@
       loadGamesList();
 
       // Auto unirse directo a la partida sin recargar
-      const username = localStorage.getItem('vtt_username') || state.usuario.nombre || 'Dungeon Master';
+      const username = localStorage.getItem('vtt_username') || state.usuario.nombre || '';
       joinGameDirect(data.codigo, username);
     } catch (err) {
       alert(`❌ Error al importar la sesión: ${err.message}`);
@@ -5465,6 +5562,7 @@
     if (name === 'start') {
       dom.screenStart?.classList.remove('hidden');
       dom.screenVTT?.classList.add('hidden');
+      updateLobbyUserDisplay();
     } else {
       dom.screenStart?.classList.add('hidden');
       dom.screenVTT?.classList.remove('hidden');
@@ -5477,11 +5575,22 @@
   function joinGameDirect(codigo, nombreUsuario) {
     if (!codigo) return;
     codigo = codigo.toUpperCase().trim();
-    nombreUsuario = (nombreUsuario || localStorage.getItem('vtt_username') || state.usuario?.nombre || 'Jugador').trim();
+    nombreUsuario = (nombreUsuario || localStorage.getItem('vtt_username') || state.usuario?.nombre || '').trim();
+
+    // Si aún no hay nombre de usuario, no permitir unirse a ciegas: pedir nombre al jugador
+    if (!nombreUsuario) {
+      if (dom.joinCodeInput) dom.joinCodeInput.value = codigo;
+      if (dom.joinUsernameInput) dom.joinUsernameInput.value = '';
+      loadJoinModalSessionsList();
+      openModal(dom.modalJoinGame);
+      setTimeout(() => dom.joinUsernameInput?.focus(), 150);
+      return;
+    }
 
     // Guardar en almacenamiento local para no perder la partida
     localStorage.setItem('vtt_active_game_code', codigo);
     localStorage.setItem('vtt_username', nombreUsuario);
+    localStorage.setItem('vtt_username_explicit', '1');
 
     const deterministicId = 'usr_' + nombreUsuario.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
     state.usuario.id = deterministicId;

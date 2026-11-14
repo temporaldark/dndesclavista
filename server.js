@@ -762,6 +762,70 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Cambiar nombre de usuario en caliente durante una sesión activa
+  socket.on('cambiar_nombre_usuario', async ({ nuevoNombre }) => {
+    try {
+      const { partidaId, usuarioId: oldUserId } = socket.data || {};
+      if (!partidaId || !nuevoNombre || typeof nuevoNombre !== 'string') return;
+
+      const nombreLimpio = nuevoNombre.trim().substring(0, 40);
+      if (!nombreLimpio) return;
+
+      const partida = await dbGet(`SELECT dm_id FROM partidas WHERE id = ?`, [partidaId]);
+      const newUserId = 'usr_' + nombreLimpio.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+
+      // Si el usuario era DM o su nuevo ID coincide con el dm_id de la partida, conserva/obtiene rol DM
+      const eraDM = !!socket.data.esDM;
+      const esDM = eraDM || (partida && partida.dm_id === newUserId);
+
+      // Si el usuario era el DM y cambia su nombre, actualizar el dm_id de la partida
+      if (eraDM && partida && partida.dm_id === oldUserId) {
+        await dbRun(`UPDATE partidas SET dm_id = ? WHERE id = ?`, [newUserId, partidaId]);
+      }
+
+      const viejoNombre = socket.data.nombreUsuario || 'Un jugador';
+      socket.data.nombreUsuario = nombreLimpio;
+      socket.data.usuarioId = newUserId;
+      socket.data.esDM = esDM;
+
+      // Actualizar en connectedUsers
+      if (connectedUsers.has(partidaId)) {
+        const roomUsers = connectedUsers.get(partidaId);
+        roomUsers.delete(oldUserId);
+        roomUsers.set(newUserId, {
+          id: newUserId,
+          nombre: nombreLimpio,
+          esDM,
+          color: socket.data.colorUsuario,
+          socketId: socket.id
+        });
+        io.to(partidaId).emit('lista_jugadores', Array.from(roomUsers.values()));
+      }
+
+      // Responder al socket emisor con su nuevo estado
+      socket.emit('usuario_actualizado', {
+        id: newUserId,
+        nombre: nombreLimpio,
+        esDM,
+        color: socket.data.colorUsuario
+      });
+
+      // Anuncio en el chat
+      io.to(partidaId).emit('nuevo_mensaje', {
+        id: uuidv4(),
+        partida_id: partidaId,
+        usuario_id: 'sistema',
+        nombre_usuario: 'Sistema',
+        color_usuario: '#c9a84c',
+        mensaje: `👤 "${viejoNombre}" ahora se llama "${nombreLimpio}".`,
+        es_gif: 0,
+        fecha: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error('Error al cambiar nombre de usuario:', err);
+    }
+  });
+
   // Modificar datos de la sesión en tiempo real (DM / Creador)
   socket.on('actualizar_partida_info', async ({ partidaId, nombre, imagenPortada }) => {
     try {

@@ -38,8 +38,8 @@
       <div id="code-badge" class="code-badge" title="Haz clic para copiar el código de partida">
         <i class="fa-solid fa-key"></i> Code: <strong id="current-room-code">------</strong>
       </div>
-      <div id="user-role-badge" class="role-badge">
-        <i class="fa-solid fa-user-shield"></i> <span id="user-role-text">Jugador</span>
+      <div id="user-role-badge" class="role-badge clickable" title="Haz clic para cambiar tu nombre de usuario">
+        <i class="fa-solid fa-user-pen"></i> <span id="user-role-text">Jugador</span>
       </div>
       <div id="scene-badge" class="scene-badge">
         <i class="fa-solid fa-map-location-dot"></i> <span id="current-scene-name">Mazmorra Principal</span>
@@ -78,6 +78,18 @@
     <div class="hero-header">
       <h1><i class="fa-solid fa-dragon gold-text"></i> VTT D&D 5e</h1>
       <p class="subtitle">Mesa Virtual de Rol Multijugador en Tiempo Real con Soporte Homebrew</p>
+    </div>
+
+    <!-- BARRA DE PERFIL DE USUARIO / SELECCIÓN DE IDENTIDAD -->
+    <div class="lobby-user-bar">
+      <div class="lobby-user-info">
+        <i class="fa-solid fa-circle-user gold-text"></i>
+        <span>Jugando como: </span>
+        <strong id="lobby-username-display">Sin definir</strong>
+      </div>
+      <button id="btn-lobby-change-user" class="btn btn-sm btn-outline-gold" type="button" title="Cambiar tu nombre de usuario">
+        <i class="fa-solid fa-user-pen"></i> Cambiar Nombre
+      </button>
     </div>
 
     <div class="start-actions">
@@ -925,6 +937,29 @@
     </div>
   </div>
 
+  <!-- MODAL: CAMBIAR NOMBRE DE USUARIO / PERFIL -->
+  <div id="modal-change-user" class="modal-overlay hidden">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-user-pen gold-text"></i> Tu Nombre de Usuario</h3>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="form-change-user" class="modal-body">
+        <div class="form-group">
+          <label>Nombre de Jugador / Dungeon Master *</label>
+          <input type="text" id="input-change-username" required maxlength="40" placeholder="Ej: Legolas, Arturo, DM Laura">
+          <small style="color: #94a3b8; font-size: 0.8rem; margin-top: 6px; display: block;">
+            Este nombre se usará en el chat, tus tiradas de dados, tus fichas y la lista de jugadores.
+          </small>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary btn-close-modal">Cancelar</button>
+          <button type="submit" class="btn btn-gold"><i class="fa-solid fa-check"></i> Guardar Nombre</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- MODAL: CATÁLOGO EXPANDIDO DE PLANTILLAS DEL DM (PC Y MÓVIL) -->
   <div id="modal-dm-gallery" class="modal-overlay hidden">
     <div class="modal-content modal-xl modal-gallery-catalog">
@@ -1090,7 +1125,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script>if (typeof io === 'undefined') document.write('<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"><\/script>');</script>
   <!-- Lógica de la Aplicación -->
-  <script src="app.js?v=3.6.3"></script>
+  <script src="app.js?v=3.6.4"></script>
 </body>
 
 </html>

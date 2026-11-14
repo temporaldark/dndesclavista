@@ -156,6 +156,18 @@ input:focus, select:focus, textarea:focus, button:focus {
   font-weight: bold;
 }
 
+.role-badge.clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.role-badge.clickable:hover {
+  filter: brightness(1.2);
+  border-color: var(--gold-light);
+  transform: translateY(-1px);
+}
+
 .scene-badge {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -216,6 +228,45 @@ input:focus, select:focus, textarea:focus, button:focus {
 .hero-header .subtitle {
   color: var(--text-muted);
   font-size: 1.1rem;
+}
+
+.lobby-user-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(30, 41, 59, 0.75);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 18px;
+  margin: 0 auto 24px auto;
+  width: 100%;
+  max-width: 900px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.lobby-user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  color: var(--text-main);
+}
+
+.lobby-user-info strong {
+  color: var(--gold-light);
+  font-size: 1.05rem;
+}
+
+.btn-outline-gold {
+  background: transparent;
+  border: 1px solid var(--gold-light);
+  color: var(--gold-light);
+}
+
+.btn-outline-gold:hover {
+  background: rgba(201, 168, 76, 0.18);
+  box-shadow: var(--shadow-gold);
 }
 
 .start-actions {
