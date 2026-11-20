@@ -1419,6 +1419,18 @@
 
     const img = new Image();
     img.onload = () => {
+      // Si la imagen devuelta es el pixel vacío de contingencia (<= 1x1), tratar como sin mapa
+      if (img.naturalWidth <= 1 && img.naturalHeight <= 1) {
+        mapImage = null;
+        mapImageLoaded = false;
+        if (dom.mapBgImg) {
+          dom.mapBgImg.classList.add('hidden');
+          dom.mapBgImg.src = '';
+        }
+        markDirty();
+        return;
+      }
+
       mapImage = img;
       mapImageLoaded = true;
       
@@ -1442,15 +1454,11 @@
       }
       markDirty();
     };
-    img.onerror = (e) => {
-      console.warn('[VTT] No se pudo cargar imagen de mapa:', e);
+    img.onerror = () => {
       if (!mapImage) {
         mapImage = null;
         mapImageLoaded = false;
         markDirty();
-      }
-      if (state.esDM && escCur) {
-        showToast(`⚠️ No se encontró la imagen del mapa de "${escCur.nombre || 'la escena'}" (posible reinicio del servidor). Puedes volver a cargarla en Herramientas DM > Escenas.`, 'warning', 7000);
       }
     };
     img.src = src;

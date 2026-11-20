@@ -83,6 +83,51 @@ app.use('/uploads', express.static(uploadsDir, {
   }
 }));
 
+// Helper para verificar y auto-sanear escenas cuyo mapa apunta a un archivo que ya no existe en disco ni en BD
+async function verificarMapaEscena(escena) {
+  if (!escena || !escena.mapa) return;
+  if (!escena.mapa.startsWith('/api/escenas/')) return;
+
+  const prefix = `${escena.id}.`;
+  let existsOnDisk = false;
+  try {
+    if (fs.existsSync(mapsDir)) {
+      existsOnDisk = fs.readdirSync(mapsDir).some(f => f.startsWith(prefix));
+    }
+  } catch (_) {}
+  if (existsOnDisk) return;
+
+  // Si no está en disco, verificar si existe mapa_data en la BD
+  try {
+    const row = await dbGet(`SELECT mapa_data FROM escenas WHERE id = ?`, [escena.id]);
+    if (row?.mapa_data && typeof row.mapa_data === 'string' && row.mapa_data.startsWith('data:')) {
+      try { await guardarMapaEnDisco(escena.id, row.mapa_data); } catch (_) {}
+      return;
+    }
+  } catch (_) {}
+
+  // Verificar si está en algún backup/snapshot
+  try {
+    if (typeof buscarMapaEnBackups === 'function') {
+      const b64 = await buscarMapaEnBackups(escena.id);
+      if (b64) {
+        try {
+          await dbRun(`UPDATE escenas SET mapa_data = ? WHERE id = ?`, [b64, escena.id]);
+          await guardarMapaEnDisco(escena.id, b64);
+        } catch (_) {}
+        return;
+      }
+    }
+  } catch (_) {}
+
+  // Si no existe en ningún lado (archivo huérfano de un reinicio previo de Railway):
+  // Limpiar el enlace roto de la BD para que el cliente no intente descargarlo ni genere 404
+  try {
+    await dbRun(`UPDATE escenas SET mapa = NULL WHERE id = ?`, [escena.id]);
+  } catch (_) {}
+  escena.mapa = null;
+}
+
 // Endpoint HTTP optimizado para streaming de mapas de escenas con soporte de ETag y Cache-Control
 app.get('/api/escenas/:id/mapa', async (req, res) => {
   try {
@@ -145,7 +190,18 @@ app.get('/api/escenas/:id/mapa', async (req, res) => {
       }
     }
 
-    return res.status(404).json({ error: 'Mapa no encontrado. El DM puede volver a subir la imagen de la escena.' });
+    // Si no se encuentra en ningún lado (archivo huérfano de un reinicio anterior):
+    // Limpiar en BD para evitar futuras llamadas rotas
+    try {
+      await dbRun(`UPDATE escenas SET mapa = NULL WHERE id = ?`, [id]);
+    } catch (_) {}
+
+    // Responder 200 con pixel transparente para no registrar error 404 rojo en la consola del navegador
+    const emptyPixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('X-Map-Status', 'empty');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).send(emptyPixel);
   } catch (err) {
     console.error('Error al servir mapa de escena:', err);
     return res.status(500).json({ error: 'Error interno al servir el mapa' });
@@ -700,6 +756,9 @@ io.on('connection', (socket) => {
         await dbRun(`UPDATE partidas SET escena_activa_id = ? WHERE id = ?`, [escenaActiva.id, partida.id]);
         partida.escena_activa_id = escenaActiva.id;
       }
+      if (escenaActiva) {
+        await verificarMapaEscena(escenaActiva);
+      }
 
       // Obtener listas completas (optimizadas: escenas sin mapa base64 para evitar payloads de 30MB+)
       const escenas = await dbAll(`SELECT id, partida_id, nombre, config_grid_x, config_grid_y, config_casilla FROM escenas WHERE partida_id = ?`, [partida.id]);
@@ -902,6 +961,9 @@ io.on('connection', (socket) => {
       // 2. Cambiar escena activa
       await dbRun(`UPDATE partidas SET escena_activa_id = ?, fecha_modificacion = ? WHERE id = ?`, [escenaId, new Date().toISOString(), partidaId]);
       const escenaActiva = await dbGet(`SELECT * FROM escenas WHERE id = ?`, [escenaId]);
+      if (escenaActiva) {
+        await verificarMapaEscena(escenaActiva);
+      }
       const figuras = await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaId]);
       const dibujoRow = await dbGet(`SELECT datos FROM dibujos WHERE escena_id = ?`, [escenaId]);
       const dibujos = dibujoRow ? JSON.parse(dibujoRow.datos || '[]') : [];
@@ -921,6 +983,7 @@ io.on('connection', (socket) => {
     try {
       const escena = await dbGet(`SELECT * FROM escenas WHERE id = ?`, [escenaId]);
       if (!escena) return;
+      await verificarMapaEscena(escena);
       const figuras = await dbAll(`SELECT * FROM figuras WHERE escena_id = ?`, [escenaId]);
       const dibujoRow = await dbGet(`SELECT datos FROM dibujos WHERE escena_id = ?`, [escenaId]);
       const dibujos = dibujoRow ? JSON.parse(dibujoRow.datos || '[]') : [];
