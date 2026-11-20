@@ -234,23 +234,81 @@ input:focus, select:focus, textarea:focus, button:focus {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  background: rgba(30, 41, 59, 0.75);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 10px 18px;
+  gap: 16px;
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px solid var(--gold-primary);
+  border-radius: 10px;
+  padding: 12px 20px;
   margin: 0 auto 24px auto;
   width: 100%;
   max-width: 900px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  flex-wrap: wrap;
 }
 
 .lobby-user-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   font-size: 0.95rem;
   color: var(--text-main);
+  flex: 1;
+  min-width: 280px;
+  flex-wrap: wrap;
+}
+
+.lobby-user-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--gold-light);
+  white-space: nowrap;
+}
+
+.lobby-user-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.lobby-username-input {
+  flex: 1;
+  padding: 8px 12px;
+  background: #0f172a;
+  border: 1px solid rgba(201, 168, 76, 0.4);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.lobby-username-input:focus {
+  border-color: var(--gold-primary);
+  box-shadow: 0 0 8px rgba(201, 168, 76, 0.35);
+}
+
+.lobby-user-status {
+  display: flex;
+  align-items: center;
+}
+
+.lobby-status-tag {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.lobby-status-tag.is-set {
+  color: #38bdf8;
+}
+
+.lobby-status-tag.is-warning {
+  color: #f59e0b;
 }
 
 .lobby-user-info strong {
@@ -861,19 +919,85 @@ input:focus, select:focus, textarea:focus, button:focus {
   border: 1px solid var(--border-subtle);
 }
 
-.chat-input-bar {
+.chat-input-bar,
+.chat-input-area {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
-.chat-input-bar input {
+.chat-input-bar input,
+.chat-input-area input {
   flex: 1;
+  min-width: 0;
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
   color: #fff;
   padding: 10px 12px;
   border-radius: 6px;
-  min-height: 48px;
+  min-height: 44px;
+}
+
+#tab-chat {
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+#tab-chat .pane-header {
+  flex-shrink: 0;
+}
+
+#tab-chat .chat-messages-container {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+#tab-chat .chat-input-area {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+/* BUSCADORES DE FICHAS E HISTORIAL */
+.fichas-search-bar input,
+.history-search-bar input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-main);
+  box-sizing: border-box;
+}
+
+.fichas-search-bar input:focus,
+.history-search-bar input:focus {
+  border-color: var(--gold-primary);
+  box-shadow: 0 0 6px rgba(201, 168, 76, 0.4);
+}
+
+/* BOTÓN CERRAR PANELES LATERALES EN MÓVIL */
+.btn-close-panel {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.15rem;
+  padding: 6px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  min-height: 36px;
+  min-width: 36px;
+}
+
+.btn-close-panel:hover,
+.btn-close-panel:active {
+  color: var(--gold-light);
+  transform: scale(1.1);
 }
 
 /* HISTORIAL COMPLETO DE DADOS */
@@ -1798,6 +1922,7 @@ input:focus, select:focus, textarea:focus, button:focus {
 .modal-body {
   padding: 20px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1990,23 +2115,85 @@ input:focus, select:focus, textarea:focus, button:focus {
 }
 
 .mobile-overlay.active {
+  display: block !important;
   opacity: 1;
   pointer-events: auto;
 }
 
 /* ADAPTACIÓN MÓVIL (MOBILE-FIRST RESPONSIVE) */
 @media (max-width: 900px) {
+  /* Prevenir auto-zoom intrusivo en Safari / iOS */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Tap instantáneo sin retardo de doble toque */
+  button,
+  .btn,
+  .tab-btn,
+  .tool-btn,
+  .btn-nav,
+  .fichas-card,
+  .combat-participant-card {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   .top-navbar {
     height: auto;
     padding: 8px 12px;
+    padding-top: max(8px, env(safe-area-inset-top, 8px));
     flex-wrap: wrap;
   }
 
   .nav-center {
     order: 3;
     width: 100%;
+    display: flex;
     justify-content: space-between;
+    align-items: center;
+    gap: 4px;
     margin-top: 6px;
+  }
+
+  .code-badge,
+  .role-badge,
+  .scene-badge {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.78rem;
+    padding: 4px 8px;
+    max-width: 31vw;
+  }
+
+  /* Modales optimizados para pantalla móvil */
+  .modal-content {
+    max-height: 90dvh;
+    max-height: calc(var(--vh, 1vh) * 90);
+    max-width: 96vw;
+    margin: auto;
+  }
+
+  .modal-body {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  /* Controles flotantes respetando Safe Area */
+  .canvas-controls {
+    bottom: max(12px, env(safe-area-inset-bottom, 12px));
+    left: max(12px, env(safe-area-inset-left, 12px));
+    padding: 4px 8px;
+    gap: 6px;
+  }
+
+  .canvas-controls .btn-circle {
+    width: 38px;
+    height: 38px;
+    font-size: 0.92rem;
   }
 
   .mobile-only {
@@ -2150,6 +2337,93 @@ input:focus, select:focus, textarea:focus, button:focus {
   /* Keep canvas touch-action blocked (for panning/drawing) */
   .vtt-canvas-container {
     touch-action: none;
+  }
+
+  /* Pestañas del drawer en móvil centradas y con buen espaciado */
+  .tab-btn {
+    padding: 8px 4px;
+    font-size: 0.74rem;
+    min-width: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+  }
+
+  .tab-btn i,
+  .tab-btn svg {
+    font-size: 1rem;
+  }
+
+  /* Botones de acción de fichas con tamaño táctil adecuado */
+  .ficha-actions {
+    gap: 6px;
+  }
+
+  .ficha-actions .btn {
+    min-height: 36px;
+    height: 36px;
+    padding: 6px 10px;
+    font-size: 0.82rem;
+  }
+
+  /* Barra de usuario y acciones en el lobby en pantallas móviles */
+  .lobby-user-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px 14px;
+    gap: 8px;
+  }
+
+  .lobby-user-info {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .lobby-user-input-wrap {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .start-actions {
+    flex-direction: column;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .start-actions .btn {
+    width: 100%;
+  }
+
+  /* Formularios en modales: campos en 2 columnas en móvil */
+  .form-row > .form-group {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 120px;
+  }
+
+  /* Scroll horizontal seguro en tabla de combate para móvil */
+  .combat-setup-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Modal de notas e imagen de token en móvil */
+  #modal-gif-view .modal-content {
+    max-height: 90dvh;
+    overflow-y: auto;
+  }
+
+  #enlarged-img-notas {
+    max-height: 45dvh !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* En pantallas móviles muy estrechas, ocultar la columna tipo de la tabla de combate para evitar scroll horizontal excesivo */
+  .combat-setup-table th:nth-child(4),
+  .combat-setup-table td:nth-child(4) {
+    display: none;
   }
 }
 
@@ -2782,6 +3056,51 @@ button:hover .icon-swords {
 .combat-card-dead {
   opacity: 0.45;
   filter: grayscale(80%);
+}
+
+.combat-card-remove {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  font-size: 0.85rem;
+  padding: 2px 5px;
+  cursor: pointer;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.55;
+  transition: opacity 0.2s, transform 0.2s;
+  margin-left: 4px;
+}
+
+.combat-card-remove:hover {
+  opacity: 1;
+  transform: scale(1.25);
+  color: #f87171;
+}
+
+.combat-badge-in-fight {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.btn-quick-add-combat {
+  background: linear-gradient(135deg, rgba(201, 168, 76, 0.25) 0%, rgba(201, 168, 76, 0.45) 100%);
+  border: 1px solid var(--gold-light);
+  color: var(--gold-light);
+  font-weight: 600;
+}
+
+.btn-quick-add-combat:hover {
+  background: var(--gold-primary);
+  color: #000;
 }
 
 /* MODAL PREPARACIÓN COMBATE */

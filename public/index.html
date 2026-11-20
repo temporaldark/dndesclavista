@@ -3,7 +3,11 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0d0d15">
   <title>VTT D&D 5e - Homebrew Tabletop Multijugador</title>
 
   <!-- Preconexiones para acelerar carga de fuentes e iconos externos -->
@@ -18,7 +22,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <!-- Estilos Temáticos D&D -->
-  <link rel="stylesheet" href="style.css?v=3.6.1">
+  <link rel="stylesheet" href="style.css?v=3.6.3">
 </head>
 
 <body>
@@ -50,6 +54,9 @@
       <span id="save-status-indicator" class="save-status" title="Estado de Guardado">
         <i class="fa-solid fa-cloud-arrow-up"></i> <span>Listo</span>
       </span>
+      <button id="btn-quick-gallery" class="btn-nav mobile-only dm-only" title="Catálogo de Plantillas / Bestiario (DM)">
+        <i class="fa-solid fa-dragon"></i>
+      </button>
       <button id="btn-mobile-dm-tools" class="btn-nav mobile-only" title="Herramientas">
         <i class="fa-solid fa-toolbox"></i>
       </button>
@@ -83,13 +90,20 @@
     <!-- BARRA DE PERFIL DE USUARIO / SELECCIÓN DE IDENTIDAD -->
     <div class="lobby-user-bar">
       <div class="lobby-user-info">
-        <i class="fa-solid fa-circle-user gold-text"></i>
-        <span>Jugando como: </span>
-        <strong id="lobby-username-display">Sin definir</strong>
+        <label for="lobby-username-input" class="lobby-user-label">
+          <i class="fa-solid fa-circle-user gold-text"></i>
+          <span>Tu Nombre de Jugador:</span>
+        </label>
+        <div class="lobby-user-input-wrap">
+          <input type="text" id="lobby-username-input" class="form-input lobby-username-input" placeholder="Escribe tu nombre de usuario..." maxlength="30" autocomplete="nickname">
+          <button id="btn-save-lobby-username" class="btn btn-sm btn-gold" type="button" title="Guardar nombre de usuario">
+            <i class="fa-solid fa-check"></i> Guardar
+          </button>
+        </div>
       </div>
-      <button id="btn-lobby-change-user" class="btn btn-sm btn-outline-gold" type="button" title="Cambiar tu nombre de usuario">
-        <i class="fa-solid fa-user-pen"></i> Cambiar Nombre
-      </button>
+      <div class="lobby-user-status">
+        <span id="lobby-username-status" class="lobby-status-tag"></span>
+      </div>
     </div>
 
     <div class="start-actions">
@@ -116,12 +130,15 @@
 
   <!-- PANTALLA PRINCIPAL VTT (TABLERO Y PANELES) -->
   <main id="screen-vtt" class="screen-container hidden">
-    <div id="mobile-overlay" class="mobile-overlay hidden"></div>
+    <div id="mobile-overlay" class="mobile-overlay"></div>
 
     <!-- PANEL IZQUIERDO (HERRAMIENTAS DE MAPA: MOVER, MEDIR, FIGURAS, HP PARA TODOS / DIBUJAR SOLO DM) -->
     <aside id="dm-tools-panel" class="dm-tools-panel">
-      <div class="panel-header">
-        <i class="fa-solid fa-toolbox gold-text"></i> <span>Herramientas</span>
+      <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding-right: 4px;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <i class="fa-solid fa-toolbox gold-text"></i> <span>Herramientas</span>
+        </div>
+        <button type="button" class="btn-close-panel mobile-only" title="Cerrar panel"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="tools-buttons">
         <button id="tool-move" class="tool-btn active" data-tool="move" title="Mover tu Ficha">
@@ -238,6 +255,9 @@
               <i class="fa-solid fa-forward-step"></i> Terminar Mi Turno
             </button>
             <!-- Controles DM -->
+            <button id="btn-combat-add-participant" class="btn-circle-sm dm-only" title="Agregar más fichas/jugadores a la ronda actual (DM)">
+              <i class="fa-solid fa-user-plus"></i>
+            </button>
             <button id="btn-combat-prev" class="btn-circle-sm dm-only" title="Turno Anterior (DM)">
               <i class="fa-solid fa-backward-step"></i>
             </button>
@@ -268,7 +288,7 @@
 
       <div id="vtt-canvas-container" class="vtt-canvas-container">
         <img id="vtt-map-bg" class="hidden" style="position: absolute; top: 0; left: 0; transform-origin: 0 0; pointer-events: none; z-index: 0;" alt="Map Background">
-        <canvas id="vtt-canvas" style="position: relative; z-index: 1;"></canvas>
+        <canvas id="vtt-canvas" tabindex="0" style="position: relative; z-index: 1; outline: none;"></canvas>
       </div>
 
       <!-- Controles flotantes de Zoom y Posición -->
@@ -300,6 +320,7 @@
         <button class="tab-btn" data-tab="tab-historial"><i class="fa-solid fa-clock-rotate-left"></i>
           <span>Historial</span></button>
         <button class="tab-btn dm-only" data-tab="tab-dm"><i class="fa-solid fa-key"></i> <span>DM</span></button>
+        <button type="button" class="btn-close-panel mobile-only" title="Cerrar panel"><i class="fa-solid fa-xmark"></i></button>
       </nav>
 
       <div class="tab-content-container">
@@ -909,13 +930,8 @@
       </div>
       <form id="form-join-game" class="modal-body">
         <div class="form-group">
-          <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--gold-light); margin-bottom: 4px;">
-            <span><i class="fa-solid fa-list-check"></i> Partidas Disponibles:</span>
-            <small style="color: #94a3b8; font-weight: normal;">(Haz clic para autocompletar código)</small>
-          </label>
-          <div id="join-available-games-list" class="join-games-list-box">
-            <div style="color: #64748b; font-size: 0.8rem; padding: 8px; text-align: center;">Cargando sesiones...</div>
-          </div>
+          <label>Tu Nombre de Jugador *</label>
+          <input type="text" id="join-username-input" required placeholder="Ej: Legolas">
         </div>
         <div class="form-group">
           <label>Código de 6 Caracteres *</label>
@@ -923,8 +939,13 @@
             style="text-transform: uppercase; letter-spacing: 2px; font-weight: bold; font-size: 1.2rem;">
         </div>
         <div class="form-group">
-          <label>Tu Nombre de Jugador *</label>
-          <input type="text" id="join-username-input" required placeholder="Ej: Legolas">
+          <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--gold-light); margin-bottom: 4px;">
+            <span><i class="fa-solid fa-list-check"></i> Partidas Disponibles:</span>
+            <small style="color: #94a3b8; font-weight: normal;">(Haz clic para autocompletar código)</small>
+          </label>
+          <div id="join-available-games-list" class="join-games-list-box">
+            <div style="color: #64748b; font-size: 0.8rem; padding: 8px; text-align: center;">Cargando sesiones...</div>
+          </div>
         </div>
         <div class="form-group" style="margin-top: 10px;">
           <!-- El rol de DM se asigna automáticamente al creador -->
@@ -1083,7 +1104,7 @@
             <line x1="7" y1="17" x2="4" y2="20"></line>
             <line x1="3" y1="19" x2="5" y2="21"></line>
           </svg>
-          Preparación de Combate
+          <span id="combat-setup-title-text">Preparación de Combate</span>
         </h3>
         <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
       </div>
@@ -1109,11 +1130,16 @@
           </table>
         </div>
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
         <button type="button" class="btn btn-secondary btn-close-modal">Cancelar</button>
-        <button type="button" id="btn-combat-start-confirm" class="btn btn-gold">
-          <i class="fa-solid fa-play"></i> ¡Comenzar Combate!
-        </button>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" id="btn-combat-add-confirm" class="btn btn-gold hidden" title="Añadir a la ronda activa sin reiniciar">
+            <i class="fa-solid fa-user-plus"></i> Añadir a la Ronda
+          </button>
+          <button type="button" id="btn-combat-start-confirm" class="btn btn-primary">
+            <i class="fa-solid fa-play"></i> ¡Comenzar Combate!
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1125,7 +1151,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script>if (typeof io === 'undefined') document.write('<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"><\/script>');</script>
   <!-- Lógica de la Aplicación -->
-  <script src="app.js?v=3.6.4"></script>
+  <script src="app.js?v=3.6.8"></script>
 </body>
 
 </html>

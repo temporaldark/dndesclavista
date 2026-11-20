@@ -75,14 +75,17 @@
   let gallerySpawnQuantity = 1;
   let inspectingTemplateData = null;
   let isDraggingToken = false;
+  let tokenDidActuallyMove = false;
   let dragOffsets = {};
   let isDraggingFigure = false;
+  let figureDidActuallyMove = false;
   let selectedFigureId = null;
   let dragOffset = { x: 0, y: 0 }; // Para arrastrar figuras individuales
 
   // Estado de Capas y Utilería (Props)
   let propImagesCache = {};
   let isDraggingProp = false;
+  let propDidActuallyMove = false;
   let selectedPropId = null;
   let propDragOffset = { x: 0, y: 0 };
 
@@ -170,15 +173,45 @@
   // --- INICIALIZACIÓN ---
   function updateLobbyUserDisplay() {
     const currentName = (localStorage.getItem('vtt_username') || state.usuario?.nombre || '').trim();
-    if (dom && dom.lobbyUsernameDisplay) {
-      if (currentName) {
-        dom.lobbyUsernameDisplay.textContent = currentName;
-        dom.lobbyUsernameDisplay.style.color = 'var(--gold-light)';
-      } else {
-        dom.lobbyUsernameDisplay.textContent = 'Sin definir (Haz clic en Cambiar Nombre)';
-        dom.lobbyUsernameDisplay.style.color = '#94a3b8';
+    if (dom.lobbyUsernameInput) {
+      if (document.activeElement !== dom.lobbyUsernameInput) {
+        dom.lobbyUsernameInput.value = currentName;
       }
     }
+    if (dom.lobbyUsernameStatus) {
+      if (currentName) {
+        dom.lobbyUsernameStatus.textContent = `✓ Jugador: ${currentName}`;
+        dom.lobbyUsernameStatus.className = 'lobby-status-tag is-set';
+      } else {
+        dom.lobbyUsernameStatus.textContent = '⚠️ Escribe tu nombre antes de entrar';
+        dom.lobbyUsernameStatus.className = 'lobby-status-tag is-warning';
+      }
+    }
+    if (dom.lobbyUsernameDisplay) {
+      dom.lobbyUsernameDisplay.textContent = currentName || 'Sin definir';
+    }
+  }
+
+  function saveLobbyUsername(name) {
+    const trimmed = (name || '').trim();
+    if (!trimmed) {
+      if (dom.lobbyUsernameStatus) {
+        dom.lobbyUsernameStatus.textContent = '⚠️ El nombre no puede estar vacío';
+        dom.lobbyUsernameStatus.className = 'lobby-status-tag is-warning';
+      }
+      return false;
+    }
+    localStorage.setItem('vtt_username', trimmed);
+    localStorage.setItem('vtt_username_explicit', '1');
+    const deterministicId = 'usr_' + trimmed.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+    state.usuario.id = deterministicId;
+    state.usuario.nombre = trimmed;
+    localStorage.setItem('vtt_user_id', deterministicId);
+    if (dom.joinUsernameInput) dom.joinUsernameInput.value = trimmed;
+    const dmNameEl = document.getElementById('create-dm-name');
+    if (dmNameEl && !dmNameEl.value.trim()) dmNameEl.value = trimmed;
+    updateLobbyUserDisplay();
+    return true;
   }
 
   function startApp() {
@@ -210,10 +243,11 @@
       loadGamesList();
       setupAutoSave();
 
-      // Auto-reanudar sesión activa si existe
+      // Auto-reanudar sesión activa SOLO si estaba activamente en partida en esta pestaña
+      const inSession = sessionStorage.getItem('vtt_in_session') === '1';
       const activeCode = localStorage.getItem('vtt_active_game_code');
       const activeUser = state.usuario.nombre || localStorage.getItem('vtt_username');
-      if (activeCode && activeUser) {
+      if (inSession && activeCode && activeUser) {
         console.log('🔄 Reanudando automáticamente sesión activa:', activeCode);
         joinGameDirect(activeCode, activeUser);
       }
@@ -259,6 +293,9 @@
       dmToolsPanel: document.getElementById('dm-tools-panel'),
 
       // Lista Partidas
+      lobbyUsernameInput: document.getElementById('lobby-username-input'),
+      btnSaveLobbyUsername: document.getElementById('btn-save-lobby-username'),
+      lobbyUsernameStatus: document.getElementById('lobby-username-status'),
       gamesList: document.getElementById('games-list'),
       btnCreateGameModal: document.getElementById('btn-create-game-modal'),
       btnJoinGameModal: document.getElementById('btn-join-game-modal'),
@@ -484,6 +521,9 @@
       btnCombatSelectAll: document.getElementById('btn-combat-select-all'),
       btnCombatRollAll: document.getElementById('btn-combat-roll-all'),
       btnCombatStartConfirm: document.getElementById('btn-combat-start-confirm'),
+      btnCombatAddParticipant: document.getElementById('btn-combat-add-participant'),
+      btnCombatAddConfirm: document.getElementById('btn-combat-add-confirm'),
+      combatSetupTitleText: document.getElementById('combat-setup-title-text'),
       toolCombat: document.getElementById('tool-combat')
     };
 
@@ -491,13 +531,13 @@
     setupMobileMenuListeners();
   }
 
-  function setupMobileMenuListeners() {
-    function closeAllPanels() {
-      dom.rightPanel.classList.remove('open');
-      dom.dmToolsPanel.classList.remove('open');
-      dom.mobileOverlay.classList.remove('active');
-    }
+  function closeAllPanels() {
+    if (dom.rightPanel) dom.rightPanel.classList.remove('open');
+    if (dom.dmToolsPanel) dom.dmToolsPanel.classList.remove('open');
+    if (dom.mobileOverlay) dom.mobileOverlay.classList.remove('active');
+  }
 
+  function setupMobileMenuListeners() {
     if (dom.btnMobileMenu) {
       dom.btnMobileMenu.addEventListener('click', () => {
         const isOpen = dom.rightPanel.classList.contains('open');
@@ -522,6 +562,52 @@
 
     if (dom.mobileOverlay) {
       dom.mobileOverlay.addEventListener('click', closeAllPanels);
+      dom.mobileOverlay.addEventListener('touchstart', (e) => {
+        if (e.cancelable) e.preventDefault();
+        closeAllPanels();
+      }, { passive: false });
+    }
+
+    // Gestos táctiles de deslizamiento (Swipe) para cerrar paneles laterales en móviles
+    function setupSwipeToClose(element, direction) {
+      if (!element) return;
+      let startX = 0;
+      let startY = 0;
+      element.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+          startX = e.touches[0].clientX;
+          startY = e.touches[0].clientY;
+        }
+      }, { passive: true });
+
+      element.addEventListener('touchend', (e) => {
+        if (e.changedTouches.length === 1) {
+          const deltaX = e.changedTouches[0].clientX - startX;
+          const deltaY = e.changedTouches[0].clientY - startY;
+          if (Math.abs(deltaY) < 90) {
+            if (direction === 'right' && deltaX > 50) {
+              closeAllPanels();
+            } else if (direction === 'left' && deltaX < -50) {
+              closeAllPanels();
+            }
+          }
+        }
+      }, { passive: true });
+    }
+
+    setupSwipeToClose(dom.rightPanel, 'right');
+    setupSwipeToClose(dom.dmToolsPanel, 'left');
+
+    // Botones de cierre explícito (X) dentro de paneles laterales en móviles
+    document.querySelectorAll('.btn-close-panel').forEach(btn => {
+      btn.addEventListener('click', closeAllPanels);
+    });
+
+    // Prevenir que toques en controles flotantes traspasen al canvas subyacente
+    const controlsEl = document.querySelector('.canvas-controls');
+    if (controlsEl) {
+      controlsEl.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+      controlsEl.addEventListener('touchend', (e) => e.stopPropagation(), { passive: true });
     }
   }
 
@@ -537,6 +623,13 @@
 
     // Si el nombre de la ficha coincide con el nombre de usuario del jugador conectado
     if (ficha.nombre && ficha.nombre.toLowerCase().trim() === uName) return true;
+
+    // Si la ficha es un PJ (tipo jugador / pj / personaje) y no tiene dueño asignado, cualquier jugador puede controlarla/reclamarla
+    const tipoLower = (ficha.tipo || '').toLowerCase().trim();
+    const esPJ = !tipoLower || tipoLower === 'jugador' || tipoLower === 'pj' || tipoLower === 'personaje';
+    if (!fJugadorId && esPJ) {
+      return true;
+    }
 
     return false;
   }
@@ -794,6 +887,7 @@
       const combateAnterior = state.combate;
       state.combate = combate || { activo: false, ronda: 1, turnoIndex: 0, participantes: [] };
       renderCombatTracker();
+      renderFichasList();
       markDirty();
 
       // Notificación si el turno pasó al jugador actual
@@ -809,6 +903,7 @@
     socket.on('error_partida', (msg) => {
       hideVttLoading();
       localStorage.removeItem('vtt_active_game_code');
+      sessionStorage.removeItem('vtt_in_session');
       showScreen('start');
       alert('❌ Error: ' + msg);
     });
@@ -1249,19 +1344,30 @@
     resizeCanvas();
 
     window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('orientationchange', () => {
+      setTimeout(resizeCanvas, 150);
+      setTimeout(resizeCanvas, 350);
+    });
     window.addEventListener('scroll', updateCanvasRect, { passive: true });
 
     // Eventos de Mouse
-    dom.canvasContainer.addEventListener('mousedown', handleMouseDown);
-    dom.canvasContainer.addEventListener('mousemove', handleMouseMove);
-    dom.canvasContainer.addEventListener('mouseup', handleMouseUp);
-    dom.canvasContainer.addEventListener('mouseleave', handleMouseUp);
-    dom.canvasContainer.addEventListener('wheel', handleWheel, { passive: false });
+    dom.canvasContainer?.addEventListener('mousedown', handleMouseDown);
+    dom.canvasContainer?.addEventListener('mousemove', handleMouseMove);
+    dom.canvasContainer?.addEventListener('mouseup', handleMouseUp);
+    dom.canvasContainer?.addEventListener('mouseleave', handleMouseUp);
+    dom.canvasContainer?.addEventListener('wheel', handleWheel, { passive: false });
+
+    // Asegurar que el canvas y el contenedor wrapper capturen el wheel también
+    if (dom.canvasWrapper) {
+      dom.canvasWrapper.addEventListener('wheel', handleWheel, { passive: false });
+    }
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
 
     // Eventos Táctiles Móvil (Touch)
-    dom.canvasContainer.addEventListener('touchstart', handleTouchStart, { passive: false });
-    dom.canvasContainer.addEventListener('touchmove', handleTouchMove, { passive: false });
-    dom.canvasContainer.addEventListener('touchend', handleTouchEnd, { passive: false });
+    dom.canvasContainer?.addEventListener('touchstart', handleTouchStart, { passive: false });
+    dom.canvasContainer?.addEventListener('touchmove', handleTouchMove, { passive: false });
+    dom.canvasContainer?.addEventListener('touchend', handleTouchEnd, { passive: false });
+    dom.canvasContainer?.addEventListener('touchcancel', handleTouchCancel, { passive: false });
   }
 
   function resizeCanvas() {
@@ -1818,13 +1924,22 @@
         ctx.strokeStyle = 'rgba(255,255,255,0.3)';
         ctx.strokeRect(barX, barY, barW, barH);
 
-        // Nombre encima de la barra (solo si está revelado)
+        // Nombre encima de la barra (solo si está revelado) con contorno de alto contraste
         if (showName) {
+          ctx.font = 'bold 13px Roboto, sans-serif';
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+          ctx.strokeText(displayName, cx, py - 22);
           ctx.fillStyle = '#ffffff';
           ctx.fillText(displayName, cx, py - 22);
         }
       } else if (showName) {
-        // Solo nombre, sin barra
+        // Solo nombre, sin barra con contorno de alto contraste
+        ctx.font = 'bold 13px Roboto, sans-serif';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+        ctx.strokeText(displayName, cx, py - 6);
+        ctx.fillStyle = '#ffffff';
         ctx.fillText(displayName, cx, py - 6);
       }
       ctx.restore();
@@ -1934,6 +2049,16 @@
 
   // --- MANEJADORES DE EVENTOS MOUSE / TOUCH EN CANVAS ---
   function handleMouseDown(e) {
+    tokenDidActuallyMove = false;
+    propDidActuallyMove = false;
+    figureDidActuallyMove = false;
+
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      const tag = document.activeElement.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') {
+        document.activeElement.blur();
+      }
+    }
     updateCanvasRect();
     const gridPos = screenToGrid(e.clientX, e.clientY);
     const escenaCur = getEscenaActual();
@@ -2155,9 +2280,7 @@
   }
 
   function handleWindowMouseUp(e) {
-    if (isDraggingToken || isDraggingFigure || isDraggingProp || isPanning) {
-      handleMouseUp();
-    }
+    handleMouseUp();
   }
 
   function handleMouseMove(e) {
@@ -2190,6 +2313,7 @@
       });
       
       if (didMove) {
+        tokenDidActuallyMove = true;
         if (now - lastMoveEmitTime > 40) {
           lastMoveEmitTime = now;
         }
@@ -2198,6 +2322,7 @@
     } else if (isDraggingProp && selectedPropId) {
       const prop = (state.props || []).find(p => p.id === selectedPropId);
       if (prop) {
+        propDidActuallyMove = true;
         prop.x = gridPos.x - propDragOffset.x;
         prop.y = gridPos.y - propDragOffset.y;
         markDirty();
@@ -2216,6 +2341,7 @@
     } else if (isDraggingFigure && selectedFigureId) {
       const fig = state.figuras.find(f => f.id === selectedFigureId);
       if (fig) {
+        figureDidActuallyMove = true;
         fig.x = gridPos.x - dragOffset.x;
         fig.y = gridPos.y - dragOffset.y;
         markDirty();
@@ -2240,50 +2366,59 @@
     const escenaCur = getEscenaActual();
 
     if (isDraggingToken && selectedFichasIds.length > 0) {
-      selectedFichasIds.forEach(id => {
-        const ficha = state.fichas.find(f => f.id === id);
-        if (ficha) {
-          if (!state.usuario?.esDM && !esDuenioDeFicha(ficha)) return;
-          ficha.x = Math.round(ficha.x);
-          ficha.y = Math.round(ficha.y);
-          socket?.emit('guardar_posicion_ficha', {
-            partidaId: state.partida.id,
-            escenaId: escenaCur?.id,
-            fichaId: ficha.id,
-            x: ficha.x,
-            y: ficha.y
-          });
-        }
-      });
+      if (tokenDidActuallyMove) {
+        selectedFichasIds.forEach(id => {
+          const ficha = state.fichas.find(f => f.id === id);
+          if (ficha) {
+            if (!state.usuario?.esDM && !esDuenioDeFicha(ficha)) return;
+            ficha.x = Math.round(ficha.x);
+            ficha.y = Math.round(ficha.y);
+            socket?.emit('guardar_posicion_ficha', {
+              partidaId: state.partida.id,
+              escenaId: escenaCur?.id,
+              fichaId: ficha.id,
+              x: ficha.x,
+              y: ficha.y
+            });
+          }
+        });
+      }
+      tokenDidActuallyMove = false;
     }
 
     if (isDraggingProp && selectedPropId) {
-      const prop = (state.props || []).find(p => p.id === selectedPropId);
-      if (prop) {
-        prop.x = Math.round(prop.x * 2) / 2;
-        prop.y = Math.round(prop.y * 2) / 2;
-        socket?.emit('guardar_posicion_prop', {
-          partidaId: state.partida.id,
-          escenaId: escenaCur?.id,
-          propId: prop.id,
-          x: prop.x,
-          y: prop.y
-        });
+      if (propDidActuallyMove) {
+        const prop = (state.props || []).find(p => p.id === selectedPropId);
+        if (prop) {
+          prop.x = Math.round(prop.x * 2) / 2;
+          prop.y = Math.round(prop.y * 2) / 2;
+          socket?.emit('guardar_posicion_prop', {
+            partidaId: state.partida.id,
+            escenaId: escenaCur?.id,
+            propId: prop.id,
+            x: prop.x,
+            y: prop.y
+          });
+        }
       }
       isDraggingProp = false;
+      propDidActuallyMove = false;
       markDirty();
     }
 
     if (isDraggingFigure && selectedFigureId) {
-      const fig = state.figuras.find(f => f.id === selectedFigureId);
-      if (fig) {
-        socket?.emit('guardar_figura', {
-          partidaId: state.partida.id,
-          escenaId: escenaCur?.id,
-          figuraData: fig
-        });
+      if (figureDidActuallyMove) {
+        const fig = state.figuras.find(f => f.id === selectedFigureId);
+        if (fig) {
+          socket?.emit('guardar_figura', {
+            partidaId: state.partida.id,
+            escenaId: escenaCur?.id,
+            figuraData: fig
+          });
+        }
       }
       isDraggingFigure = false;
+      figureDidActuallyMove = false;
       markDirty();
     }
 
@@ -2310,7 +2445,6 @@
     markDirty();
   }
 
-
   function handleWheel(e) {
     e.preventDefault();
     const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
@@ -2332,45 +2466,148 @@
     markDirty();
   }
 
-  // SOPORTE EVENTOS TÁCTILES MÓVIL
+  // SOPORTE EVENTOS TÁCTILES MÓVIL (ZOOM, PAN Y ARRASTRE MULTITÁCTIL)
   let touchStartDist = 0;
+  let touchStartMid = null;
+  let touchLastPan = null;
+  let touchSingleStartPos = null;
+  let touchMovedBeyondSlop = false;
+  const TOUCH_SLOP_THRESHOLD = 8; // Umbral de píxeles para separar un toque simple de un arrastre
 
   function handleTouchStart(e) {
+    if (e.cancelable) e.preventDefault();
     updateCanvasRect();
+
     if (e.touches.length === 1) {
       const touch = e.touches[0];
-      handleMouseDown({ clientX: touch.clientX, clientY: touch.clientY });
+      touchStartDist = 0;
+      touchStartMid = null;
+      touchLastPan = null;
+      touchSingleStartPos = { x: touch.clientX, y: touch.clientY };
+      touchMovedBeyondSlop = false;
+      handleMouseDown({ clientX: touch.clientX, clientY: touch.clientY, button: 0 });
     } else if (e.touches.length === 2) {
-      touchStartDist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
+      // Al colocar un segundo dedo, cancelar arrastres de fichas o figuras para iniciar gesto de zoom/pan
+      if (isDraggingToken) {
+        isDraggingToken = false;
+        draggedToken = null;
+        draggedTokensInitialPositions = {};
+      }
+      if (isDraggingFigure) {
+        isDraggingFigure = false;
+      }
+      if (isDraggingProp) {
+        isDraggingProp = false;
+        draggedProp = null;
+      }
+      isPanning = false;
+
+      const t0 = e.touches[0];
+      const t1 = e.touches[1];
+      touchStartDist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+      touchStartMid = {
+        x: (t0.clientX + t1.clientX) / 2,
+        y: (t0.clientY + t1.clientY) / 2
+      };
+      touchLastPan = { x: touchStartMid.x, y: touchStartMid.y };
     }
   }
 
   function handleTouchMove(e) {
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
+
     if (e.touches.length === 1) {
       const touch = e.touches[0];
-      handleMouseMove({ clientX: touch.clientX, clientY: touch.clientY });
-    } else if (e.touches.length === 2) {
-      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      if (!touchMovedBeyondSlop && touchSingleStartPos) {
+        const dist = Math.hypot(touch.clientX - touchSingleStartPos.x, touch.clientY - touchSingleStartPos.y);
+        if (dist >= TOUCH_SLOP_THRESHOLD) {
+          touchMovedBeyondSlop = true;
+        }
+      }
 
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      if (touchStartDist > 0) {
+      // Si no ha superado el umbral (tap táctil con vibración natural involuntaria), no arrastrar
+      if (touchMovedBeyondSlop) {
+        handleMouseMove({ clientX: touch.clientX, clientY: touch.clientY });
+      }
+    } else if (e.touches.length === 2) {
+      const t0 = e.touches[0];
+      const t1 = e.touches[1];
+      const midX = (t0.clientX + t1.clientX) / 2;
+      const midY = (t0.clientY + t1.clientY) / 2;
+
+      // 1. Paneo con dos dedos
+      if (touchLastPan) {
+        const dx = midX - touchLastPan.x;
+        const dy = midY - touchLastPan.y;
+        viewport.panX += dx;
+        viewport.panY += dy;
+        touchLastPan = { x: midX, y: midY };
+      }
+
+      // 2. Pellizco / Pinch Zoom
+      const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+      if (touchStartDist > 0 && Math.abs(dist - touchStartDist) > 1) {
         const factor = dist / touchStartDist;
         zoomAt(midX, midY, factor);
       }
       touchStartDist = dist;
+      markDirty();
     }
   }
 
   function handleTouchEnd(e) {
-    handleMouseUp();
+    if (e.cancelable) e.preventDefault();
+
+    if (e.touches.length === 1) {
+      // Queda un dedo en pantalla: sincronizar panStart para evitar saltos bruscos
+      const touch = e.touches[0];
+      touchStartDist = 0;
+      touchStartMid = null;
+      touchLastPan = null;
+      touchSingleStartPos = { x: touch.clientX, y: touch.clientY };
+      touchMovedBeyondSlop = false;
+      panStart.x = touch.clientX - viewport.panX;
+      panStart.y = touch.clientY - viewport.panY;
+      if (activeTool === 'pan') {
+        isPanning = true;
+      }
+    } else if (e.touches.length === 0) {
+      touchStartDist = 0;
+      touchStartMid = null;
+      touchLastPan = null;
+
+      // Si fue solo un toque rápido sin superar el slop, limpiar banderas sin guardar coordenadas alteradas
+      if (!touchMovedBeyondSlop) {
+        isDraggingToken = false;
+        isDraggingProp = false;
+        isDraggingFigure = false;
+        isPanning = false;
+        isDrawing = false;
+        window.removeEventListener('mousemove', handleWindowMouseMove);
+        window.removeEventListener('mouseup', handleWindowMouseUp);
+        markDirty();
+      } else {
+        handleMouseUp();
+      }
+      touchSingleStartPos = null;
+      touchMovedBeyondSlop = false;
+    }
+  }
+
+  function handleTouchCancel(e) {
+    touchStartDist = 0;
+    touchStartMid = null;
+    touchLastPan = null;
+    touchSingleStartPos = null;
+    touchMovedBeyondSlop = false;
+    isDraggingToken = false;
+    isDraggingProp = false;
+    isDraggingFigure = false;
+    isPanning = false;
+    isDrawing = false;
+    window.removeEventListener('mousemove', handleWindowMouseMove);
+    window.removeEventListener('mouseup', handleWindowMouseUp);
+    markDirty();
   }
 
   // --- REGISTRO DE EVENT LISTENERS DOM ---
@@ -2391,8 +2628,10 @@
     });
 
     // --- CONTROLES DE COMBATE & TURN TRACKER ---
-    dom.btnOpenCombatModal?.addEventListener('click', openCombatSetupModal);
-    dom.toolCombat?.addEventListener('click', openCombatSetupModal);
+    dom.btnOpenCombatModal?.addEventListener('click', () => openCombatSetupModal(state.combate?.activo));
+    dom.toolCombat?.addEventListener('click', () => openCombatSetupModal(state.combate?.activo));
+    dom.btnCombatAddParticipant?.addEventListener('click', () => openCombatSetupModal(true));
+    dom.btnCombatAddConfirm?.addEventListener('click', confirmAddParticipantsToCombat);
 
     dom.btnCombatSelectAll?.addEventListener('click', () => {
       if (!dom.combatSetupTbody) return;
@@ -2451,6 +2690,7 @@
         if (!salir) return;
         const partidaIdToSave = state.partida.id;
         localStorage.removeItem('vtt_active_game_code');
+        sessionStorage.removeItem('vtt_in_session');
 
         // Guardado garantizado en disco antes de volver a la pantalla de inicio
         if (partidaIdToSave) {
@@ -2688,6 +2928,42 @@
       showToast(`👤 Nombre guardado: ${newName}`, 'gold');
     });
 
+    // Barra inline de nombre de usuario en el Lobby
+    if (dom.lobbyUsernameInput) {
+      dom.lobbyUsernameInput.addEventListener('input', () => {
+        const val = dom.lobbyUsernameInput.value.trim();
+        if (val) {
+          saveLobbyUsername(val);
+        } else if (dom.lobbyUsernameStatus) {
+          dom.lobbyUsernameStatus.textContent = '⚠️ Escribe tu nombre antes de entrar';
+          dom.lobbyUsernameStatus.className = 'lobby-status-tag is-warning';
+        }
+      });
+      dom.lobbyUsernameInput.addEventListener('blur', () => {
+        const val = dom.lobbyUsernameInput.value.trim();
+        if (val) saveLobbyUsername(val);
+      });
+      dom.lobbyUsernameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const val = dom.lobbyUsernameInput.value.trim();
+          if (saveLobbyUsername(val)) {
+            showToast(`✓ Nombre guardado: ${val}`, 'gold');
+          }
+        }
+      });
+    }
+
+    dom.btnSaveLobbyUsername?.addEventListener('click', () => {
+      const val = dom.lobbyUsernameInput ? dom.lobbyUsernameInput.value.trim() : '';
+      if (saveLobbyUsername(val)) {
+        showToast(`✓ Nombre guardado: ${val}`, 'gold');
+      } else {
+        alert('Por favor escribe tu nombre de jugador.');
+        dom.lobbyUsernameInput?.focus();
+      }
+    });
+
     // Modificar datos de la sesión (DM en partida)
     dom.btnDmEditSession?.addEventListener('click', () => {
       if (state.partida) {
@@ -2830,6 +3106,11 @@
         dom.toolButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         activeTool = btn.dataset.tool;
+
+        // Auto-cerrar panel DM en móvil al elegir herramientas directas de mapa
+        if (window.innerWidth <= 900 && ['move', 'pan', 'measure', 'erase'].includes(activeTool)) {
+          closeAllPanels();
+        }
 
         // Mostrar opciones de sub-herramienta
         dom.toolOptionsContainer?.classList.add('hidden');
@@ -3774,13 +4055,22 @@
   }
 
   function centerOnPlayerToken(username) {
-    const ficha = (state.fichas || []).find(f => f.nombre.toLowerCase() === username.toLowerCase());
-    if (ficha) {
+    if (!username) return;
+    const target = username.toLowerCase().trim();
+    const ficha = (state.fichas || []).find(f => {
+      const fName = (f.nombre || '').toLowerCase().trim();
+      const fJugadorId = (f.jugador_id || '').toLowerCase().trim();
+      return fName === target || fJugadorId === target || fJugadorId === 'usr_' + target.replace(/[^a-z0-9]/g, '_');
+    });
+    if (ficha && canvas) {
       const tileSize = getTileSize();
       viewport.panX = canvas.width / 2 - (ficha.x * tileSize);
       viewport.panY = canvas.height / 2 - (ficha.y * tileSize);
       selectedFichasIds = [ficha.id];
       markDirty();
+      if (window.innerWidth <= 900) {
+        closeAllPanels();
+      }
     }
   }
 
@@ -3792,6 +4082,9 @@
       viewport.panY = canvas.height / 2 - (ficha.y * tileSize);
       selectedFichasIds = [ficha.id];
       markDirty();
+      if (window.innerWidth <= 900) {
+        closeAllPanels();
+      }
     }
   }
 
@@ -3884,6 +4177,23 @@
         card.appendChild(avatarEl);
         card.appendChild(metaEl);
 
+        // Botón para que el DM pueda remover un participante de la ronda si se retira o muere
+        if (state.usuario?.esDM) {
+          const btnRemove = document.createElement('button');
+          btnRemove.className = 'combat-card-remove';
+          btnRemove.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+          btnRemove.title = `Quitar a ${pName} del combate`;
+          btnRemove.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (confirm(`¿Quitar a "${p.nombre}" de la ronda de combate?`)) {
+              if (state.partida?.id) {
+                socket.emit('quitar_participante_combate', { partidaId: state.partida.id, fichaId: p.id });
+              }
+            }
+          });
+          card.appendChild(btnRemove);
+        }
+
         card.addEventListener('click', () => {
           centerOnToken(p.id);
         });
@@ -3900,7 +4210,7 @@
     }
   }
 
-  function openCombatSetupModal() {
+  function openCombatSetupModal(isAddingMode = false) {
     if (!state.usuario?.esDM) {
       alert('Solo el Dungeon Master puede preparar e iniciar el combate.');
       return;
@@ -3909,37 +4219,75 @@
     if (!dom.combatSetupTbody) return;
     dom.combatSetupTbody.innerHTML = '';
 
+    const isCombatActive = Boolean(state.combate?.activo);
+    const modeAdding = isAddingMode || isCombatActive;
+
+    if (dom.combatSetupTitleText) {
+      dom.combatSetupTitleText.textContent = modeAdding
+        ? `Gestión de Combate — Ronda ${state.combate?.ronda || 1} en Curso`
+        : 'Preparación de Combate';
+    }
+
+    if (dom.btnCombatAddConfirm) {
+      if (modeAdding) {
+        dom.btnCombatAddConfirm.classList.remove('hidden');
+        if (dom.btnCombatStartConfirm) {
+          dom.btnCombatStartConfirm.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i> Reiniciar Combate';
+          dom.btnCombatStartConfirm.className = 'btn btn-secondary';
+        }
+      } else {
+        dom.btnCombatAddConfirm.classList.add('hidden');
+        if (dom.btnCombatStartConfirm) {
+          dom.btnCombatStartConfirm.innerHTML = '<i class="fa-solid fa-play"></i> ¡Comenzar Combate!';
+          dom.btnCombatStartConfirm.className = 'btn btn-gold';
+        }
+      }
+    }
+
     // Obtener fichas de la escena activa (o todos los jugadores y criaturas de esta escena)
     const escenaId = state.escenaActiva?.id;
     const tokensDisponibles = (state.fichas || []).filter(f => f.tipo === 'jugador' || f.escena_id === escenaId);
 
     if (tokensDisponibles.length === 0) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">No hay fichas en esta escena para iniciar combate.</td>`;
+      tr.innerHTML = `<td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">No hay fichas en esta escena para gestionar combate.</td>`;
       dom.combatSetupTbody.appendChild(tr);
       openModal(dom.modalCombatSetup);
       return;
     }
 
+    const participantesActualesIds = new Set((state.combate?.participantes || []).map(p => p.id));
+
     tokensDisponibles.forEach(f => {
       const tr = document.createElement('tr');
       tr.dataset.fichaId = f.id;
+      const alreadyIn = modeAdding && participantesActualesIds.has(f.id);
+      if (alreadyIn) tr.dataset.alreadyIn = '1';
 
-      // Calcular modificador de destreza: Math.floor((destreza - 10) / 2)
+      // Calcular modificador de destreza
       const dexMod = Math.floor(((f.destreza ?? 10) - 10) / 2);
-      // Si la ficha ya tiene una iniciativa guardada, usarla como base
-      const iniBase = (f.iniciativa !== undefined && f.iniciativa !== null && f.iniciativa !== 0) ? f.iniciativa : (10 + dexMod);
+      let iniBase;
+      if (alreadyIn) {
+        const pCurrent = state.combate.participantes.find(p => p.id === f.id);
+        iniBase = pCurrent?.iniciativa ?? (f.iniciativa || (10 + dexMod));
+      } else {
+        iniBase = (f.iniciativa !== undefined && f.iniciativa !== null && f.iniciativa !== 0) ? f.iniciativa : (10 + dexMod);
+      }
 
       const avatarHtml = f.imagen
         ? `<img src="${f.imagen}" class="combat-setup-avatar" alt="${f.nombre}">`
         : `<div class="combat-setup-avatar" style="display:flex;align-items:center;justify-content:center;color:var(--gold-light);">${(f.nombre || '?')[0].toUpperCase()}</div>`;
 
+      const checkDisabled = alreadyIn ? 'disabled' : '';
+      const checkChecked = alreadyIn ? 'checked' : 'checked';
+      const badgeInCombat = alreadyIn ? ' <span class="combat-badge-in-fight">En Combate</span>' : '';
+
       tr.innerHTML = `
-        <td style="text-align: center;"><input type="checkbox" class="combat-token-check" checked data-ficha-id="${f.id}"></td>
+        <td style="text-align: center;"><input type="checkbox" class="combat-token-check" ${checkChecked} ${checkDisabled} data-ficha-id="${f.id}"></td>
         <td>${avatarHtml}</td>
-        <td><strong>${f.nombre}</strong></td>
+        <td><strong>${f.nombre}</strong>${badgeInCombat}</td>
         <td><span class="badge-tag tag-${f.tipo || 'jugador'}">${f.tipo === 'jugador' ? 'Jugador' : (f.tipo === 'npc' ? 'NPC' : 'Monstruo')}</span></td>
-        <td><input type="number" class="combat-setup-ini-input" data-ficha-id="${f.id}" data-dex-mod="${dexMod}" value="${iniBase}"></td>
+        <td><input type="number" class="combat-setup-ini-input" data-ficha-id="${f.id}" data-dex-mod="${dexMod}" value="${iniBase}" ${alreadyIn ? 'disabled' : ''}></td>
       `;
 
       dom.combatSetupTbody.appendChild(tr);
@@ -3951,12 +4299,55 @@
 
   function rollAllCombatInitiatives() {
     if (!dom.combatSetupTbody) return;
-    const inputs = dom.combatSetupTbody.querySelectorAll('.combat-setup-ini-input');
+    const inputs = dom.combatSetupTbody.querySelectorAll('.combat-setup-ini-input:not(:disabled)');
     inputs.forEach(input => {
       const dexMod = parseInt(input.dataset.dexMod, 10) || 0;
       const d20 = Math.floor(Math.random() * 20) + 1;
       input.value = d20 + dexMod;
     });
+  }
+
+  function confirmAddParticipantsToCombat() {
+    if (!state.partida?.id) return;
+    if (!dom.combatSetupTbody) return;
+
+    // Obtener los tokens marcados que NO estaban ya en combate
+    const checks = dom.combatSetupTbody.querySelectorAll('.combat-token-check:checked:not(:disabled)');
+    if (checks.length === 0) {
+      alert('Selecciona al menos un participante nuevo para agregar a la ronda.');
+      return;
+    }
+
+    const nuevosParticipantes = [];
+    checks.forEach(chk => {
+      const fichaId = chk.dataset.fichaId;
+      const ficha = (state.fichas || []).find(f => f.id === fichaId);
+      const iniInput = dom.combatSetupTbody.querySelector(`.combat-setup-ini-input[data-ficha-id="${fichaId}"]`);
+      const iniciativa = parseInt(iniInput?.value, 10) || 0;
+
+      if (ficha) {
+        nuevosParticipantes.push({
+          id: ficha.id,
+          nombre: ficha.nombre,
+          tipo: ficha.tipo,
+          imagen: ficha.imagen,
+          jugador_id: ficha.jugador_id,
+          destreza: ficha.destreza || 10,
+          iniciativa: iniciativa,
+          hp_actual: ficha.hp_actual ?? 10,
+          hp_maximo: ficha.hp_maximo ?? 10,
+          ac: ficha.ac ?? 10
+        });
+      }
+    });
+
+    socket.emit('agregar_participantes_combate', {
+      partidaId: state.partida.id,
+      nuevosParticipantes
+    });
+
+    closeModal(dom.modalCombatSetup);
+    showToast(`⚔️ ${nuevosParticipantes.length} participante(s) incorporado(s) a la ronda actual`, 'gold');
   }
 
   function confirmStartCombat() {
@@ -4142,6 +4533,12 @@
       const showNotas = state.usuario.esDM || !isMonster || visibility.notas;
       const tieneNotasVisibles = showNotas && !!(ficha.notas && ficha.notas.trim() !== '');
 
+      const isCombatActive = Boolean(state.combate?.activo);
+      const estaEnCombate = isCombatActive && (state.combate?.participantes || []).some(p => p.id === ficha.id);
+      const btnAddCombatHtml = (state.usuario?.esDM && isCombatActive && !estaEnCombate)
+        ? `<button class="btn btn-sm btn-quick-add-combat" title="Incorporar este personaje/criatura a la ronda de combate activa"><i class="fa-solid fa-swords"></i> +Ronda</button>`
+        : '';
+
       card.innerHTML = `
         <div class="ficha-card-header">
           <img src="${avatarSrc}" class="ficha-avatar" style="cursor: pointer;" title="Haz clic para ampliar">
@@ -4153,6 +4550,7 @@
         </div>
         <div class="ficha-actions">
           <button class="btn btn-sm btn-secondary btn-center-ficha" title="Centrar cámara en esta ficha"><i class="fa-solid fa-crosshairs"></i></button>
+          ${btnAddCombatHtml}
           ${tieneNotasVisibles ? `<button class="btn btn-sm btn-secondary btn-ver-notas" title="Ver rasgos, hechizos y notas"><i class="fa-solid fa-scroll gold-text"></i> Notas</button>` : ''}
           ${esPropietario ? `<button class="btn btn-sm ${ficha.gigante ? 'btn-gold' : 'btn-secondary'} btn-gigante" title="${ficha.gigante ? 'Volver a tamaño normal' : 'Aumentar a tamaño gigante'}"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> ${ficha.gigante ? 'Normal' : 'Gigante'}</button>` : ''}
           ${state.usuario.esDM ? `<button class="btn btn-sm ${ficha.oculto ? 'btn-warning' : 'btn-secondary'} btn-toggle-oculto" title="${ficha.oculto ? 'Mostrar en mapa a jugadores' : 'Ocultar en mapa a jugadores'}"><i class="fa-solid ${ficha.oculto ? 'fa-eye' : 'fa-eye-slash'}"></i> ${ficha.oculto ? 'Mostrar' : 'Ocultar'}</button>` : ''}
@@ -4161,6 +4559,35 @@
           ${(state.usuario.esDM || esPropietario) ? '<button class="btn btn-sm btn-danger btn-del-ficha" title="Eliminar ficha"><i class="fa-solid fa-trash"></i></button>' : ''}
         </div>
       `;
+
+      card.querySelector('.btn-quick-add-combat')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const dexMod = Math.floor(((ficha.destreza ?? 10) - 10) / 2);
+        const rolledIni = (Math.floor(Math.random() * 20) + 1) + dexMod;
+        const baseIni = (ficha.iniciativa !== undefined && ficha.iniciativa !== null && ficha.iniciativa !== 0) ? ficha.iniciativa : rolledIni;
+        const inputIni = prompt(`Iniciativa para incorporar a "${ficha.nombre}" a la ronda ${state.combate?.ronda || 1} (d20+DES=${dexMod}):`, baseIni);
+        if (inputIni === null) return;
+        const finalIniciativa = parseInt(inputIni, 10) || 0;
+
+        const nuevoParticipante = {
+          id: ficha.id,
+          nombre: ficha.nombre,
+          tipo: ficha.tipo,
+          imagen: ficha.imagen,
+          jugador_id: ficha.jugador_id,
+          destreza: ficha.destreza || 10,
+          iniciativa: finalIniciativa,
+          hp_actual: ficha.hp_actual ?? 10,
+          hp_maximo: ficha.hp_maximo ?? 10,
+          ac: ficha.ac ?? 10
+        };
+
+        socket?.emit('agregar_participantes_combate', {
+          partidaId: state.partida.id,
+          nuevosParticipantes: [nuevoParticipante]
+        });
+        showToast(`⚔️ "${ficha.nombre}" incorporado a la ronda de combate`, 'gold');
+      });
 
       card.querySelector('.btn-center-ficha')?.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -5072,15 +5499,22 @@
 
         const handleEnterGame = (e) => {
           if (e) e.stopPropagation();
-          let username = (localStorage.getItem('vtt_username') || state.usuario?.nombre || '').trim();
+          let username = (dom.lobbyUsernameInput ? dom.lobbyUsernameInput.value.trim() : '') || (localStorage.getItem('vtt_username') || state.usuario?.nombre || '').trim();
           if (!username) {
-            if (dom.joinCodeInput) dom.joinCodeInput.value = p.codigo;
-            if (dom.joinUsernameInput) dom.joinUsernameInput.value = '';
-            loadJoinModalSessionsList();
-            openModal(dom.modalJoinGame);
-            setTimeout(() => dom.joinUsernameInput?.focus(), 150);
+            if (dom.lobbyUsernameInput) {
+              dom.lobbyUsernameInput.focus();
+              dom.lobbyUsernameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              showToast('⚠️ Escribe tu nombre de jugador arriba antes de entrar a la partida', 'warning');
+            } else {
+              if (dom.joinCodeInput) dom.joinCodeInput.value = p.codigo;
+              if (dom.joinUsernameInput) dom.joinUsernameInput.value = '';
+              loadJoinModalSessionsList();
+              openModal(dom.modalJoinGame);
+              setTimeout(() => dom.joinUsernameInput?.focus(), 150);
+            }
             return;
           }
+          saveLobbyUsername(username);
           joinGameDirect(p.codigo, username);
         };
 
@@ -5471,6 +5905,9 @@
 
   // MODALES & PANTALLAS
   function openModal(modal) {
+    if (window.innerWidth <= 900) {
+      closeAllPanels();
+    }
     if (modal) modal.classList.remove('hidden');
   }
 
@@ -5559,6 +5996,7 @@
   }
 
   function showScreen(name) {
+    closeAllPanels();
     if (name === 'start') {
       dom.screenStart?.classList.remove('hidden');
       dom.screenVTT?.classList.add('hidden');
@@ -5591,6 +6029,7 @@
     localStorage.setItem('vtt_active_game_code', codigo);
     localStorage.setItem('vtt_username', nombreUsuario);
     localStorage.setItem('vtt_username_explicit', '1');
+    sessionStorage.setItem('vtt_in_session', '1');
 
     const deterministicId = 'usr_' + nombreUsuario.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
     state.usuario.id = deterministicId;

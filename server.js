@@ -625,6 +625,12 @@ function puedeMoverFicha(socket, ficha) {
   if (ficha.nombre && ficha.nombre.toLowerCase().trim() === nombreUsuario) {
     return true;
   }
+  // Si la ficha es de tipo jugador (PJ) y no tiene dueño asignado, cualquier jugador puede controlarla/reclamarla
+  const tipoFicha = (ficha.tipo || '').toLowerCase().trim();
+  const esPJ = !tipoFicha || tipoFicha === 'jugador' || tipoFicha === 'pj' || tipoFicha === 'personaje';
+  if (!fJugadorId && esPJ) {
+    return true;
+  }
   return false;
 }
 
@@ -1154,7 +1160,10 @@ io.on('connection', (socket) => {
         iniciativa, nivel, altura, tamanioBase, tamanio_base, color_aro, notas, x = 5, y = 5, revelado
       } = payload;
 
-      const ownerId = jugador_id || jugadorId || (socket.data?.esDM ? null : socket.data?.usuarioId);
+      const tipoFinal = tipo || 'jugador';
+      const rawNombre = (nombre && typeof nombre === 'string') ? nombre.trim() : '';
+      const finalNombre = rawNombre || (tipoFinal === 'monstruo' ? 'Monstruo' : 'Personaje');
+      const ownerId = jugador_id || jugadorId || (socket.data?.esDM ? (jugador_id || null) : socket.data?.usuarioId);
 
       const defaultRevelado = JSON.stringify({
         global: { imagen: false, nombre: false, hp: false, ac: false, notas: false },
@@ -1168,7 +1177,7 @@ io.on('connection', (socket) => {
       await dbRun(
         `INSERT INTO fichas (id, partida_id, escena_id, nombre, tipo, jugador_id, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro, notas, x, y, revelado)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, partidaId, escenaId, nombre, tipo || 'jugador', ownerId, imagen, fuerza || 10, destreza || 10, constitucion || 10, inteligencia || 10, sabiduria || 10, carisma || 10, hpActual ?? hp_actual ?? 10, hpMaximo ?? hp_maximo ?? 10, ac ?? 10, velocidad ?? 30, iniciativa ?? 0, nivel ?? 1, altura ?? 2, tamanioBase || tamanio_base || 'mediano', color_aro || '#c9a84c', notas || '', x, y, finalRevelado]
+        [id, partidaId, escenaId, finalNombre, tipoFinal, ownerId, imagen, fuerza || 10, destreza || 10, constitucion || 10, inteligencia || 10, sabiduria || 10, carisma || 10, hpActual ?? hp_actual ?? 10, hpMaximo ?? hp_maximo ?? 10, ac ?? 10, velocidad ?? 30, iniciativa ?? 0, nivel ?? 1, altura ?? 2, tamanioBase || tamanio_base || 'mediano', color_aro || '#c9a84c', notas || '', x, y, finalRevelado]
       );
 
       if (escenaId) {
@@ -1202,7 +1211,7 @@ io.on('connection', (socket) => {
 
       const {
         id,
-        nombre = current.nombre,
+        nombre,
         tipo = current.tipo,
         jugador_id,
         jugadorId,
@@ -1228,10 +1237,19 @@ io.on('connection', (socket) => {
         oculto
       } = fichaData;
 
-      // Solo el DM puede reasignar el jugador_id de una ficha
-      const finalJugadorId = socket.data?.esDM
-        ? (jugador_id !== undefined ? jugador_id : (jugadorId !== undefined ? jugadorId : current.jugador_id))
-        : current.jugador_id;
+      // Sanitizar nombre para evitar que un string vacío o con espacios borre el nombre actual
+      const cleanNombre = (nombre !== undefined && typeof nombre === 'string') ? nombre.trim() : current.nombre;
+      const finalNombre = cleanNombre || current.nombre || (current.tipo === 'monstruo' ? 'Monstruo' : 'Personaje');
+
+      // Si no es DM y la ficha es un PJ sin dueño asignado, el jugador que la edita la reclama
+      const tipoLower = (current.tipo || '').toLowerCase().trim();
+      const esPJ = !tipoLower || tipoLower === 'jugador' || tipoLower === 'pj' || tipoLower === 'personaje';
+      let finalJugadorId = current.jugador_id;
+      if (socket.data?.esDM) {
+        finalJugadorId = (jugador_id !== undefined ? jugador_id : (jugadorId !== undefined ? jugadorId : current.jugador_id));
+      } else if (!current.jugador_id && esPJ && socket.data?.usuarioId) {
+        finalJugadorId = socket.data?.usuarioId;
+      }
 
       const finalRevelado = revelado !== undefined
         ? (typeof revelado === 'object' ? JSON.stringify(revelado) : revelado)
@@ -1241,7 +1259,7 @@ io.on('connection', (socket) => {
 
       await dbRun(
         `UPDATE fichas SET nombre = ?, tipo = ?, jugador_id = ?, imagen = ?, fuerza = ?, destreza = ?, constitucion = ?, inteligencia = ?, sabiduria = ?, carisma = ?, hp_actual = ?, hp_maximo = ?, ac = ?, velocidad = ?, iniciativa = ?, nivel = ?, altura = ?, tamanio_base = ?, color_aro = ?, gigante = ?, notas = ?, revelado = ?, oculto = ? WHERE id = ?`,
-        [nombre, tipo, finalJugadorId, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro || '#c9a84c', finalGigante, notas, finalRevelado, finalOculto, id]
+        [finalNombre, tipo, finalJugadorId, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro || '#c9a84c', finalGigante, notas, finalRevelado, finalOculto, id]
       );
 
       const fichaActualizada = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [id]);
@@ -1800,6 +1818,145 @@ io.on('connection', (socket) => {
       io.to(partidaId).emit('combate_actualizado', combate);
     } catch (err) {
       console.error('[Combate] Error en actualizar_combate:', err);
+    }
+  });
+
+  // Agregar participantes al combate activo sin reiniciar la ronda (DM)
+  socket.on('agregar_participantes_combate', async ({ partidaId, nuevosParticipantes }) => {
+    try {
+      if (!socket.data?.esDM) {
+        return socket.emit('error_partida', 'Solo el DM puede agregar participantes al combate.');
+      }
+
+      const partida = await dbGet(`SELECT datos_combate FROM partidas WHERE id = ?`, [partidaId]);
+      if (!partida || !partida.datos_combate) return;
+
+      let combate = JSON.parse(partida.datos_combate);
+      if (!combate || !combate.activo) {
+        return socket.emit('error_partida', 'No hay un combate activo en este momento.');
+      }
+
+      const participantesActuales = combate.participantes || [];
+      const turnoActualId = participantesActuales[combate.turnoIndex]?.id;
+
+      // Filtrar sólo los que no estén ya en la ronda
+      const idsExistentes = new Set(participantesActuales.map(p => p.id));
+      const aAgregar = (nuevosParticipantes || []).filter(p => !idsExistentes.has(p.id));
+
+      if (aAgregar.length === 0) return;
+
+      // Combinar y ordenar por iniciativa (mayor a menor)
+      const combinados = [...participantesActuales, ...aAgregar];
+      combinados.sort((a, b) => {
+        const iniA = Number(a.iniciativa) || 0;
+        const iniB = Number(b.iniciativa) || 0;
+        if (iniB !== iniA) return iniB - iniA;
+        const desA = Number(a.destreza) || 10;
+        const desB = Number(b.destreza) || 10;
+        return desB - desA;
+      });
+
+      // Mantener el turno sobre el participante que estaba activo
+      let nuevoTurnoIndex = 0;
+      if (turnoActualId) {
+        const idx = combinados.findIndex(p => p.id === turnoActualId);
+        if (idx !== -1) nuevoTurnoIndex = idx;
+      }
+
+      combate.participantes = combinados;
+      combate.turnoIndex = nuevoTurnoIndex;
+
+      const ahora = new Date().toISOString();
+      await dbRun(`UPDATE partidas SET datos_combate = ?, fecha_modificacion = ? WHERE id = ?`, [JSON.stringify(combate), ahora, partidaId]);
+      scheduleAutoSave(partidaId);
+
+      io.to(partidaId).emit('combate_actualizado', combate);
+
+      // Notificar en el chat del sistema
+      const nombresAgregados = aAgregar.map(p => `**${p.nombre}**`).join(', ');
+      const mensajeTexto = `⚔️ Se han unido a la ronda ${combate.ronda}: ${nombresAgregados}`;
+      const msgId = uuidv4();
+      await dbRun(
+        `INSERT INTO mensajes (id, partida_id, usuario_id, nombre_usuario, color_usuario, mensaje, es_gif, fecha, nombre_ficha)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [msgId, partidaId, 'sistema', 'Sistema', '#c9a84c', mensajeTexto, 0, ahora, null]
+      );
+      io.to(partidaId).emit('nuevo_mensaje', {
+        id: msgId,
+        partida_id: partidaId,
+        usuario_id: 'sistema',
+        nombre_usuario: 'Sistema',
+        color_usuario: '#c9a84c',
+        mensaje: mensajeTexto,
+        es_gif: 0,
+        fecha: ahora,
+        nombre_ficha: null
+      });
+    } catch (err) {
+      console.error('[Combate] Error en agregar_participantes_combate:', err);
+    }
+  });
+
+  // Quitar participante del combate activo (DM)
+  socket.on('quitar_participante_combate', async ({ partidaId, fichaId }) => {
+    try {
+      if (!socket.data?.esDM) {
+        return socket.emit('error_partida', 'Solo el DM puede remover participantes del combate.');
+      }
+
+      const partida = await dbGet(`SELECT datos_combate FROM partidas WHERE id = ?`, [partidaId]);
+      if (!partida || !partida.datos_combate) return;
+
+      let combate = JSON.parse(partida.datos_combate);
+      if (!combate || !combate.activo || !combate.participantes) return;
+
+      const turnoActualId = combate.participantes[combate.turnoIndex]?.id;
+      const participanteEliminado = combate.participantes.find(p => p.id === fichaId);
+      combate.participantes = combate.participantes.filter(p => p.id !== fichaId);
+
+      if (combate.participantes.length === 0) {
+        combate.activo = false;
+        combate.ronda = 1;
+        combate.turnoIndex = 0;
+      } else {
+        let nuevoTurnoIndex = 0;
+        if (turnoActualId && turnoActualId !== fichaId) {
+          const idx = combate.participantes.findIndex(p => p.id === turnoActualId);
+          if (idx !== -1) nuevoTurnoIndex = idx;
+        } else {
+          nuevoTurnoIndex = Math.min(combate.turnoIndex, combate.participantes.length - 1);
+        }
+        combate.turnoIndex = nuevoTurnoIndex;
+      }
+
+      const ahora = new Date().toISOString();
+      await dbRun(`UPDATE partidas SET datos_combate = ?, fecha_modificacion = ? WHERE id = ?`, [JSON.stringify(combate), ahora, partidaId]);
+      scheduleAutoSave(partidaId);
+
+      io.to(partidaId).emit('combate_actualizado', combate);
+
+      if (participanteEliminado) {
+        const msgId = uuidv4();
+        const mensajeTexto = `⚔️ **${participanteEliminado.nombre}** ha salido del combate.`;
+        await dbRun(
+          `INSERT INTO mensajes (id, partida_id, usuario_id, nombre_usuario, color_usuario, mensaje, es_gif, fecha, nombre_ficha)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [msgId, partidaId, 'sistema', 'Sistema', '#c9a84c', mensajeTexto, 0, ahora, null]
+        );
+        io.to(partidaId).emit('nuevo_mensaje', {
+          id: msgId,
+          partida_id: partidaId,
+          usuario_id: 'sistema',
+          nombre_usuario: 'Sistema',
+          color_usuario: '#c9a84c',
+          mensaje: mensajeTexto,
+          es_gif: 0,
+          fecha: ahora,
+          nombre_ficha: null
+        });
+      }
+    } catch (err) {
+      console.error('[Combate] Error en quitar_participante_combate:', err);
     }
   });
 
