@@ -1449,6 +1449,9 @@
         mapImageLoaded = false;
         markDirty();
       }
+      if (state.esDM && escCur) {
+        showToast(`⚠️ No se encontró la imagen del mapa de "${escCur.nombre || 'la escena'}" (posible reinicio del servidor). Puedes volver a cargarla en Herramientas DM > Escenas.`, 'warning', 7000);
+      }
     };
     img.src = src;
   }

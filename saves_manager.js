@@ -75,6 +75,36 @@ async function obtenerMapaComoBase64(escenaId) {
   return null;
 }
 
+// Helper para buscar un mapa en archivos de backup o snapshots locales si se perdió del disco
+async function buscarMapaEnBackups(escenaId) {
+  try {
+    const candidateDirs = [savesDir, backupsDir];
+    for (const dir of candidateDirs) {
+      if (!fs.existsSync(dir)) continue;
+      const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+      for (const f of files) {
+        try {
+          const filePath = path.join(dir, f);
+          const content = fs.readFileSync(filePath, 'utf8');
+          if (content.includes(escenaId)) {
+            const parsed = JSON.parse(content);
+            const esc = (parsed.escenas || []).find(e => e.id === escenaId);
+            if (esc) {
+              if (esc.mapa_data && typeof esc.mapa_data === 'string' && esc.mapa_data.startsWith('data:image/')) {
+                return esc.mapa_data;
+              }
+              if (esc.mapa && typeof esc.mapa === 'string' && esc.mapa.startsWith('data:image/')) {
+                return esc.mapa;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
 // Migración transparente de mapas antiguos guardados en Base64 en la base de datos
 async function migrarMapasExistentes() {
   try {
@@ -86,7 +116,7 @@ async function migrarMapasExistentes() {
         try {
           const newUrl = await guardarMapaEnDisco(row.id, row.mapa);
           if (newUrl && newUrl !== row.mapa) {
-            await dbRun(`UPDATE escenas SET mapa = ? WHERE id = ?`, [newUrl, row.id]);
+            await dbRun(`UPDATE escenas SET mapa = ?, mapa_data = ? WHERE id = ?`, [newUrl, row.mapa, row.id]);
           }
         } catch (e) {
           console.warn(`Error al migrar mapa de escena ${row.id}:`, e.message);
@@ -125,27 +155,36 @@ function limpiarNombrePartida(nombre) {
   return limpio.replace(/[\s\-_]+$/g, '').trim() || 'Partida';
 }
 
-// Extraer todos los datos de una partida desde SQLite
+// Extraer todos los datos de una partida desde SQLite / PostgreSQL
 async function exportPartidaData(partidaId) {
-  const partida = await dbGet(`SELECT * FROM partidas WHERE id = ?`, [partidaId]);
+  const partida = await dbGet(`SELECT * FROM partidas WHERE id = ? OR codigo = ?`, [partidaId, String(partidaId).toUpperCase()]);
   if (!partida) return null;
+  const actualPartidaId = partida.id;
   partida.nombre = limpiarNombrePartida(partida.nombre);
 
-  const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [partidaId]);
+  const escenas = await dbAll(`SELECT * FROM escenas WHERE partida_id = ?`, [actualPartidaId]);
+  for (const esc of escenas) {
+    if (esc.mapa_data && typeof esc.mapa_data === 'string' && esc.mapa_data.startsWith('data:image/')) {
+      esc.mapa = esc.mapa_data;
+    } else if (esc.mapa && esc.mapa.startsWith('/api/escenas/')) {
+      const b64 = await obtenerMapaComoBase64(esc.id);
+      if (b64) esc.mapa = b64;
+    }
+  }
   // Garantizar que la escena activa apunte a una escena válida (priorizar la que tiene mapa)
   if (!partida.escena_activa_id || !escenas.some(e => e.id === partida.escena_activa_id)) {
     const conMapa = escenas.find(e => e.mapa);
     partida.escena_activa_id = conMapa ? conMapa.id : (escenas[0]?.id || null);
   }
 
-  const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ?`, [partidaId]);
-  const figuras = await dbAll(`SELECT f.* FROM figuras f JOIN escenas e ON f.escena_id = e.id WHERE e.partida_id = ?`, [partidaId]);
-  const dibujos = await dbAll(`SELECT d.* FROM dibujos d JOIN escenas e ON d.escena_id = e.id WHERE e.partida_id = ?`, [partidaId]);
-  const posiciones_fichas = await dbAll(`SELECT pf.* FROM posiciones_fichas pf JOIN escenas e ON pf.escena_id = e.id WHERE e.partida_id = ?`, [partidaId]);
-  const mensajes = await dbAll(`SELECT * FROM mensajes WHERE partida_id = ? ORDER BY fecha ASC LIMIT 500`, [partidaId]);
-  const historial = await dbAll(`SELECT * FROM historial_dados WHERE partida_id = ? ORDER BY fecha DESC LIMIT 500`, [partidaId]);
-  const galeria = await dbAll(`SELECT * FROM galeria WHERE partida_id = ?`, [partidaId]);
-  const props = await dbAll(`SELECT p.* FROM capas_props p JOIN escenas e ON p.escena_id = e.id WHERE e.partida_id = ?`, [partidaId]);
+  const fichas = await dbAll(`SELECT * FROM fichas WHERE partida_id = ?`, [actualPartidaId]);
+  const figuras = await dbAll(`SELECT f.* FROM figuras f JOIN escenas e ON f.escena_id = e.id WHERE e.partida_id = ?`, [actualPartidaId]);
+  const dibujos = await dbAll(`SELECT d.* FROM dibujos d JOIN escenas e ON d.escena_id = e.id WHERE e.partida_id = ?`, [actualPartidaId]);
+  const posiciones_fichas = await dbAll(`SELECT pf.* FROM posiciones_fichas pf JOIN escenas e ON pf.escena_id = e.id WHERE e.partida_id = ?`, [actualPartidaId]);
+  const mensajes = await dbAll(`SELECT * FROM mensajes WHERE partida_id = ? ORDER BY fecha ASC LIMIT 500`, [actualPartidaId]);
+  const historial = await dbAll(`SELECT * FROM historial_dados WHERE partida_id = ? ORDER BY fecha DESC LIMIT 500`, [actualPartidaId]);
+  const galeria = await dbAll(`SELECT * FROM galeria WHERE partida_id = ?`, [actualPartidaId]);
+  const props = await dbAll(`SELECT p.* FROM capas_props p JOIN escenas e ON p.escena_id = e.id WHERE e.partida_id = ?`, [actualPartidaId]);
 
   return {
     version: '2.0.0',
@@ -167,9 +206,9 @@ async function exportPartidaData(partidaId) {
 async function savePartidaToFile(partidaId, createSnapshot = false) {
   if (!partidaId) return false;
   if (isSavingPartida.has(partidaId)) {
-    // Si ya está en curso una operación de guardado para esta partida, re-programar
+    // Si ya está en curso una operación de guardado para esta partida, re-programar y retornar true
     scheduleAutoSave(partidaId, 1000);
-    return false;
+    return true;
   }
   isSavingPartida.add(partidaId);
 
@@ -629,10 +668,13 @@ module.exports = {
   ensureDirectories,
   uploadsDir,
   mapsDir,
+  savesDir,
+  backupsDir,
   guardarMapaEnDisco,
   eliminarMapaDeDisco,
   migrarMapasExistentes,
   obtenerMapaComoBase64,
+  buscarMapaEnBackups,
   exportPartidaData,
   savePartidaToFile,
   scheduleAutoSave,

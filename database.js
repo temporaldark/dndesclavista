@@ -239,6 +239,7 @@ async function initDb() {
         partida_id TEXT NOT NULL REFERENCES partidas(id) ON DELETE CASCADE,
         nombre TEXT NOT NULL,
         mapa TEXT,
+        mapa_data TEXT,
         config_grid_x INTEGER DEFAULT 40,
         config_grid_y INTEGER DEFAULT 40,
         config_casilla INTEGER DEFAULT 5
@@ -379,6 +380,7 @@ async function initDb() {
     try { await dbRun(`ALTER TABLE escenas ADD COLUMN IF NOT EXISTS config_grid_x INTEGER DEFAULT 40`); } catch (_) {}
     try { await dbRun(`ALTER TABLE escenas ADD COLUMN IF NOT EXISTS config_grid_y INTEGER DEFAULT 40`); } catch (_) {}
     try { await dbRun(`ALTER TABLE escenas ADD COLUMN IF NOT EXISTS config_casilla INTEGER DEFAULT 5`); } catch (_) {}
+    try { await dbRun(`ALTER TABLE escenas ADD COLUMN IF NOT EXISTS mapa_data TEXT`); } catch (_) {}
     try { await dbRun(`ALTER TABLE historial_dados ADD COLUMN IF NOT EXISTS nombre_ficha TEXT`); } catch (_) {}
     try { await dbRun(`ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS nombre_ficha TEXT`); } catch (_) {}
 
@@ -429,6 +431,7 @@ async function initDb() {
       partida_id TEXT NOT NULL,
       nombre TEXT NOT NULL,
       mapa TEXT,
+      mapa_data TEXT,
       config_grid_x INTEGER DEFAULT 40,
       config_grid_y INTEGER DEFAULT 40,
       config_casilla INTEGER DEFAULT 5,
@@ -580,6 +583,7 @@ async function initDb() {
   try { await dbRun(`ALTER TABLE escenas ADD COLUMN config_grid_x INTEGER DEFAULT 40`); } catch (_) {}
   try { await dbRun(`ALTER TABLE escenas ADD COLUMN config_grid_y INTEGER DEFAULT 40`); } catch (_) {}
   try { await dbRun(`ALTER TABLE escenas ADD COLUMN config_casilla INTEGER DEFAULT 5`); } catch (_) {}
+  try { await dbRun(`ALTER TABLE escenas ADD COLUMN mapa_data TEXT`); } catch (_) {}
   try { await dbRun(`ALTER TABLE historial_dados ADD COLUMN nombre_ficha TEXT`); } catch (_) {}
   try { await dbRun(`ALTER TABLE mensajes ADD COLUMN nombre_ficha TEXT`); } catch (_) {}
 

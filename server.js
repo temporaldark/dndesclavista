@@ -22,7 +22,8 @@ const {
   guardarMapaEnDisco,
   eliminarMapaDeDisco,
   migrarMapasExistentes,
-  obtenerMapaComoBase64
+  obtenerMapaComoBase64,
+  buscarMapaEnBackups
 } = require('./saves_manager');
 
 let compression = null;
@@ -106,35 +107,48 @@ app.get('/api/escenas/:id/mapa', async (req, res) => {
       return res.sendFile(fullPath);
     }
 
-    // Fallback: verificar si aún está almacenado en SQLite/Postgres como base64
-    const escena = await dbGet(`SELECT mapa FROM escenas WHERE id = ?`, [id]);
-    if (escena && escena.mapa) {
-      if (escena.mapa.startsWith('data:')) {
-        // Migrar en caliente a disco para acelerar próximas peticiones
-        const newUrl = await guardarMapaEnDisco(id, escena.mapa);
-        if (newUrl) {
-          await dbRun(`UPDATE escenas SET mapa = ? WHERE id = ?`, [newUrl, id]);
-        }
-        const matches = escena.mapa.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-        if (matches && matches.length === 3) {
-          const contentType = matches[1];
-          const buffer = Buffer.from(matches[2], 'base64');
-          res.setHeader('Content-Type', contentType);
-          res.setHeader('Cache-Control', 'public, max-age=86400');
-          return res.send(buffer);
-        }
-      } else if (escena.mapa.startsWith('/uploads/')) {
-        const localPath = path.join(dataDir, escena.mapa.replace(/^\//, ''));
-        if (fs.existsSync(localPath)) {
-          return res.sendFile(localPath);
-        }
+    // Fallback 1: verificar si está en PostgreSQL / SQLite (en mapa_data o mapa como data:image)
+    const escena = await dbGet(`SELECT mapa, mapa_data FROM escenas WHERE id = ?`, [id]);
+    let rawData = (escena?.mapa_data && typeof escena.mapa_data === 'string' && escena.mapa_data.startsWith('data:')) ? escena.mapa_data : null;
+    if (!rawData && escena?.mapa && typeof escena.mapa === 'string' && escena.mapa.startsWith('data:')) {
+      rawData = escena.mapa;
+    }
+
+    // Fallback 2: si no está en disco ni en BD (ej. reinicio de contenedor en Railway), buscar en backups locales
+    if (!rawData && typeof buscarMapaEnBackups === 'function') {
+      rawData = await buscarMapaEnBackups(id);
+      if (rawData) {
+        try {
+          await dbRun(`UPDATE escenas SET mapa_data = ? WHERE id = ?`, [rawData, id]);
+        } catch (_) {}
       }
     }
 
-    return res.status(404).send('Mapa no encontrado');
+    if (rawData && rawData.startsWith('data:')) {
+      // Regenerar en caché de disco para acelerar próximas peticiones
+      try {
+        await guardarMapaEnDisco(id, rawData);
+      } catch (_) {}
+
+      const matches = rawData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        const contentType = matches[1];
+        const buffer = Buffer.from(matches[2], 'base64');
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=604800, must-revalidate');
+        return res.send(buffer);
+      }
+    } else if (escena && escena.mapa && escena.mapa.startsWith('/uploads/')) {
+      const localPath = path.join(dataDir, escena.mapa.replace(/^\//, ''));
+      if (fs.existsSync(localPath)) {
+        return res.sendFile(localPath);
+      }
+    }
+
+    return res.status(404).json({ error: 'Mapa no encontrado. El DM puede volver a subir la imagen de la escena.' });
   } catch (err) {
     console.error('Error al servir mapa de escena:', err);
-    return res.status(500).send('Error interno al servir el mapa');
+    return res.status(500).json({ error: 'Error interno al servir el mapa' });
   }
 });
 
@@ -377,11 +391,14 @@ app.post('/api/partidas/:codigo/backups/restaurar', async (req, res) => {
 app.post('/api/partidas/:id/guardar_ahora', async (req, res) => {
   try {
     const { id } = req.params;
-    const ok = await savePartidaToFile(id, true);
-    if (!ok) return res.status(404).json({ error: 'Partida no encontrada o error al guardar.' });
+    const partida = await dbGet(`SELECT id FROM partidas WHERE id = ? OR codigo = ?`, [id, String(id).toUpperCase()]);
+    if (!partida) {
+      return res.json({ success: false, notFound: true, message: 'Partida no activa o no encontrada' });
+    }
+    await savePartidaToFile(partida.id, true);
     res.json({ success: true, timestamp: new Date().toISOString() });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.json({ success: false, error: err.message });
   }
 });
 
@@ -495,12 +512,16 @@ app.post('/api/partidas/import', async (req, res) => {
           firstNewEscenaId = newEscenaId;
         }
         let finalMapa = esc.mapa || null;
+        let rawData = null;
         if (finalMapa && finalMapa.startsWith('data:image/')) {
+          rawData = finalMapa;
           finalMapa = await guardarMapaEnDisco(newEscenaId, finalMapa);
+        } else if (esc.mapa_data) {
+          rawData = esc.mapa_data;
         }
         await dbRun(
-          `INSERT INTO escenas (id, partida_id, nombre, mapa, config_grid_x, config_grid_y, config_casilla) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [newEscenaId, newPartidaId, esc.nombre, finalMapa, esc.config_grid_x || partida.config_grid_x || 40, esc.config_grid_y || partida.config_grid_y || 40, esc.config_casilla || partida.config_casilla || 5]
+          `INSERT INTO escenas (id, partida_id, nombre, mapa, mapa_data, config_grid_x, config_grid_y, config_casilla) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [newEscenaId, newPartidaId, esc.nombre, finalMapa, rawData, esc.config_grid_x || partida.config_grid_x || 40, esc.config_grid_y || partida.config_grid_y || 40, esc.config_casilla || partida.config_casilla || 5]
         );
       }
 
@@ -1004,14 +1025,16 @@ io.on('connection', (socket) => {
   socket.on('actualizar_mapa', async ({ partidaId, escenaId, mapaBase64 }) => {
     try {
       let finalMapa = mapaBase64;
+      let rawData = null;
       if (mapaBase64) {
+        rawData = mapaBase64;
         // Guardar la imagen en disco y reemplazar el payload pesado por una URL liviana con streaming HTTP
         const urlDisco = await guardarMapaEnDisco(escenaId, mapaBase64);
         if (urlDisco) finalMapa = urlDisco;
       } else {
         await eliminarMapaDeDisco(escenaId);
       }
-      await dbRun(`UPDATE escenas SET mapa = ? WHERE id = ?`, [finalMapa, escenaId]);
+      await dbRun(`UPDATE escenas SET mapa = ?, mapa_data = ? WHERE id = ?`, [finalMapa, rawData, escenaId]);
       await dbRun(`UPDATE partidas SET fecha_modificacion = ? WHERE id = ?`, [new Date().toISOString(), partidaId]);
       io.to(partidaId).emit('mapa_actualizado', { escenaId, mapa: finalMapa });
       scheduleAutoSave(partidaId);
