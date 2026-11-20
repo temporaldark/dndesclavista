@@ -216,6 +216,9 @@
 
   function startApp() {
     try {
+      // Purgar de inmediato blobs antiguos y pesados de localStorage para liberar espacio
+      purgeLegacyLocalStorageMirrors();
+
       // Generar o cargar usuario id local basado en nombre de usuario si existe
       let savedUsername = localStorage.getItem('vtt_username');
       // Si el nombre guardado es el antiguo fallback 'Dungeon Master' y no fue elegido explícitamente, limpiarlo
@@ -5664,41 +5667,143 @@
   }
 
   // --- GESTIÓN DE AUTO-GUARDADO Y RESILIENCIA ANTE CAÍDAS ---
+  // Motor de almacenamiento local: IndexedDB (soporte asíncrono para cientos de MB sin límite de localStorage)
+  let idbSnapshotPromise = null;
+  function getVttSnapshotDB() {
+    if (!idbSnapshotPromise) {
+      idbSnapshotPromise = new Promise((resolve) => {
+        if (typeof window === 'undefined' || !window.indexedDB) {
+          resolve(null);
+          return;
+        }
+        try {
+          const req = window.indexedDB.open('VTT_Snapshots_DB', 1);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('snapshots')) {
+              db.createObjectStore('snapshots', { keyPath: 'codigo' });
+            }
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(null);
+        } catch (_) {
+          resolve(null);
+        }
+      });
+    }
+    return idbSnapshotPromise;
+  }
+
+  async function saveSnapshotToIndexedDB(codigo, data) {
+    try {
+      const db = await getVttSnapshotDB();
+      if (!db) return false;
+      return new Promise((resolve) => {
+        const tx = db.transaction('snapshots', 'readwrite');
+        const store = tx.objectStore('snapshots');
+        store.put({
+          codigo: codigo,
+          guardado: Date.now(),
+          snapshot: data
+        });
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function getSnapshotFromIndexedDB(codigo) {
+    try {
+      const db = await getVttSnapshotDB();
+      if (!db) return null;
+      return new Promise((resolve) => {
+        const tx = db.transaction('snapshots', 'readonly');
+        const store = tx.objectStore('snapshots');
+        const req = store.get(codigo);
+        req.onsuccess = () => resolve(req.result ? req.result.snapshot : null);
+        req.onerror = () => resolve(null);
+      });
+    } catch (_) {
+      return null;
+    }
+  }
+  window.recuperarSnapshotLocal = getSnapshotFromIndexedDB;
+
+  // Limpieza preventiva de claves pesadas antiguas en localStorage para liberar los ~5MB de cuota del origen
+  function purgeLegacyLocalStorageMirrors() {
+    try {
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('vtt_local_mirror_') || k.startsWith('vtt_mirror_'))) {
+          keysToRemove.push(k);
+        }
+      }
+      keysToRemove.forEach(k => {
+        try { localStorage.removeItem(k); } catch (_) {}
+      });
+    } catch (_) {}
+  }
+
+  let quotaWarningLogged = false;
+
   function saveLocalMirrorBackup() {
     if (!state.partida || !state.partida.codigo) return;
+    const codigoPartida = state.partida.codigo;
+
+    // Snapshot estructurado completo para IndexedDB (soporta imágenes, fichas y dibujos sin límite de 5MB)
+    const mirrorData = {
+      version: '2.1.0-local',
+      fecha: new Date().toISOString(),
+      partida: state.partida,
+      escenaActiva: state.escenaActiva ? {
+        id: state.escenaActiva.id,
+        partida_id: state.escenaActiva.partida_id,
+        nombre: state.escenaActiva.nombre,
+        config_grid_x: state.escenaActiva.config_grid_x,
+        config_grid_y: state.escenaActiva.config_grid_y,
+        config_casilla: state.escenaActiva.config_casilla
+      } : null,
+      escenas: (state.escenas || []).map(sc => ({
+        id: sc.id,
+        partida_id: sc.partida_id,
+        nombre: sc.nombre,
+        config_grid_x: sc.config_grid_x,
+        config_grid_y: sc.config_grid_y,
+        config_casilla: sc.config_casilla
+      })),
+      fichas: state.fichas,
+      figuras: state.figuras,
+      dibujos: state.dibujos,
+      mensajes: (state.mensajes || []).slice(-30),
+      historial: (state.historial || []).slice(-30),
+      galeria: []
+    };
+
+    // 1. Guardar de forma asíncrona en IndexedDB (no bloquea UI, cuota amplia de cientos de MB)
+    saveSnapshotToIndexedDB(codigoPartida, mirrorData);
+
+    // 2. Liberar espacio en localStorage eliminando blobs pesados acumulados
+    purgeLegacyLocalStorageMirrors();
+
+    // 3. Escribir únicamente un metadato ultra-ligero (<300 bytes) en localStorage para evitar QuotaExceededError
     try {
-      // Snapshot ligero para localStorage: omitir mapas base64 pesados e imágenes de galería
-      // para evitar bloqueos en el hilo UI del navegador y excepciones de cuota
-      const mirrorData = {
-        version: '2.0.0-local',
+      const lightweightMeta = {
+        version: '2.1.0-meta',
+        codigo: codigoPartida,
+        nombre: state.partida.nombre || '',
         fecha: new Date().toISOString(),
-        partida: state.partida,
-        escenaActiva: state.escenaActiva ? {
-          id: state.escenaActiva.id,
-          partida_id: state.escenaActiva.partida_id,
-          nombre: state.escenaActiva.nombre,
-          config_grid_x: state.escenaActiva.config_grid_x,
-          config_grid_y: state.escenaActiva.config_grid_y,
-          config_casilla: state.escenaActiva.config_casilla
-        } : null,
-        escenas: (state.escenas || []).map(sc => ({
-          id: sc.id,
-          partida_id: sc.partida_id,
-          nombre: sc.nombre,
-          config_grid_x: sc.config_grid_x,
-          config_grid_y: sc.config_grid_y,
-          config_casilla: sc.config_casilla
-        })),
-        fichas: state.fichas,
-        figuras: state.figuras,
-        dibujos: state.dibujos,
-        mensajes: (state.mensajes || []).slice(-30),
-        historial: (state.historial || []).slice(-30),
-        galeria: []
+        totalFichas: (state.fichas || []).length,
+        totalEscenas: (state.escenas || []).length
       };
-      localStorage.setItem('vtt_local_mirror_' + state.partida.codigo, JSON.stringify(mirrorData));
+      localStorage.setItem('vtt_session_meta_' + codigoPartida, JSON.stringify(lightweightMeta));
     } catch (e) {
-      console.warn('[VTT] Aviso: No se pudo escribir snapshot en localStorage:', e);
+      if (!quotaWarningLogged) {
+        console.info('[VTT] Almacenamiento local optimizado mediante IndexedDB.');
+        quotaWarningLogged = true;
+      }
     }
   }
 
