@@ -3,7 +3,8 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -51,10 +52,14 @@
     </div>
 
     <div class="nav-right">
+      <button id="btn-toggle-alpha-effects" class="btn-nav" title="Activar/Desactivar recuadros de efectos en tokens [ALPHA]">
+        <i class="fa-solid fa-sparkles gold-text"></i> <span class="desktop-only" style="font-size: 0.78rem;">Efectos <small class="badge-alpha">ALPHA</small></span>
+      </button>
       <span id="save-status-indicator" class="save-status" title="Estado de Guardado">
         <i class="fa-solid fa-cloud-arrow-up"></i> <span>Listo</span>
       </span>
-      <button id="btn-quick-gallery" class="btn-nav mobile-only dm-only" title="Catálogo de Plantillas / Bestiario (DM)">
+      <button id="btn-quick-gallery" class="btn-nav mobile-only dm-only"
+        title="Catálogo de Plantillas / Bestiario (DM)">
         <i class="fa-solid fa-dragon"></i>
       </button>
       <button id="btn-mobile-dm-tools" class="btn-nav mobile-only" title="Herramientas">
@@ -70,7 +75,8 @@
   <div id="reconnect-banner" class="reconnect-banner hidden">
     <div class="reconnect-content">
       <span class="reconnect-icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
-      <span id="reconnect-msg">Conexión con el servidor interrumpida. Intentando reconectar automáticamente... Tu partida está segura en este navegador.</span>
+      <span id="reconnect-msg">Conexión con el servidor interrumpida. Intentando reconectar automáticamente... Tu
+        partida está segura en este navegador.</span>
       <button id="btn-reconnect-now" class="btn btn-sm btn-primary" title="Forzar reconexión inmediata con el servidor">
         <i class="fa-solid fa-arrows-rotate"></i> Reconectar Ahora
       </button>
@@ -95,8 +101,10 @@
           <span>Tu Nombre de Jugador:</span>
         </label>
         <div class="lobby-user-input-wrap">
-          <input type="text" id="lobby-username-input" class="form-input lobby-username-input" placeholder="Escribe tu nombre de usuario..." maxlength="30" autocomplete="nickname">
-          <button id="btn-save-lobby-username" class="btn btn-sm btn-gold" type="button" title="Guardar nombre de usuario">
+          <input type="text" id="lobby-username-input" class="form-input lobby-username-input"
+            placeholder="Escribe tu nombre de usuario..." maxlength="30" autocomplete="nickname">
+          <button id="btn-save-lobby-username" class="btn btn-sm btn-gold" type="button"
+            title="Guardar nombre de usuario">
             <i class="fa-solid fa-check"></i> Guardar
           </button>
         </div>
@@ -134,11 +142,13 @@
 
     <!-- PANEL IZQUIERDO (HERRAMIENTAS DE MAPA: MOVER, MEDIR, FIGURAS, HP PARA TODOS / DIBUJAR SOLO DM) -->
     <aside id="dm-tools-panel" class="dm-tools-panel">
-      <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding-right: 4px;">
+      <div class="panel-header"
+        style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding-right: 4px;">
         <div style="display: flex; align-items: center; gap: 6px;">
           <i class="fa-solid fa-toolbox gold-text"></i> <span>Herramientas</span>
         </div>
-        <button type="button" class="btn-close-panel mobile-only" title="Cerrar panel"><i class="fa-solid fa-xmark"></i></button>
+        <button type="button" class="btn-close-panel mobile-only" title="Cerrar panel"><i
+            class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="tools-buttons">
         <button id="tool-move" class="tool-btn active" data-tool="move" title="Mover tu Ficha">
@@ -157,7 +167,8 @@
           <i class="fa-solid fa-eraser"></i> <span>Borrar</span>
         </button>
         <button id="tool-combat" class="tool-btn dm-only" title="Tracker de Rondas y Combate">
-          <svg class="icon-swords gold-text" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="icon-swords gold-text" viewBox="0 0 24 24" width="22" height="22" fill="none"
+            stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"></polyline>
             <line x1="13" y1="19" x2="19" y2="13"></line>
             <line x1="16" y1="16" x2="20" y2="20"></line>
@@ -186,16 +197,24 @@
 
         <!-- Opciones de Utilería / Capas (DM) -->
         <div id="opt-props" class="tool-sub-options hidden">
-          <span style="font-size: 0.8rem; color: #cbd5e1; font-weight: bold;"><i class="fa-solid fa-layer-group gold-text"></i> Utilería:</span>
+          <span style="font-size: 0.8rem; color: #cbd5e1; font-weight: bold;"><i
+              class="fa-solid fa-layer-group gold-text"></i> Utilería:</span>
           <div class="opt-props-presets" style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
-            <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="carro" title="Colocar Automóvil">🚗 Auto</button>
-            <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="arbol" title="Colocar Árbol">🌲 Árbol</button>
-            <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="cajas" title="Colocar Cajas">📦 Cajas</button>
-            <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="mesa" title="Colocar Mesa">🪑 Mesa</button>
-            <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="sangre" title="Colocar Sangre">🩸 Sangre</button>
-            <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="crater" title="Colocar Cráter">💥 Cráter</button>
+            <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="carro"
+              title="Colocar Automóvil">🚗 Auto</button>
+            <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="arbol"
+              title="Colocar Árbol">🌲 Árbol</button>
+            <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="cajas"
+              title="Colocar Cajas">📦 Cajas</button>
+            <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="mesa"
+              title="Colocar Mesa">🪑 Mesa</button>
+            <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="sangre"
+              title="Colocar Sangre">🩸 Sangre</button>
+            <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="crater"
+              title="Colocar Cráter">💥 Cráter</button>
           </div>
-          <button type="button" id="btn-toolbar-open-props" class="btn btn-sm btn-gold" title="Abrir panel de objetos"><i class="fa-solid fa-gear"></i> Ajustes Capas</button>
+          <button type="button" id="btn-toolbar-open-props" class="btn btn-sm btn-gold"
+            title="Abrir panel de objetos"><i class="fa-solid fa-gear"></i> Ajustes Capas</button>
         </div>
 
         <!-- Opciones de Figuras (Hechizos y Áreas para Jugadores y DM) -->
@@ -208,8 +227,10 @@
               <option value="rectangulo">📏 Rectángulo</option>
             </select>
           </label>
-          <label id="lbl-fig-width">Ancho (casillas): <input type="number" id="fig-size" value="3" min="0.5" step="0.5" max="100"></label>
-          <label id="lbl-fig-height">Largo (casillas): <input type="number" id="fig-height" value="3" min="0.5" step="0.5" max="100"></label>
+          <label id="lbl-fig-width">Ancho (casillas): <input type="number" id="fig-size" value="3" min="0.5" step="0.5"
+              max="100"></label>
+          <label id="lbl-fig-height">Largo (casillas): <input type="number" id="fig-height" value="3" min="0.5"
+              step="0.5" max="100"></label>
           <label>Rotación (°): <input type="range" id="fig-rotation" min="0" max="360" value="0"></label>
           <label>Color: <input type="color" id="fig-color" value="#c9a84c"></label>
           <label>Transparencia: <input type="range" id="fig-opacity" min="0.1" max="0.9" step="0.1" value="0.4"></label>
@@ -233,7 +254,9 @@
       <div id="combat-tracker-bar" class="combat-tracker-bar hidden">
         <div class="combat-tracker-header">
           <div class="combat-round-badge">
-            <svg class="icon-swords gold-text" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-right:3px;">
+            <svg class="icon-swords gold-text" viewBox="0 0 24 24" width="14" height="14" fill="none"
+              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+              style="display:inline-block; vertical-align:middle; margin-right:3px;">
               <polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"></polyline>
               <line x1="13" y1="19" x2="19" y2="13"></line>
               <line x1="16" y1="16" x2="20" y2="20"></line>
@@ -255,7 +278,8 @@
               <i class="fa-solid fa-forward-step"></i> Terminar Mi Turno
             </button>
             <!-- Controles DM -->
-            <button id="btn-combat-add-participant" class="btn-circle-sm dm-only" title="Agregar más fichas/jugadores a la ronda actual (DM)">
+            <button id="btn-combat-add-participant" class="btn-circle-sm dm-only"
+              title="Agregar más fichas/jugadores a la ronda actual (DM)">
               <i class="fa-solid fa-user-plus"></i>
             </button>
             <button id="btn-combat-prev" class="btn-circle-sm dm-only" title="Turno Anterior (DM)">
@@ -278,16 +302,23 @@
       <div id="dm-staging-banner" class="staging-banner hidden">
         <div class="staging-banner-content">
           <span class="staging-badge"><i class="fa-solid fa-eye"></i> MODO PREPARACIÓN DM</span>
-          <span id="staging-banner-text">Preparando escena: <strong id="staging-viewing-name">--</strong> <span class="staging-hint">(Los jugadores siguen en <strong id="staging-active-name">--</strong>)</span></span>
+          <span id="staging-banner-text">Preparando escena: <strong id="staging-viewing-name">--</strong> <span
+              class="staging-hint">(Los jugadores siguen en <strong id="staging-active-name">--</strong>)</span></span>
           <div class="staging-banner-actions">
-            <button id="btn-staging-activate-all" class="btn btn-sm btn-gold" title="Hacer que todos los jugadores pasen a esta escena"><i class="fa-solid fa-rocket"></i> Activar para Jugadores</button>
-            <button id="btn-staging-return-active" class="btn btn-sm btn-secondary" title="Volver a ver la escena donde están jugando los jugadores"><i class="fa-solid fa-arrow-turn-down-left"></i> Volver a Escena Activa</button>
+            <button id="btn-staging-activate-all" class="btn btn-sm btn-gold"
+              title="Hacer que todos los jugadores pasen a esta escena"><i class="fa-solid fa-rocket"></i> Activar para
+              Jugadores</button>
+            <button id="btn-staging-return-active" class="btn btn-sm btn-secondary"
+              title="Volver a ver la escena donde están jugando los jugadores"><i
+                class="fa-solid fa-arrow-turn-down-left"></i> Volver a Escena Activa</button>
           </div>
         </div>
       </div>
 
       <div id="vtt-canvas-container" class="vtt-canvas-container">
-        <img id="vtt-map-bg" class="hidden" style="position: absolute; top: 0; left: 0; transform-origin: 0 0; pointer-events: none; z-index: 0;" alt="Map Background">
+        <img id="vtt-map-bg" class="hidden"
+          style="position: absolute; top: 0; left: 0; transform-origin: 0 0; pointer-events: none; z-index: 0;"
+          alt="Map Background">
         <canvas id="vtt-canvas" tabindex="0" style="position: relative; z-index: 1; outline: none;"></canvas>
       </div>
 
@@ -320,7 +351,8 @@
         <button class="tab-btn" data-tab="tab-historial"><i class="fa-solid fa-clock-rotate-left"></i>
           <span>Historial</span></button>
         <button class="tab-btn dm-only" data-tab="tab-dm"><i class="fa-solid fa-key"></i> <span>DM</span></button>
-        <button type="button" class="btn-close-panel mobile-only" title="Cerrar panel"><i class="fa-solid fa-xmark"></i></button>
+        <button type="button" class="btn-close-panel mobile-only" title="Cerrar panel"><i
+            class="fa-solid fa-xmark"></i></button>
       </nav>
 
       <div class="tab-content-container">
@@ -336,8 +368,11 @@
               <button id="btn-sort-initiative" class="btn btn-secondary btn-sm" title="Ordenar por Iniciativa">
                 <i class="fa-solid fa-arrow-down-9-1"></i>
               </button>
-              <button id="btn-open-combat-modal" class="btn btn-secondary btn-sm dm-only" title="Tracker de Rondas y Combate">
-                <svg class="icon-swords gold-text" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle;">
+              <button id="btn-open-combat-modal" class="btn btn-secondary btn-sm dm-only"
+                title="Tracker de Rondas y Combate">
+                <svg class="icon-swords gold-text" viewBox="0 0 24 24" width="15" height="15" fill="none"
+                  stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+                  style="display:inline-block; vertical-align:middle;">
                   <polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"></polyline>
                   <line x1="13" y1="19" x2="19" y2="13"></line>
                   <line x1="16" y1="16" x2="20" y2="20"></line>
@@ -368,6 +403,22 @@
           </div>
 
           <div class="dice-section">
+            <!-- BANNER DE EFECTOS ACTIVOS Y AJUSTE DE DADOS [ALPHA] -->
+            <div id="dice-effects-banner" class="dice-effects-banner hidden">
+              <div class="dice-effects-header">
+                <span class="dice-effects-title"><i class="fa-solid fa-sparkles gold-text"></i> Efectos en Token <span class="badge-alpha">ALPHA</span>:</span>
+                <label class="dice-auto-toggle-label" title="Ajusta ventaja, desventaja o bonos en dados automáticamente">
+                  <input type="checkbox" id="check-dice-auto-effects" checked> Auto-ajustar
+                </label>
+              </div>
+              <div id="dice-effects-chips" class="dice-effects-chips">
+                <!-- Badges de efectos activos en la ficha seleccionada -->
+              </div>
+              <div id="dice-effects-explanation" class="dice-effects-explanation">
+                <!-- Explicación de la regla D&D 5e o recordatorio manual -->
+              </div>
+            </div>
+
             <label class="input-label">Fórmula Personalizada:</label>
             <div class="formula-input-group">
               <input type="text" id="dice-formula-input" placeholder="Ej: 2d10+6+1d6 o 1d20+5" value="1d20+3">
@@ -425,12 +476,15 @@
             <!-- Mensajes de chat -->
           </div>
           <div class="chat-input-area">
-            <input type="text" id="chat-text-input" placeholder="Escribe mensaje o link de GIF/imagen..." autocomplete="off">
-            <button id="btn-upload-chat-media" type="button" class="btn btn-secondary" title="Subir archivo GIF o Imagen">
+            <input type="text" id="chat-text-input" placeholder="Escribe mensaje o link de GIF/imagen..."
+              autocomplete="off">
+            <button id="btn-upload-chat-media" type="button" class="btn btn-secondary"
+              title="Subir archivo GIF o Imagen">
               <i class="fa-solid fa-paperclip"></i>
             </button>
             <input type="file" id="chat-file-input" accept="image/*,.gif,.webp,.png,.jpg,.jpeg" class="hidden">
-            <button id="btn-send-chat" type="button" class="btn btn-primary" title="Enviar mensaje"><i class="fa-solid fa-paper-plane"></i></button>
+            <button id="btn-send-chat" type="button" class="btn btn-primary" title="Enviar mensaje"><i
+                class="fa-solid fa-paper-plane"></i></button>
           </div>
         </div>
 
@@ -492,10 +546,12 @@
               <button id="btn-trigger-map-upload" type="button" class="btn btn-secondary btn-block">
                 <i class="fa-solid fa-image"></i> Subir Imagen de Mapa (Fondo)
               </button>
-              <input type="file" id="map-file-input" accept="image/png, image/jpeg, image/webp, image/gif" class="hidden">
+              <input type="file" id="map-file-input" accept="image/png, image/jpeg, image/webp, image/gif"
+                class="hidden">
               <button id="btn-clear-map-bg" class="btn btn-danger btn-sm btn-block mt-5"><i
                   class="fa-solid fa-trash"></i> Eliminar Imagen de Fondo</button>
-              <button id="btn-reagrupar-fichas" type="button" class="btn btn-gold btn-sm btn-block mt-5" title="Reunir todas las fichas de los jugadores en la escena visible para que no se pierdan">
+              <button id="btn-reagrupar-fichas" type="button" class="btn btn-gold btn-sm btn-block mt-5"
+                title="Reunir todas las fichas de los jugadores en la escena visible para que no se pierdan">
                 <i class="fa-solid fa-arrows-to-dot"></i> Reagrupar Fichas de Jugadores
               </button>
             </div>
@@ -504,7 +560,8 @@
           <!-- Gestión de Jugadores -->
           <div class="dm-section">
             <h4><i class="fa-solid fa-users"></i> Gestión de Jugadores</h4>
-            <div id="dm-players-list" class="players-manage-list" style="display: flex; flex-direction: column; gap: 8px;">
+            <div id="dm-players-list" class="players-manage-list"
+              style="display: flex; flex-direction: column; gap: 8px;">
               <!-- Lista de jugadores para hacer DM -->
             </div>
           </div>
@@ -524,7 +581,8 @@
 
           <!-- Galería de Fichas Plantilla (Botón de Acceso a Pantalla Completa) -->
           <div class="dm-section dm-gallery-section">
-            <button type="button" id="btn-open-gallery-modal" class="btn btn-gold btn-block btn-gallery-launcher" title="Abrir Catálogo y Bestiario en Pantalla Completa">
+            <button type="button" id="btn-open-gallery-modal" class="btn btn-gold btn-block btn-gallery-launcher"
+              title="Abrir Catálogo y Bestiario en Pantalla Completa">
               <i class="fa-solid fa-dragon"></i>
               <span>Galería de Plantillas</span>
               <span id="dm-gallery-count" class="badge-count">0</span>
@@ -535,23 +593,28 @@
               <select id="select-ficha-to-template" class="form-control" title="Selecciona una ficha del mapa o lista">
                 <option value="">-- Ficha --</option>
               </select>
-              <button type="button" id="btn-save-current-template" class="btn btn-secondary btn-sm" title="Guardar ficha seleccionada como plantilla">Guardar</button>
+              <button type="button" id="btn-save-current-template" class="btn btn-secondary btn-sm"
+                title="Guardar ficha seleccionada como plantilla">Guardar</button>
             </div>
           </div>
 
           <!-- Ajustes de la Sesión (DM / Creador) -->
           <div class="dm-section">
             <h4>⚙️ Ajustes de la Sesión</h4>
-            <button type="button" id="btn-dm-edit-session" class="btn btn-secondary btn-block" title="Modificar Nombre e Imagen de Portada de la Partida">
+            <button type="button" id="btn-dm-edit-session" class="btn btn-secondary btn-block"
+              title="Modificar Nombre e Imagen de Portada de la Partida">
               <i class="fa-solid fa-pen-to-square"></i> Modificar Nombre e Imagen
             </button>
-            <button type="button" id="btn-dm-delete-session" class="btn btn-danger btn-block" style="margin-top: 8px;" title="Eliminar definitivamente esta sesión">
+            <button type="button" id="btn-dm-delete-session" class="btn btn-danger btn-block" style="margin-top: 8px;"
+              title="Eliminar definitivamente esta sesión">
               <i class="fa-solid fa-trash"></i> Eliminar Esta Sesión
             </button>
 
             <!-- Función Experimental: Capas y Utilería -->
-            <div class="experimental-toggle-box" style="margin-top: 12px; padding: 10px; background: rgba(201, 168, 76, 0.08); border: 1px dashed rgba(201, 168, 76, 0.35); border-radius: 6px;">
-              <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--gold-light); font-weight: bold; font-size: 0.83rem; margin-bottom: 4px;">
+            <div class="experimental-toggle-box"
+              style="margin-top: 12px; padding: 10px; background: rgba(201, 168, 76, 0.08); border: 1px dashed rgba(201, 168, 76, 0.35); border-radius: 6px;">
+              <label
+                style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; color: var(--gold-light); font-weight: bold; font-size: 0.83rem; margin-bottom: 4px;">
                 <span><i class="fa-solid fa-flask-vial gold-text"></i> Función Experimental: Capas de Utilería</span>
                 <input type="checkbox" id="check-experimental-props" style="transform: scale(1.2); cursor: pointer;">
               </label>
@@ -560,30 +623,50 @@
               </p>
 
               <!-- Panel de Props desplegable dentro de la sesión -->
-              <div id="dm-props-section" class="hidden" style="margin-top: 8px; border-top: 1px dashed rgba(201,168,76,0.25); padding-top: 8px;">
-                <label class="input-label" style="font-size: 0.78rem; color: var(--gold-light); margin-bottom: 4px; display: block;">Objetos Rápidos (Clic para colocar):</label>
-                <div class="props-quick-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 10px;">
-                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="carro" title="Automóvil / Carro">🚗 Auto</button>
-                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="arbol" title="Árbol / Naturaleza">🌲 Árbol</button>
-                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="cajas" title="Cajas / Barriles">📦 Cajas</button>
-                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="mesa" title="Mesa / Mueble">🪑 Mesa</button>
-                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="sangre" title="Mancha de Sangre">🩸 Sangre</button>
-                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="crater" title="Cráter / Escombros">💥 Cráter</button>
-                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="carpa" title="Carpa / Campamento">⛺ Carpa</button>
-                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="puerta" title="Puerta / Carreta">🚪 Puerta</button>
+              <div id="dm-props-section" class="hidden"
+                style="margin-top: 8px; border-top: 1px dashed rgba(201,168,76,0.25); padding-top: 8px;">
+                <label class="input-label"
+                  style="font-size: 0.78rem; color: var(--gold-light); margin-bottom: 4px; display: block;">Objetos
+                  Rápidos (Clic para colocar):</label>
+                <div class="props-quick-grid"
+                  style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 10px;">
+                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="carro"
+                    title="Automóvil / Carro">🚗 Auto</button>
+                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="arbol"
+                    title="Árbol / Naturaleza">🌲 Árbol</button>
+                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="cajas"
+                    title="Cajas / Barriles">📦 Cajas</button>
+                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="mesa"
+                    title="Mesa / Mueble">🪑 Mesa</button>
+                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="sangre"
+                    title="Mancha de Sangre">🩸 Sangre</button>
+                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="crater"
+                    title="Cráter / Escombros">💥 Cráter</button>
+                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="carpa"
+                    title="Carpa / Campamento">⛺ Carpa</button>
+                  <button type="button" class="btn btn-sm btn-secondary btn-quick-prop" data-preset="puerta"
+                    title="Puerta / Carreta">🚪 Puerta</button>
                 </div>
 
-                <div class="prop-form-box" style="display: flex; flex-direction: column; gap: 6px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; border: 1px solid rgba(201,168,76,0.2);">
-                  <input type="text" id="prop-name-input" placeholder="Nombre (ej: Automóvil)" value="Automóvil" class="form-control" style="font-size: 0.82rem;">
+                <div class="prop-form-box"
+                  style="display: flex; flex-direction: column; gap: 6px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; border: 1px solid rgba(201,168,76,0.2);">
+                  <input type="text" id="prop-name-input" placeholder="Nombre (ej: Automóvil)" value="Automóvil"
+                    class="form-control" style="font-size: 0.82rem;">
                   <div style="display: flex; gap: 5px;">
-                    <input type="text" id="prop-url-input" placeholder="URL de imagen PNG o sube archivo..." class="form-control" style="font-size: 0.82rem; flex: 1;">
-                    <button type="button" id="btn-prop-file-trigger" class="btn btn-secondary btn-sm" title="Subir archivo PNG"><i class="fa-solid fa-file-image"></i></button>
+                    <input type="text" id="prop-url-input" placeholder="URL de imagen PNG o sube archivo..."
+                      class="form-control" style="font-size: 0.82rem; flex: 1;">
+                    <button type="button" id="btn-prop-file-trigger" class="btn btn-secondary btn-sm"
+                      title="Subir archivo PNG"><i class="fa-solid fa-file-image"></i></button>
                     <input type="file" id="prop-file-input" accept="image/*,.png,.webp" class="hidden">
                   </div>
                   <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;">
-                    <label style="font-size: 0.75rem; color: #cbd5e1;">Ancho: <input type="number" id="prop-width-input" value="2" min="0.5" max="50" step="0.5" style="width: 100%; font-size: 0.8rem;"></label>
-                    <label style="font-size: 0.75rem; color: #cbd5e1;">Alto: <input type="number" id="prop-height-input" value="4" min="0.5" max="50" step="0.5" style="width: 100%; font-size: 0.8rem;"></label>
-                    <label style="font-size: 0.75rem; color: #cbd5e1;">Giro (°): <input type="number" id="prop-rot-input" value="0" min="0" max="360" step="15" style="width: 100%; font-size: 0.8rem;"></label>
+                    <label style="font-size: 0.75rem; color: #cbd5e1;">Ancho: <input type="number" id="prop-width-input"
+                        value="2" min="0.5" max="50" step="0.5" style="width: 100%; font-size: 0.8rem;"></label>
+                    <label style="font-size: 0.75rem; color: #cbd5e1;">Alto: <input type="number" id="prop-height-input"
+                        value="4" min="0.5" max="50" step="0.5" style="width: 100%; font-size: 0.8rem;"></label>
+                    <label style="font-size: 0.75rem; color: #cbd5e1;">Giro (°): <input type="number"
+                        id="prop-rot-input" value="0" min="0" max="360" step="15"
+                        style="width: 100%; font-size: 0.8rem;"></label>
                   </div>
                   <label style="font-size: 0.75rem; color: #cbd5e1; margin-top: 2px;">
                     Capa de Dibujo:
@@ -593,13 +676,17 @@
                       <option value="encima_fichas">☁️ Techo / Auto (Sobre las fichas)</option>
                     </select>
                   </label>
-                  <button type="button" id="btn-add-prop-submit" class="btn btn-gold btn-block btn-sm" style="margin-top: 4px;">
+                  <button type="button" id="btn-add-prop-submit" class="btn btn-gold btn-block btn-sm"
+                    style="margin-top: 4px;">
                     <i class="fa-solid fa-plus"></i> Colocar en Tablero
                   </button>
                 </div>
 
-                <label style="font-size: 0.78rem; font-weight: bold; color: var(--gold-light); margin-top: 8px; display: block;">Objetos en esta escena:</label>
-                <div id="dm-props-list" class="props-list-container" style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">
+                <label
+                  style="font-size: 0.78rem; font-weight: bold; color: var(--gold-light); margin-top: 8px; display: block;">Objetos
+                  en esta escena:</label>
+                <div id="dm-props-list" class="props-list-container"
+                  style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">
                   <div style="font-size: 0.78rem; color: #64748b; padding: 4px;">No hay objetos colocados aún.</div>
                 </div>
               </div>
@@ -610,19 +697,23 @@
           <div class="dm-section">
             <h4>💾 Copias de Seguridad Automáticas</h4>
             <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 8px;">
-              Tu partida se guarda sola en archivos independientes cada pocos segundos. Aquí puedes forzar un respaldo o restaurar versiones anteriores.
+              Tu partida se guarda sola en archivos independientes cada pocos segundos. Aquí puedes forzar un respaldo o
+              restaurar versiones anteriores.
             </p>
             <button id="btn-dm-save-now" class="btn btn-gold btn-block mb-10" style="margin-bottom: 10px;">
               <i class="fa-solid fa-cloud-arrow-up"></i> Guardar Copia Ahora (Ctrl+S)
             </button>
             <div style="margin-bottom: 10px;">
-              <label style="font-size: 0.8rem; color: #c9a84c; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
+              <label
+                style="font-size: 0.8rem; color: #c9a84c; font-weight: bold; display: flex; justify-content: space-between; align-items: center;">
                 <span><i class="fa-solid fa-clock-rotate-left"></i> Snapshots en Servidor:</span>
-                <button id="btn-refresh-backups" class="btn btn-sm btn-secondary" style="padding: 2px 6px; font-size: 0.75rem;" title="Actualizar lista">
+                <button id="btn-refresh-backups" class="btn btn-sm btn-secondary"
+                  style="padding: 2px 6px; font-size: 0.75rem;" title="Actualizar lista">
                   <i class="fa-solid fa-rotate-right"></i>
                 </button>
               </label>
-              <div id="dm-backups-list" class="backups-list-container" style="max-height: 140px; overflow-y: auto; margin-top: 5px; border: 1px solid rgba(201,168,76,0.2); border-radius: 4px; padding: 4px; background: rgba(0,0,0,0.3);">
+              <div id="dm-backups-list" class="backups-list-container"
+                style="max-height: 140px; overflow-y: auto; margin-top: 5px; border: 1px solid rgba(201,168,76,0.2); border-radius: 4px; padding: 4px; background: rgba(0,0,0,0.3);">
                 <div style="font-size: 0.8rem; color: #64748b; padding: 4px;">Cargando copias...</div>
               </div>
             </div>
@@ -749,13 +840,15 @@
         <div class="form-row">
           <div class="form-group">
             <label>Color de Aro (Aura)</label>
-            <input type="color" id="ficha-color-aro" value="#c9a84c" style="width: 100%; height: 38px; padding: 0; cursor: pointer; border: 1px solid rgba(201, 168, 76, 0.4); border-radius: 4px; background: transparent;">
+            <input type="color" id="ficha-color-aro" value="#c9a84c"
+              style="width: 100%; height: 38px; padding: 0; cursor: pointer; border: 1px solid rgba(201, 168, 76, 0.4); border-radius: 4px; background: transparent;">
           </div>
         </div>
 
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <label style="margin: 0;"><i class="fa-solid fa-scroll gold-text"></i> Notas / Rasgos / Hechizos Homebrew</label>
+            <label style="margin: 0;"><i class="fa-solid fa-scroll gold-text"></i> Notas / Rasgos / Hechizos
+              Homebrew</label>
             <span style="font-size: 0.75rem; color: #94a3b8;">Sin límite de espacio • Con barra de desplazamiento</span>
           </div>
           <textarea id="ficha-notas" class="custom-scrollbar" rows="8"
@@ -797,10 +890,12 @@
         <div
           style="margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.1); padding: 10px; border-radius: 4px; background: rgba(0,0,0,0.3);">
           <div style="display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;">
-            <button type="button" id="btn-rev-ocultar-todo" class="btn btn-secondary btn-sm" title="Ocultar todo: Los jugadores no verán la barra de vida, ni CA, ni nombre real">
+            <button type="button" id="btn-rev-ocultar-todo" class="btn btn-secondary btn-sm"
+              title="Ocultar todo: Los jugadores no verán la barra de vida, ni CA, ni nombre real">
               <i class="fa-solid fa-eye-slash"></i> Ocultar Todo (Jefe Oculto)
             </button>
-            <button type="button" id="btn-rev-revelar-todo" class="btn btn-secondary btn-sm" title="Revelar todos los atributos a los jugadores">
+            <button type="button" id="btn-rev-revelar-todo" class="btn btn-secondary btn-sm"
+              title="Revelar todos los atributos a los jugadores">
               <i class="fa-solid fa-eye"></i> Revelar Todo
             </button>
           </div>
@@ -811,7 +906,8 @@
             <input type="checkbox" id="rev-nombre" class="rev-checkbox"> Revelar Nombre
           </label>
           <label style="display: block; margin-bottom: 8px; cursor: pointer;">
-            <input type="checkbox" id="rev-hp-bar" class="rev-checkbox"> Revelar Barra de Vida (Barra visual en tablero y ficha)
+            <input type="checkbox" id="rev-hp-bar" class="rev-checkbox"> Revelar Barra de Vida (Barra visual en tablero
+            y ficha)
           </label>
           <label style="display: block; margin-bottom: 8px; cursor: pointer;">
             <input type="checkbox" id="rev-hp" class="rev-checkbox"> Revelar Número de HP (Puntos de golpe exactos)
@@ -905,11 +1001,14 @@
           <input type="text" id="edit-game-img-url" placeholder="O pega un enlace de imagen (https://...)">
         </div>
         <div class="form-group" id="edit-game-preview-group" style="text-align: center;">
-          <label style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 4px;">Vista Previa de Portada:</label>
-          <img id="edit-game-preview-img" src="" alt="Vista previa" style="width: 100%; max-height: 140px; object-fit: cover; border-radius: 6px; border: 1px solid rgba(201,168,76,0.3); display: none;">
+          <label style="font-size: 0.8rem; color: #94a3b8; display: block; margin-bottom: 4px;">Vista Previa de
+            Portada:</label>
+          <img id="edit-game-preview-img" src="" alt="Vista previa"
+            style="width: 100%; max-height: 140px; object-fit: cover; border-radius: 6px; border: 1px solid rgba(201,168,76,0.3); display: none;">
         </div>
         <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
-          <button type="button" id="btn-delete-game-modal" class="btn btn-danger btn-sm" title="Eliminar definitivamente esta partida">
+          <button type="button" id="btn-delete-game-modal" class="btn btn-danger btn-sm"
+            title="Eliminar definitivamente esta partida">
             <i class="fa-solid fa-trash"></i> Eliminar Partida
           </button>
           <div style="display: flex; gap: 8px;">
@@ -939,7 +1038,8 @@
             style="text-transform: uppercase; letter-spacing: 2px; font-weight: bold; font-size: 1.2rem;">
         </div>
         <div class="form-group">
-          <label style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--gold-light); margin-bottom: 4px;">
+          <label
+            style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--gold-light); margin-bottom: 4px;">
             <span><i class="fa-solid fa-list-check"></i> Partidas Disponibles:</span>
             <small style="color: #94a3b8; font-weight: normal;">(Haz clic para autocompletar código)</small>
           </label>
@@ -968,14 +1068,25 @@
       <form id="form-change-user" class="modal-body">
         <div class="form-group">
           <label>Nombre de Jugador / Dungeon Master *</label>
-          <input type="text" id="input-change-username" required maxlength="40" placeholder="Ej: Legolas, Arturo, DM Laura">
+          <input type="text" id="input-change-username" required maxlength="40"
+            placeholder="Ej: Legolas, Arturo, DM Laura">
           <small style="color: #94a3b8; font-size: 0.8rem; margin-top: 6px; display: block;">
             Este nombre se usará en el chat, tus tiradas de dados, tus fichas y la lista de jugadores.
           </small>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary btn-close-modal">Cancelar</button>
-          <button type="submit" class="btn btn-gold"><i class="fa-solid fa-check"></i> Guardar Nombre</button>
+        <div class="modal-footer" style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; justify-content: flex-end; gap: 8px; width: 100%;">
+            <button type="button" class="btn btn-secondary btn-close-modal">Cancelar</button>
+            <button type="submit" class="btn btn-gold"><i class="fa-solid fa-check"></i> Guardar Nombre</button>
+          </div>
+          <div style="width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+            <button type="button" id="btn-reclamar-dm" class="btn btn-secondary" style="width: 100%; border: 1px dashed #c9a84c; color: #f59e0b; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <i class="fa-solid fa-crown"></i> Reclamar Rol de Dungeon Master
+            </button>
+            <small style="color: #64748b; font-size: 0.72rem; margin-top: 4px; display: block; text-align: center;">
+              Si creaste o importaste esta sesión y apareces como jugador, pulsa aquí para activarte como DM.
+            </small>
+          </div>
         </div>
       </form>
     </div>
@@ -996,21 +1107,28 @@
         <div class="catalog-toolbar">
           <div class="catalog-search-box">
             <i class="fa-solid fa-magnifying-glass search-icon"></i>
-            <input type="text" id="input-modal-gallery-search" placeholder="Buscar por nombre o rasgos..." class="form-control">
-            <button id="btn-modal-clear-search" class="btn-clear-search hidden" title="Limpiar"><i class="fa-solid fa-xmark"></i></button>
+            <input type="text" id="input-modal-gallery-search" placeholder="Buscar por nombre o rasgos..."
+              class="form-control">
+            <button id="btn-modal-clear-search" class="btn-clear-search hidden" title="Limpiar"><i
+                class="fa-solid fa-xmark"></i></button>
           </div>
           <div class="catalog-filters">
             <button class="catalog-filter-btn active" data-filter="all">Todos</button>
-            <button class="catalog-filter-btn" data-filter="monstruo"><i class="fa-solid fa-skull"></i> Monstruos</button>
+            <button class="catalog-filter-btn" data-filter="monstruo"><i class="fa-solid fa-skull"></i>
+              Monstruos</button>
             <button class="catalog-filter-btn" data-filter="npc"><i class="fa-solid fa-user-shield"></i> NPCs</button>
-            <button class="catalog-filter-btn" data-filter="jugador"><i class="fa-solid fa-person"></i> Jugadores</button>
+            <button class="catalog-filter-btn" data-filter="jugador"><i class="fa-solid fa-person"></i>
+              Jugadores</button>
           </div>
           <div class="catalog-spawn-multiplier">
             <span class="label-multi"><i class="fa-solid fa-clone"></i> Cantidad a invocar:</span>
             <div class="quantity-input-wrapper">
-              <button type="button" id="btn-qty-minus" class="btn-qty-step" title="Restar 1"><i class="fa-solid fa-minus"></i></button>
-              <input type="number" id="input-modal-spawn-qty" class="input-spawn-qty" min="1" max="50" value="1" title="Escribe la cantidad que deseas invocar">
-              <button type="button" id="btn-qty-plus" class="btn-qty-step" title="Sumar 1"><i class="fa-solid fa-plus"></i></button>
+              <button type="button" id="btn-qty-minus" class="btn-qty-step" title="Restar 1"><i
+                  class="fa-solid fa-minus"></i></button>
+              <input type="number" id="input-modal-spawn-qty" class="input-spawn-qty" min="1" max="50" value="1"
+                title="Escribe la cantidad que deseas invocar">
+              <button type="button" id="btn-qty-plus" class="btn-qty-step" title="Sumar 1"><i
+                  class="fa-solid fa-plus"></i></button>
             </div>
             <div class="quick-qty-chips">
               <button type="button" class="btn-quick-qty active" data-qty="1">1</button>
@@ -1028,7 +1146,8 @@
         </div>
       </div>
       <div class="modal-footer modal-gallery-footer">
-        <span class="catalog-hint"><i class="fa-solid fa-lightbulb gold-text"></i> Toca "Invocar" para crear la criatura en el centro de tu pantalla actual.</span>
+        <span class="catalog-hint"><i class="fa-solid fa-lightbulb gold-text"></i> Toca "Invocar" para crear la criatura
+          en el centro de tu pantalla actual.</span>
         <button type="button" class="btn btn-secondary btn-close-modal">Cerrar</button>
       </div>
     </div>
@@ -1043,7 +1162,8 @@
       </div>
       <div class="modal-body template-detail-body">
         <div class="template-detail-hero">
-          <img id="template-detail-avatar" src="https://via.placeholder.com/64" alt="Avatar" class="template-detail-img">
+          <img id="template-detail-avatar" src="https://via.placeholder.com/64" alt="Avatar"
+            class="template-detail-img">
           <div class="template-detail-meta">
             <h4 id="template-detail-name">Nombre</h4>
             <div class="template-badges-row">
@@ -1052,22 +1172,32 @@
               <span id="template-detail-level" class="badge-tag tag-level">Nivel 1</span>
             </div>
             <div class="template-vital-stats">
-              <span class="vital-item hp"><i class="fa-solid fa-heart"></i> HP: <strong id="template-detail-hp">10</strong></span>
-              <span class="vital-item ac"><i class="fa-solid fa-shield-halved"></i> CA: <strong id="template-detail-ac">10</strong></span>
-              <span class="vital-item speed"><i class="fa-solid fa-person-running"></i> Vel: <strong id="template-detail-speed">30ft</strong></span>
-              <span class="vital-item ini"><i class="fa-solid fa-dice-d20"></i> Ini: <strong id="template-detail-ini">0</strong></span>
+              <span class="vital-item hp"><i class="fa-solid fa-heart"></i> HP: <strong
+                  id="template-detail-hp">10</strong></span>
+              <span class="vital-item ac"><i class="fa-solid fa-shield-halved"></i> CA: <strong
+                  id="template-detail-ac">10</strong></span>
+              <span class="vital-item speed"><i class="fa-solid fa-person-running"></i> Vel: <strong
+                  id="template-detail-speed">30ft</strong></span>
+              <span class="vital-item ini"><i class="fa-solid fa-dice-d20"></i> Ini: <strong
+                  id="template-detail-ini">0</strong></span>
             </div>
           </div>
         </div>
 
         <!-- Tabla de Atributos D&D -->
         <div class="ability-scores-summary">
-          <div class="ability-box"><span class="ab-name">FUE</span><strong id="template-detail-str">10</strong><span id="template-mod-str" class="ab-mod">+0</span></div>
-          <div class="ability-box"><span class="ab-name">DES</span><strong id="template-detail-dex">10</strong><span id="template-mod-dex" class="ab-mod">+0</span></div>
-          <div class="ability-box"><span class="ab-name">CON</span><strong id="template-detail-con">10</strong><span id="template-mod-con" class="ab-mod">+0</span></div>
-          <div class="ability-box"><span class="ab-name">INT</span><strong id="template-detail-int">10</strong><span id="template-mod-int" class="ab-mod">+0</span></div>
-          <div class="ability-box"><span class="ab-name">SAB</span><strong id="template-detail-wis">10</strong><span id="template-mod-wis" class="ab-mod">+0</span></div>
-          <div class="ability-box"><span class="ab-name">CAR</span><strong id="template-detail-cha">10</strong><span id="template-mod-cha" class="ab-mod">+0</span></div>
+          <div class="ability-box"><span class="ab-name">FUE</span><strong id="template-detail-str">10</strong><span
+              id="template-mod-str" class="ab-mod">+0</span></div>
+          <div class="ability-box"><span class="ab-name">DES</span><strong id="template-detail-dex">10</strong><span
+              id="template-mod-dex" class="ab-mod">+0</span></div>
+          <div class="ability-box"><span class="ab-name">CON</span><strong id="template-detail-con">10</strong><span
+              id="template-mod-con" class="ab-mod">+0</span></div>
+          <div class="ability-box"><span class="ab-name">INT</span><strong id="template-detail-int">10</strong><span
+              id="template-mod-int" class="ab-mod">+0</span></div>
+          <div class="ability-box"><span class="ab-name">SAB</span><strong id="template-detail-wis">10</strong><span
+              id="template-mod-wis" class="ab-mod">+0</span></div>
+          <div class="ability-box"><span class="ab-name">CAR</span><strong id="template-detail-cha">10</strong><span
+              id="template-mod-cha" class="ab-mod">+0</span></div>
         </div>
 
         <!-- Notas / Rasgos / Habilidades -->
@@ -1080,11 +1210,13 @@
         <div class="detail-spawn-qty-wrap" style="display: flex; align-items: center; gap: 8px; margin-right: auto;">
           <span style="font-size: 0.85rem; color: #cbd5e1;"><i class="fa-solid fa-clone"></i> Cantidad:</span>
           <div class="quantity-input-wrapper" style="height: 32px;">
-            <input type="number" id="input-detail-spawn-qty" class="input-spawn-qty" min="1" max="50" value="1" title="Escribe la cantidad a invocar">
+            <input type="number" id="input-detail-spawn-qty" class="input-spawn-qty" min="1" max="50" value="1"
+              title="Escribe la cantidad a invocar">
           </div>
         </div>
         <button type="button" class="btn btn-secondary btn-close-modal">Cerrar</button>
-        <button type="button" id="btn-spawn-from-detail" class="btn btn-gold"><i class="fa-solid fa-wand-magic-sparkles"></i> Invocar al Mapa (x1)</button>
+        <button type="button" id="btn-spawn-from-detail" class="btn btn-gold"><i
+            class="fa-solid fa-wand-magic-sparkles"></i> Invocar al Mapa (x1)</button>
       </div>
     </div>
   </div>
@@ -1094,7 +1226,9 @@
     <div class="modal-content modal-md modal-combat-setup">
       <div class="modal-header">
         <h3>
-          <svg class="icon-swords gold-text" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:-2px; margin-right:6px;">
+          <svg class="icon-swords gold-text" viewBox="0 0 24 24" width="20" height="20" fill="none"
+            stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+            style="display:inline-block; vertical-align:-2px; margin-right:6px;">
             <polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"></polyline>
             <line x1="13" y1="19" x2="19" y2="13"></line>
             <line x1="16" y1="16" x2="20" y2="20"></line>
@@ -1110,14 +1244,17 @@
       </div>
       <div class="modal-body">
         <div class="combat-setup-toolbar">
-          <button type="button" id="btn-combat-select-all" class="btn btn-secondary btn-sm"><i class="fa-solid fa-check-double"></i> Marcar Todos</button>
-          <button type="button" id="btn-combat-roll-all" class="btn btn-secondary btn-sm"><i class="fa-solid fa-dice-d20 gold-text"></i> Tirar Iniciativa (d20+DES)</button>
+          <button type="button" id="btn-combat-select-all" class="btn btn-secondary btn-sm"><i
+              class="fa-solid fa-check-double"></i> Marcar Todos</button>
+          <button type="button" id="btn-combat-roll-all" class="btn btn-secondary btn-sm"><i
+              class="fa-solid fa-dice-d20 gold-text"></i> Tirar Iniciativa (d20+DES)</button>
         </div>
         <div class="combat-setup-table-wrap">
           <table class="combat-setup-table">
             <thead>
               <tr>
-                <th style="width: 38px; text-align: center;"><input type="checkbox" id="combat-select-master" checked></th>
+                <th style="width: 38px; text-align: center;"><input type="checkbox" id="combat-select-master" checked>
+                </th>
                 <th style="width: 44px; text-align: center;">Token</th>
                 <th>Nombre</th>
                 <th>Tipo</th>
@@ -1130,16 +1267,157 @@
           </table>
         </div>
       </div>
-      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+      <div class="modal-footer"
+        style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
         <button type="button" class="btn btn-secondary btn-close-modal">Cancelar</button>
         <div style="display: flex; gap: 8px;">
-          <button type="button" id="btn-combat-add-confirm" class="btn btn-gold hidden" title="Añadir a la ronda activa sin reiniciar">
+          <button type="button" id="btn-combat-add-confirm" class="btn btn-gold hidden"
+            title="Añadir a la ronda activa sin reiniciar">
             <i class="fa-solid fa-user-plus"></i> Añadir a la Ronda
           </button>
           <button type="button" id="btn-combat-start-confirm" class="btn btn-primary">
             <i class="fa-solid fa-play"></i> ¡Comenzar Combate!
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: GESTOR DE EFECTOS Y CONDICIONES VISUALES (ALPHA) -->
+  <div id="modal-ficha-efectos" class="modal-overlay hidden">
+    <div class="modal-content modal-lg modal-effects-container">
+      <div class="modal-header">
+        <div>
+          <h3><i class="fa-solid fa-sparkles gold-text"></i> Estados y Efectos <span class="badge-alpha">ALPHA</span></h3>
+          <p id="modal-effects-target-name" class="modal-subtitle">Asignando efectos a: <strong>Personaje</strong></p>
+        </div>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body modal-effects-body">
+        <!-- Sub-pestañas: 1. Activos en Ficha, 2. Condiciones D&D 5e, 3. Creador Custom (DM) -->
+        <div class="effects-tabs-header">
+          <button type="button" class="btn-effects-tab active" data-tab="tab-active-effects">
+            <i class="fa-solid fa-list-check"></i> Activos (<span id="effects-active-count">0</span>)
+          </button>
+          <button type="button" class="btn-effects-tab" data-tab="tab-dnd-conditions">
+            <i class="fa-solid fa-book-skull"></i> Condiciones D&D 5e
+          </button>
+          <button type="button" class="btn-effects-tab" data-tab="tab-custom-effect">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Crear Efecto (DM)
+          </button>
+        </div>
+
+        <!-- 1. Pestaña: Efectos activos en la ficha -->
+        <div id="tab-active-effects" class="effects-tab-content">
+          <div id="ficha-active-effects-list" class="active-effects-grid">
+            <!-- Badges de efectos activos con botón para remover -->
+          </div>
+        </div>
+
+        <!-- 2. Pestaña: Catálogo de Condiciones Oficiales D&D 5e -->
+        <div id="tab-dnd-conditions" class="effects-tab-content hidden">
+          <div class="effects-filter-bar">
+            <input type="text" id="input-search-effects" placeholder="🔍 Buscar condición (ej: Envenenado, Bendición, Derribado)..." class="effects-search-input">
+            <div class="effects-filter-tags">
+              <button type="button" class="tag-filter active" data-tag="todos">Todos</button>
+              <button type="button" class="tag-filter" data-tag="desventaja">Con Desventaja</button>
+              <button type="button" class="tag-filter" data-tag="ventaja">Con Ventaja / Buff</button>
+              <button type="button" class="tag-filter" data-tag="dados">Modifican Dados</button>
+            </div>
+          </div>
+          <div id="dnd5e-effects-grid" class="dnd-effects-catalog-grid">
+            <!-- Tarjetas de condiciones D&D 5e -->
+          </div>
+        </div>
+
+        <!-- 3. Pestaña: Crear Efecto Custom (DM) -->
+        <div id="tab-custom-effect" class="effects-tab-content hidden">
+          <form id="form-create-custom-effect" class="custom-effect-form">
+            <div class="form-row" style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <div class="form-group" style="flex: 2; min-width: 180px;">
+                <label>Nombre del Efecto *</label>
+                <input type="text" id="custom-effect-name" required placeholder="Ej: Sangrado, Maldición Carmesí, Escudo Arcano">
+              </div>
+              <div class="form-group" style="flex: 1; min-width: 100px;">
+                <label>Icono / Emoji *</label>
+                <input type="text" id="custom-effect-icon" maxlength="4" value="🔥" style="text-align: center; font-size: 1.2rem;">
+              </div>
+              <div class="form-group" style="flex: 1; min-width: 80px;">
+                <label>Color Borde</label>
+                <input type="color" id="custom-effect-color" value="#ef4444" style="height: 38px; width: 100%; cursor: pointer;">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Iconos Rápidos:</label>
+              <div class="quick-icons-palette">
+                <span class="btn-quick-icon">🔥</span>
+                <span class="btn-quick-icon">❄️</span>
+                <span class="btn-quick-icon">⚡</span>
+                <span class="btn-quick-icon">🛡️</span>
+                <span class="btn-quick-icon">🗡️</span>
+                <span class="btn-quick-icon">🩸</span>
+                <span class="btn-quick-icon">👁️</span>
+                <span class="btn-quick-icon">💀</span>
+                <span class="btn-quick-icon">✨</span>
+                <span class="btn-quick-icon">🏹</span>
+                <span class="btn-quick-icon">🧪</span>
+                <span class="btn-quick-icon">💤</span>
+                <span class="btn-quick-icon">💫</span>
+                <span class="btn-quick-icon">⭐</span>
+                <span class="btn-quick-icon">🌑</span>
+              </div>
+            </div>
+
+            <div class="form-row" style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <div class="form-group" style="flex: 1; min-width: 160px;">
+                <label>Ajuste de Dados:</label>
+                <select id="custom-effect-dice-mod" class="form-select">
+                  <option value="ninguno">Ninguno (Solo informativo)</option>
+                  <option value="ventaja">⭐ Ventaja en tiradas</option>
+                  <option value="desventaja">🌑 Desventaja en tiradas</option>
+                  <option value="+1d4">✨ +1d4 a tiradas</option>
+                  <option value="-1d4">💀 -1d4 a tiradas</option>
+                  <option value="+2">➕ +2 numérico</option>
+                  <option value="-2">➖ -2 numérico</option>
+                </select>
+              </div>
+              <div class="form-group" style="flex: 1; min-width: 140px;">
+                <label>Duración estimada:</label>
+                <input type="text" id="custom-effect-duration" placeholder="Ej: 3 rondas, 1 min, Indefinida" value="Indefinida">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>URL Imagen Personalizada (Opcional):</label>
+              <input type="url" id="custom-effect-img-url" placeholder="https://ejemplo.com/icono.png">
+            </div>
+
+            <div class="form-group">
+              <label>Descripción / Regla para Jugadores:</label>
+              <textarea id="custom-effect-desc" rows="2" placeholder="Explica la regla o lo que debe hacer el jugador (ej: Recibe 1d4 de fuego al inicio de su turno)..."></textarea>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+              <button type="submit" class="btn btn-gold"><i class="fa-solid fa-plus"></i> Guardar y Aplicar a Ficha</button>
+            </div>
+          </form>
+
+          <!-- Catálogo de efectos creados previamente en esta partida -->
+          <div class="custom-effects-saved-section">
+            <h4 style="margin-top: 15px; color: #c9a84c; font-size: 0.9rem;">Efectos Creados en esta Partida:</h4>
+            <div id="custom-effects-saved-list" class="custom-effects-saved-list">
+              <!-- Lista de custom effects -->
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #94a3b8; cursor: pointer;">
+          <input type="checkbox" id="check-canvas-alpha-effects" checked>
+          <span>Mostrar recuadros de efectos sobre tokens en el mapa <strong class="badge-alpha" style="font-size: 0.65rem;">ALPHA</strong></span>
+        </label>
+        <button type="button" class="btn btn-secondary btn-close-modal">Cerrar</button>
       </div>
     </div>
   </div>
@@ -1151,7 +1429,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script>if (typeof io === 'undefined') document.write('<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"><\/script>');</script>
   <!-- Lógica de la Aplicación -->
-  <script src="app.js?v=3.7.1"></script>
+  <script src="app.js?v=3.8.0"></script>
 </body>
 
 </html>

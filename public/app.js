@@ -25,7 +25,10 @@
     combate: { activo: false, ronda: 1, turnoIndex: 0, participantes: [] },
     jugadoresConectados: [],
     usuario: { id: null, nombre: '', esDM: false, color: '#c9a84c' },
-    experimentalPropsEnabled: false
+    experimentalPropsEnabled: false,
+    alphaTokenEffects: localStorage.getItem('vtt_alpha_token_effects') !== 'false',
+    autoDiceEffects: localStorage.getItem('vtt_auto_dice_effects') !== 'false',
+    customEffectsCatalog: []
   };
 
   // Helper para obtener la escena actualmente visualizada en pantalla
@@ -58,6 +61,231 @@
   let mapImage = new Image();
   let mapImageLoaded = false;
   let tokenImagesCache = {};
+
+  // --- CATÁLOGO OFICIAL DE CONDICIONES Y BUFFS D&D 5E (ALPHA) ---
+  const CONDICIONES_DND5E = [
+    {
+      id: 'blinded',
+      nombre: 'Cegado (Blinded)',
+      icono: '🙈',
+      color: '#64748b',
+      descripcion: 'Falla automáticamente pruebas de vista. Desventaja en ataques. Ataques contra la criatura tienen ventaja.',
+      ajusteDado: 'desventaja',
+      tipoDado: 'ataque',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'charmed',
+      nombre: 'Hechizado (Charmed)',
+      icono: '💖',
+      color: '#ec4899',
+      descripcion: 'No puede atacar a quien lo hechizó. Quien lo hechizó tiene ventaja en pruebas sociales contra él.',
+      ajusteDado: 'ninguno',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'deafened',
+      nombre: 'Ensordecido (Deafened)',
+      icono: '👂',
+      color: '#94a3b8',
+      descripcion: 'Falla automáticamente pruebas que requieran oír.',
+      ajusteDado: 'ninguno',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'frightened',
+      nombre: 'Asustado (Frightened)',
+      icono: '😱',
+      color: '#8b5cf6',
+      descripcion: 'Desventaja en pruebas de característica y ataques mientras la fuente del miedo esté a la vista. No puede acercarse a ella.',
+      ajusteDado: 'desventaja',
+      tipoDado: 'ataque_y_pruebas',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'grappled',
+      nombre: 'Agarrado (Grappled)',
+      icono: '✊',
+      color: '#f59e0b',
+      descripcion: 'Velocidad 0. Termina si el atacante queda incapacitado o si un efecto aleja al objetivo de su alcance.',
+      ajusteDado: 'ninguno',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'incapacitated',
+      nombre: 'Incapacitado (Incapacitated)',
+      icono: '🚫',
+      color: '#ef4444',
+      descripcion: 'No puede realizar acciones ni reacciones de ningún tipo.',
+      ajusteDado: 'ninguno',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'invisible',
+      nombre: 'Invisible',
+      icono: '👻',
+      color: '#06b6d4',
+      descripcion: 'Imposible de ver sin magia o visión especial. Ventaja en tiradas de ataque. Ataques contra él tienen desventaja.',
+      ajusteDado: 'ventaja',
+      tipoDado: 'ataque',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'paralyzed',
+      nombre: 'Paralizado (Paralyzed)',
+      icono: '⚡',
+      color: '#eab308',
+      descripcion: 'Incapacitado, no puede moverse ni hablar. Falla salvaciones de FUE y DES. Ataques contra él tienen ventaja y a 5 ft son críticos automáticos.',
+      ajusteDado: 'ninguno',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'petrified',
+      nombre: 'Petrificado (Petrified)',
+      icono: '🗿',
+      color: '#78716c',
+      descripcion: 'Transformado en piedra. Peso x10. Incapacitado. Resistencia a todo daño. Inmune a veneno.',
+      ajusteDado: 'ninguno',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'poisoned',
+      nombre: 'Envenenado (Poisoned)',
+      icono: '🧪',
+      color: '#10b981',
+      descripcion: 'Desventaja en tiradas de ataque y pruebas de característica.',
+      ajusteDado: 'desventaja',
+      tipoDado: 'ataque_y_pruebas',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'prone',
+      nombre: 'Derribado (Prone)',
+      icono: '🛌',
+      color: '#d97706',
+      descripcion: 'Solo puede arrastrarse o gastar mitad de movimiento para levantarse. Desventaja en ataques. Ataques a 5 ft tienen ventaja, a más de 5 ft desventaja.',
+      ajusteDado: 'desventaja',
+      tipoDado: 'ataque',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'restrained',
+      nombre: 'Apresado (Restrained)',
+      icono: '🕸️',
+      color: '#6366f1',
+      descripcion: 'Velocidad 0. Desventaja en ataques y salvaciones de DES. Ataques contra él tienen ventaja.',
+      ajusteDado: 'desventaja',
+      tipoDado: 'ataque',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'stunned',
+      nombre: 'Aturdido (Stunned)',
+      icono: '💫',
+      color: '#a855f7',
+      descripcion: 'Incapacitado, no puede moverse. Falla salvaciones de FUE y DES. Ataques contra él tienen ventaja.',
+      ajusteDado: 'ninguno',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'unconscious',
+      nombre: 'Inconsciente (Unconscious)',
+      icono: '💤',
+      color: '#dc2626',
+      descripcion: 'Incapacitado, derribado, suelta lo que sostiene. Falla salvaciones de FUE y DES. Ataques contra él tienen ventaja y a 5 ft son críticos automáticos.',
+      ajusteDado: 'ninguno',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'exhaustion',
+      nombre: 'Agotamiento (Exhaustion)',
+      icono: '😫',
+      color: '#b45309',
+      descripcion: 'Niveles 1 a 6. Aplica desventaja acumulativa en pruebas, ataques y salvaciones.',
+      ajusteDado: 'desventaja',
+      tipoDado: 'ataque_y_pruebas',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'bless',
+      nombre: 'Bendición (Bless)',
+      icono: '✨',
+      color: '#38bdf8',
+      descripcion: 'Suma +1d4 a tiradas de ataque y tiradas de salvación.',
+      ajusteDado: '+1d4',
+      tipoDado: 'ataque_y_salvacion',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'bane',
+      nombre: 'Perdición (Bane)',
+      icono: '💀',
+      color: '#991b1b',
+      descripcion: 'Resta 1d4 (-1d4) a tiradas de ataque y tiradas de salvación.',
+      ajusteDado: '-1d4',
+      tipoDado: 'ataque_y_salvacion',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'rage',
+      nombre: 'Furia (Rage)',
+      icono: '😡',
+      color: '#ea580c',
+      descripcion: 'Ventaja en pruebas y salvaciones de Fuerza. Bono al daño con Fuerza. Resistencia a daño físico.',
+      ajusteDado: 'ventaja',
+      tipoDado: 'fuerza',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'concentration',
+      nombre: 'Concentración',
+      icono: '🧘',
+      color: '#0284c7',
+      descripcion: 'Manteniendo un conjuro. Debe superar salvación de CON al recibir daño (CD 10 o mitad del daño recibido).',
+      ajusteDado: 'ninguno',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'haste',
+      nombre: 'Acelerar (Haste)',
+      icono: '💨',
+      color: '#14b8a6',
+      descripcion: 'Velocidad x2, +2 CA, ventaja en salvaciones de DES, acción adicional por turno.',
+      ajusteDado: 'ninguno',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'advantage_custom',
+      nombre: 'Ventaja (Inspiración)',
+      icono: '⭐',
+      color: '#eab308',
+      descripcion: 'La siguiente tirada de d20 se realiza con ventaja (2d20kh1).',
+      ajusteDado: 'ventaja',
+      tipoDado: 'todos',
+      origen: 'dnd5e'
+    },
+    {
+      id: 'disadvantage_custom',
+      nombre: 'Desventaja',
+      icono: '🌑',
+      color: '#475569',
+      descripcion: 'La siguiente tirada de d20 se realiza con desventaja (2d20kl1).',
+      ajusteDado: 'desventaja',
+      tipoDado: 'todos',
+      origen: 'dnd5e'
+    }
+  ];
+
+  const effectImageCache = new Map();
+  function getEffectImageCached(url) {
+    if (!url) return null;
+    if (effectImageCache.has(url)) return effectImageCache.get(url);
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = url;
+    effectImageCache.set(url, img);
+    return img;
+  }
 
   let viewport = {
     zoom: 1.0,
@@ -156,7 +384,7 @@
             if (webpUrl && webpUrl.startsWith('data:image/webp')) {
               resDataUrl = webpUrl;
             }
-          } catch (_) {}
+          } catch (_) { }
           if (!resDataUrl) {
             resDataUrl = offCanvas.toDataURL('image/jpeg', quality);
           }
@@ -726,10 +954,10 @@
     });
 
     // Helper: emite cuando el socket esté conectado
-    window._emitWhenReady = function(event, data) {
+    window._emitWhenReady = function (event, data) {
       if (!socket) { initSocket(); }
       if (socket && !socket.connected) {
-        try { socket.connect(); } catch (_) {}
+        try { socket.connect(); } catch (_) { }
       }
       if (socket && socket.connected) {
         socket.emit(event, data);
@@ -857,6 +1085,16 @@
       state.combate = data.combate || { activo: false, ronda: 1, turnoIndex: 0, participantes: [] };
       state.jugadoresConectados = data.jugadoresConectados || [];
       state.usuario = data.usuario;
+
+      if (data.partida?.efectos_catalogo) {
+        try {
+          state.customEffectsCatalog = typeof data.partida.efectos_catalogo === 'string'
+            ? JSON.parse(data.partida.efectos_catalogo)
+            : data.partida.efectos_catalogo;
+        } catch (_) { state.customEffectsCatalog = []; }
+      } else {
+        state.customEffectsCatalog = [];
+      }
 
       // Cargar preferencia experimental de capas
       const expSaved = localStorage.getItem('vtt_exp_props_' + (data.partida?.codigo || ''));
@@ -1157,9 +1395,18 @@
         state.fichas[idx] = fichaActualizada;
         renderFichasList();
         renderTokenSelects();
+        updateDiceEffectsBanner();
+        if (currentEditingFichaEffectsId === fichaActualizada.id) {
+          renderActiveFichaEffectsModal(fichaActualizada);
+        }
         markDirty();
         debounceLocalMirrorSave();
       }
+    });
+
+    socket.on('catalogo_efectos_actualizado', (catalogo) => {
+      state.customEffectsCatalog = Array.isArray(catalogo) ? catalogo : [];
+      renderCustomEffectsSavedList();
     });
 
     socket.on('gigante_toggled', ({ fichaId, gigante }) => {
@@ -1433,7 +1680,7 @@
 
       mapImage = img;
       mapImageLoaded = true;
-      
+
       const isGif = typeof src === 'string' && (src.startsWith('data:image/gif') || src.toLowerCase().includes('.gif'));
       if (isGif) {
         if (dom.mapBgImg) {
@@ -1447,7 +1694,7 @@
           dom.mapBgImg.src = '';
         }
       }
-      
+
       if (viewportInitializedForScene !== escCur?.id) {
         if (!isPanning) centerMap(); // Centrar una sola vez al entrar por primera vez a la escena
         viewportInitializedForScene = escCur?.id;
@@ -1525,7 +1772,7 @@
     const maxDim = Math.max(wTiles, hTiles);
 
     if (prop.x + maxDim < screenLeft || prop.x - maxDim > screenRight ||
-        prop.y + maxDim < screenTop || prop.y - maxDim > screenBottom) {
+      prop.y + maxDim < screenTop || prop.y - maxDim > screenBottom) {
       return;
     }
 
@@ -1703,7 +1950,7 @@
         const maxRadius = Math.max(anchoCasillas, largoCasillas) + 1;
         // Culling: saltar figuras fuera de la pantalla
         if (fig.x + maxRadius < screenTileLeft || fig.x - maxRadius > screenTileRight ||
-            fig.y + maxRadius < screenTileTop || fig.y - maxRadius > screenTileBottom) {
+          fig.y + maxRadius < screenTileTop || fig.y - maxRadius > screenTileBottom) {
           return;
         }
 
@@ -1797,7 +2044,7 @@
 
       // Culling: omitir tokens fuera de la pantalla real visible (incluyendo coordenadas fuera del mapa)
       if (ficha.x + scaleMult < screenTileLeft || ficha.x > screenTileRight ||
-          ficha.y + scaleMult < screenTileTop || ficha.y > screenTileBottom) {
+        ficha.y + scaleMult < screenTileTop || ficha.y > screenTileBottom) {
         return;
       }
 
@@ -1958,6 +2205,9 @@
       }
       ctx.restore();
 
+      // 5.4. Dibujar Recuadros Pequeños con Iconos/Imágenes de Efectos encima del Token [ALPHA]
+      drawTokenAlphaEffects(ctx, ficha, cx, cy, px, py, tokenWidth, tokenHeight, showBar, showName);
+
       // Si la ficha está fuera de los límites del mapa, dibujar aro de advertencia para verla claramente
       const isOutOfMap = ficha.x < 0 || ficha.x + scaleMult > cols || ficha.y < 0 || ficha.y + scaleMult > rows;
       if (isOutOfMap) {
@@ -2043,6 +2293,93 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText((ficha.nombre || '?').charAt(0).toUpperCase(), px + w / 2, py + h / 2);
+  }
+
+  // --- DIBUJADO DE RECUADROS DE EFECTOS VISUALES EN TOKENS [ALPHA] ---
+  function drawTokenAlphaEffects(ctx, ficha, cx, cy, px, py, tokenWidth, tokenHeight, showBar, showName) {
+    if (state.alphaTokenEffects === false) return;
+    let efectosList = [];
+    if (Array.isArray(ficha.efectos)) {
+      efectosList = ficha.efectos;
+    } else if (typeof ficha.efectos === 'string' && ficha.efectos.trim()) {
+      try { efectosList = JSON.parse(ficha.efectos); } catch (_) { efectosList = []; }
+    }
+    if (!efectosList || efectosList.length === 0) return;
+
+    ctx.save();
+    // Tamaño nítido del recuadro (mín 16px, máx 28px, ajustado a escala de pantalla)
+    const badgeSize = Math.max(16, Math.min(28, tokenWidth * 0.28));
+    const badgeGap = 3;
+    const maxBadges = 5;
+    const displayBadges = efectosList.slice(0, maxBadges);
+    const hasMore = efectosList.length > maxBadges;
+    const totalCount = displayBadges.length + (hasMore ? 1 : 0);
+    const totalW = totalCount * badgeSize + (totalCount - 1) * badgeGap;
+
+    // Posición vertical: flotando directamente encima de la barra de vida y el nombre
+    const topOffset = (showBar ? 26 : 8) + (showName ? 18 : 0) + badgeSize + 2;
+    const by = py - topOffset;
+    const startX = cx - totalW / 2;
+
+    displayBadges.forEach((ef, idx) => {
+      const bx = startX + idx * (badgeSize + badgeGap);
+      const bColor = ef.color || '#c9a84c';
+
+      // 1. Recuadro oscuro semi-transparente
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(bx, by, badgeSize, badgeSize, 4);
+      } else {
+        ctx.rect(bx, by, badgeSize, badgeSize);
+      }
+      ctx.fill();
+
+      // 2. Borde exterior coloreado
+      ctx.strokeStyle = bColor;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // 3. Contenido: Imagen personalizada o Icono/Emoji D&D
+      if (ef.imagen && typeof ef.imagen === 'string' && ef.imagen.startsWith('http')) {
+        const cachedImg = getEffectImageCached(ef.imagen);
+        if (cachedImg && cachedImg.complete && cachedImg.naturalWidth > 0) {
+          ctx.drawImage(cachedImg, bx + 2, by + 2, badgeSize - 4, badgeSize - 4);
+        } else {
+          ctx.fillStyle = '#ffffff';
+          ctx.font = `${Math.floor(badgeSize * 0.65)}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(ef.icono || '✨', bx + badgeSize / 2, by + badgeSize / 2 + 1);
+        }
+      } else {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `${Math.floor(badgeSize * 0.68)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(ef.icono || '✨', bx + badgeSize / 2, by + badgeSize / 2 + 1);
+      }
+    });
+
+    // Indicador numérico "+N" si hay más de 5 efectos en la misma ficha
+    if (hasMore) {
+      const plusBx = startX + displayBadges.length * (badgeSize + badgeGap);
+      ctx.fillStyle = 'rgba(201, 168, 76, 0.95)';
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(plusBx, by, badgeSize, badgeSize, 4);
+      } else {
+        ctx.rect(plusBx, by, badgeSize, badgeSize);
+      }
+      ctx.fill();
+      ctx.fillStyle = '#0b0f19';
+      ctx.font = `bold ${Math.floor(badgeSize * 0.52)}px Roboto, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`+${efectosList.length - maxBadges}`, plusBx + badgeSize / 2, by + badgeSize / 2 + 1);
+    }
+
+    ctx.restore();
   }
 
   let lastMoveEmitTime = 0;
@@ -2132,7 +2469,7 @@
               return f && esDuenioDeFicha(f);
             });
           }
-          
+
           updateMultiSelectBadge();
           if (dom.diceTokenSelect) {
             dom.diceTokenSelect.value = selectedFichasIds[0] || '';
@@ -2141,8 +2478,9 @@
               dom.diceTokenSelect.value = selectedFichasIds[0];
             }
           }
+          updateDiceEffectsBanner();
           isDraggingToken = selectedFichasIds.length > 0;
-          
+
           dragOffsets = {};
           selectedFichasIds.forEach(id => {
             const f = state.fichas.find(fi => fi.id === id);
@@ -2150,7 +2488,7 @@
               dragOffsets[id] = { x: gridPos.x - f.x, y: gridPos.y - f.y };
             }
           });
-          
+
           renderFichasList();
           markDirty();
           return;
@@ -2325,7 +2663,7 @@
           }
         }
       });
-      
+
       if (didMove) {
         tokenDidActuallyMove = true;
         if (now - lastMoveEmitTime > 40) {
@@ -2714,8 +3052,8 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ snapshot: false }),
               keepalive: true
-            }).catch(() => {});
-          } catch (_) {}
+            }).catch(() => { });
+          } catch (_) { }
         }
       }
       autoSaveGame();
@@ -2823,16 +3161,16 @@
       const dmNameEl = document.getElementById('create-dm-name');
       const imgUrlEl = document.getElementById('create-game-img-url') || document.getElementById('new-game-image');
       const imgFileEl = document.getElementById('create-game-img-file');
-      
+
       const nombre = (titleEl && titleEl.value.trim()) ? titleEl.value.trim() : 'Nueva Partida';
       const dmName = (dmNameEl && dmNameEl.value.trim()) ? dmNameEl.value.trim() : (localStorage.getItem('vtt_username') || 'Dungeon Master');
-      
+
       let imagenPortada = imgUrlEl ? imgUrlEl.value.trim() : '';
       if (imgFileEl && imgFileEl.files && imgFileEl.files[0]) {
         try {
           const comp = await compressImageFile(imgFileEl.files[0], 800, 500, 0.82);
           if (comp) imagenPortada = comp;
-        } catch (_) {}
+        } catch (_) { }
       }
 
       localStorage.setItem('vtt_username', dmName);
@@ -3022,7 +3360,7 @@
         try {
           const comp = await compressImageFile(dom.editGameImgFile.files[0], 800, 500, 0.82);
           if (comp) nuevaImagen = comp;
-        } catch (_) {}
+        } catch (_) { }
       }
 
       const usuarioId = localStorage.getItem('vtt_user_id') || state.usuario?.id || '';
@@ -3361,8 +3699,113 @@
         selectedFichasIds = [];
       }
       updateMultiSelectBadge();
+      updateDiceEffectsBanner();
       renderFichasList();
       markDirty();
+    });
+
+    // --- EFECTOS Y CONDICIONES VISUALES (ALPHA) LISTENERS ---
+    const btnToggleAlphaEffects = document.getElementById('btn-toggle-alpha-effects');
+    btnToggleAlphaEffects?.addEventListener('click', () => {
+      state.alphaTokenEffects = !state.alphaTokenEffects;
+      localStorage.setItem('vtt_alpha_token_effects', String(state.alphaTokenEffects));
+      const chkCanvas = document.getElementById('check-canvas-alpha-effects');
+      if (chkCanvas) chkCanvas.checked = state.alphaTokenEffects;
+      markDirty();
+      showToast(`🏷️ Recuadros de efectos en tokens: ${state.alphaTokenEffects ? 'ACTIVADOS [ALPHA]' : 'DESACTIVADOS'}`, 'gold');
+    });
+
+    const chkCanvasAlphaEffects = document.getElementById('check-canvas-alpha-effects');
+    chkCanvasAlphaEffects?.addEventListener('change', (e) => {
+      state.alphaTokenEffects = e.target.checked;
+      localStorage.setItem('vtt_alpha_token_effects', String(state.alphaTokenEffects));
+      markDirty();
+    });
+
+    const chkDiceAutoEffects = document.getElementById('check-dice-auto-effects');
+    chkDiceAutoEffects?.addEventListener('change', (e) => {
+      state.autoDiceEffects = e.target.checked;
+      localStorage.setItem('vtt_auto_dice_effects', String(state.autoDiceEffects));
+      updateDiceEffectsBanner();
+      showToast(state.autoDiceEffects ? '⚡ Ajuste automático de dados con efectos ACTIVO' : 'ℹ️ Ajuste de dados con efectos MANUAL (Informativo)', 'info');
+    });
+
+    // Pestañas del modal de efectos
+    document.querySelectorAll('.btn-effects-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetTab = btn.dataset.tab;
+        document.querySelectorAll('.btn-effects-tab').forEach(b => b.classList.toggle('active', b === btn));
+        document.querySelectorAll('.effects-tab-content').forEach(c => c.classList.toggle('hidden', c.id !== targetTab));
+      });
+    });
+
+    // Filtros y búsqueda en catálogo D&D 5e
+    let currentCatalogFilterTag = 'todos';
+    const inputSearchEffects = document.getElementById('input-search-effects');
+    inputSearchEffects?.addEventListener('input', (e) => {
+      renderDndConditionsCatalog(e.target.value, currentCatalogFilterTag);
+    });
+
+    document.querySelectorAll('.effects-filter-tags .tag-filter').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.effects-filter-tags .tag-filter').forEach(b => b.classList.toggle('active', b === btn));
+        currentCatalogFilterTag = btn.dataset.tag || 'todos';
+        renderDndConditionsCatalog(inputSearchEffects?.value || '', currentCatalogFilterTag);
+      });
+    });
+
+    // Iconos rápidos del formulario custom
+    document.querySelectorAll('.btn-quick-icon').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const iconInput = document.getElementById('custom-effect-icon');
+        if (iconInput) iconInput.value = btn.textContent.trim();
+      });
+    });
+
+    // Formulario de creación de efecto personalizado (DM)
+    const formCustomEffect = document.getElementById('form-create-custom-effect');
+    formCustomEffect?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const nameInput = document.getElementById('custom-effect-name');
+      const iconInput = document.getElementById('custom-effect-icon');
+      const colorInput = document.getElementById('custom-effect-color');
+      const modSelect = document.getElementById('custom-effect-dice-mod');
+      const durInput = document.getElementById('custom-effect-duration');
+      const imgInput = document.getElementById('custom-effect-img-url');
+      const descInput = document.getElementById('custom-effect-desc');
+
+      const nombre = nameInput ? nameInput.value.trim() : '';
+      if (!nombre) return;
+
+      const efectoNuevo = {
+        id: 'cust_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        nombre,
+        icono: (iconInput && iconInput.value.trim()) ? iconInput.value.trim() : '✨',
+        imagen: (imgInput && imgInput.value.trim()) ? imgInput.value.trim() : '',
+        color: (colorInput && colorInput.value) ? colorInput.value : '#ef4444',
+        ajusteDado: (modSelect && modSelect.value) ? modSelect.value : 'ninguno',
+        tipoDado: 'todos',
+        duracion: (durInput && durInput.value.trim()) ? durInput.value.trim() : 'Indefinida',
+        descripcion: (descInput && descInput.value.trim()) ? descInput.value.trim() : '',
+        origen: 'custom'
+      };
+
+      if (currentEditingFichaEffectsId) {
+        asignarEfectoAFicha(currentEditingFichaEffectsId, efectoNuevo);
+      }
+
+      if (state.usuario?.esDM && state.partida?.id) {
+        socket?.emit('guardar_efecto_catalogo', {
+          partidaId: state.partida.id,
+          efecto: efectoNuevo
+        });
+      }
+
+      nameInput.value = '';
+      if (descInput) descInput.value = '';
+      if (imgInput) imgInput.value = '';
+      const tabActivosBtn = document.querySelector('.btn-effects-tab[data-tab="tab-active-effects"]');
+      if (tabActivosBtn) tabActivosBtn.click();
     });
 
     // Chat
@@ -3478,7 +3921,7 @@
               if (webpData && webpData.startsWith('data:image/webp')) {
                 resizedBase64 = webpData;
               }
-            } catch (_) {}
+            } catch (_) { }
             if (!resizedBase64) {
               resizedBase64 = canvas.toDataURL('image/jpeg', 0.82);
             }
@@ -3712,7 +4155,7 @@
     };
 
     // Función unificada para crear y colocar prop en el mapa
-    window.crearYColocarProp = function(name, url, w, h, layer, rot = 0) {
+    window.crearYColocarProp = function (name, url, w, h, layer, rot = 0) {
       const escenaCur = getEscenaActual();
       if (!escenaCur || !state.partida?.id) {
         showToast('No hay escena disponible para colocar el objeto.', 'warning');
@@ -3855,11 +4298,73 @@
 
     const isDamageOrHeal = (classif === 'Daño' || classif === 'Curación');
 
+    // Determinar la ficha objetivo para animación y lectura de efectos
+    const targetTokenId = fichaId || (selectedFichasIds && selectedFichasIds[0]) || dom.diceTokenSelect?.value || '';
+    const targetFicha = targetTokenId ? (state.fichas || []).find(f => f.id === targetTokenId) : null;
+    const targetNombre = targetFicha ? targetFicha.nombre : '';
+
+    // Detección de efectos activos en la criatura para ajuste de dados [ALPHA]
+    let efectosFicha = [];
+    if (targetFicha?.efectos) {
+      if (Array.isArray(targetFicha.efectos)) efectosFicha = targetFicha.efectos;
+      else if (typeof targetFicha.efectos === 'string' && targetFicha.efectos.trim()) {
+        try { efectosFicha = JSON.parse(targetFicha.efectos); } catch (_) {}
+      }
+    }
+
+    let finalMode = mode;
+    const effectNotes = [];
+    const autoEffects = state.autoDiceEffects !== false;
+
+    if (efectosFicha.length > 0) {
+      const hasDesv = efectosFicha.some(e => e.ajusteDado === 'desventaja');
+      const hasVent = efectosFicha.some(e => e.ajusteDado === 'ventaja');
+      const hasBless = efectosFicha.some(e => e.ajusteDado === '+1d4');
+      const hasBane = efectosFicha.some(e => e.ajusteDado === '-1d4');
+      const hasPlus2 = efectosFicha.some(e => e.ajusteDado === '+2');
+      const hasMinus2 = efectosFicha.some(e => e.ajusteDado === '-2');
+
+      if (autoEffects && !isDamageOrHeal) {
+        if (hasDesv && finalMode === 'normal') {
+          finalMode = 'desventaja';
+          effectNotes.push('Desventaja auto');
+        }
+        if (hasVent && finalMode === 'normal') {
+          finalMode = 'ventaja';
+          effectNotes.push('Ventaja auto');
+        }
+        if (hasBless) {
+          rawFormula += '+1d4';
+          effectNotes.push('+1d4 Bendición');
+        }
+        if (hasBane) {
+          rawFormula += '-1d4';
+          effectNotes.push('-1d4 Perdición');
+        }
+        if (hasPlus2) {
+          rawFormula += '+2';
+          effectNotes.push('+2 Bono');
+        }
+        if (hasMinus2) {
+          rawFormula += '-2';
+          effectNotes.push('-2 Penalizador');
+        }
+      } else if (!autoEffects) {
+        // Notificar al usuario lo que debe hacer según la regla si eligió modo manual
+        const nombresConEfecto = efectosFicha.filter(e => e.ajusteDado && e.ajusteDado !== 'ninguno');
+        if (nombresConEfecto.length > 0) {
+          const detalle = nombresConEfecto.map(e => `${e.icono || ''}${e.nombre}: ${e.ajusteDado}`).join(' | ');
+          effectNotes.push(`Regla: ${detalle}`);
+          showToast(`ℹ️ Efectos en ${targetFicha.nombre}: ${detalle}. Aplica el botón si deseas ajustarlo.`, 'info');
+        }
+      }
+    }
+
     try {
       if (!isDamageOrHeal) {
-        if (mode === 'ventaja') {
+        if (finalMode === 'ventaja') {
           rawFormula = rawFormula.replace(/1d20/g, '2d20kh1');
-        } else if (mode === 'desventaja') {
+        } else if (finalMode === 'desventaja') {
           rawFormula = rawFormula.replace(/1d20/g, '2d20kl1');
         }
       }
@@ -3869,17 +4374,16 @@
 
       // Construir texto de fórmula con detalle de dados
       let formulaDisplay = originalFormula;
-      if (!isDamageOrHeal && mode !== 'normal' && diceResult.rollDetails.length > 0) {
-        const modeLabel = mode === 'ventaja' ? '⭐Ventaja' : '🌑Desventaja';
+      if (!isDamageOrHeal && finalMode !== 'normal' && diceResult.rollDetails.length > 0) {
+        const modeLabel = finalMode === 'ventaja' ? '⭐Ventaja' : '🌑Desventaja';
         formulaDisplay = `${originalFormula} [${modeLabel}: ${diceResult.rollDetails.join(', ')}]`;
       } else if (diceResult.rollDetails.length > 0) {
         formulaDisplay = `${originalFormula} [${diceResult.rollDetails.join(', ')}]`;
       }
 
-      // Determinar la ficha objetivo para animación y asignaciones (Iniciativa / Daño / Curación)
-      const targetTokenId = fichaId || (selectedFichasIds && selectedFichasIds[0]) || dom.diceTokenSelect?.value || '';
-      const targetFicha = targetTokenId ? (state.fichas || []).find(f => f.id === targetTokenId) : null;
-      const targetNombre = targetFicha ? targetFicha.nombre : '';
+      if (effectNotes.length > 0) {
+        formulaDisplay += ` [⚡${effectNotes.join(' - ')}]`;
+      }
 
       socket?.emit('lanzar_dados', {
         partidaId: state.partida.id,
@@ -3998,11 +4502,11 @@
     const trimmed = text.trim();
     if (trimmed.startsWith('data:image/')) return true;
     return IMAGE_URL_REGEX.test(trimmed) ||
-           TENOR_URL_REGEX.test(trimmed) ||
-           GIPHY_URL_REGEX.test(trimmed) ||
-           IMGBB_REGEX.test(trimmed) ||
-           DISCORD_MEDIA_REGEX.test(trimmed) ||
-           /\.(gif|png|jpe?g|webp|svg)(\?.*)?$/i.test(trimmed);
+      TENOR_URL_REGEX.test(trimmed) ||
+      GIPHY_URL_REGEX.test(trimmed) ||
+      IMGBB_REGEX.test(trimmed) ||
+      DISCORD_MEDIA_REGEX.test(trimmed) ||
+      /\.(gif|png|jpe?g|webp|svg)(\?.*)?$/i.test(trimmed);
   }
 
   function sendChatMessage() {
@@ -4446,7 +4950,7 @@
       const isMe = j.id === state.usuario.id;
       const btnMakeDM = state.usuario.esDM && !j.esDM ? `<button class="btn btn-sm btn-primary btn-make-dm" style="margin-left:8px;" data-id="${j.id}">Hacer DM</button>` : '';
       const btnRemoveDM = state.usuario.esDM && j.esDM && !isMe ? `<button class="btn btn-sm btn-danger btn-remove-dm" style="margin-left:8px;" data-id="${j.id}">Quitar DM</button>` : '';
-      
+
       const div = document.createElement('div');
       div.className = 'dm-player-item';
       div.style = 'display: flex; justify-content: space-between; align-items: center; padding: 5px; background: rgba(0,0,0,0.3); border-radius: 4px;';
@@ -4454,21 +4958,21 @@
         <span><i class="fa-solid fa-user${j.esDM ? '-shield gold-text' : ''}"></i> ${j.nombre}</span>
         <div>${btnMakeDM}${btnRemoveDM}</div>
       `;
-      
+
       const btnMake = div.querySelector('.btn-make-dm');
       if (btnMake) {
         btnMake.addEventListener('click', () => {
           socket?.emit('toggle_dm', { partidaId: state.partida.id, targetUsuarioId: j.id, makeDM: true });
         });
       }
-      
+
       const btnRemove = div.querySelector('.btn-remove-dm');
       if (btnRemove) {
         btnRemove.addEventListener('click', () => {
           socket?.emit('toggle_dm', { partidaId: state.partida.id, targetUsuarioId: j.id, makeDM: false });
         });
       }
-      
+
       dom.dmPlayersList.appendChild(div);
     });
   }
@@ -4560,10 +5064,12 @@
             <div class="ficha-name">${displayName} ${ocultoBadge}</div>
             <div class="ficha-sub">${subInfoText}</div>
             ${hpBarHtml}
+            ${renderFichaEffectsHtml(ficha)}
           </div>
         </div>
         <div class="ficha-actions">
           <button class="btn btn-sm btn-secondary btn-center-ficha" title="Centrar cámara en esta ficha"><i class="fa-solid fa-crosshairs"></i></button>
+          <button class="btn btn-sm btn-secondary btn-manage-effects" title="Gestionar Estados y Efectos [ALPHA]"><i class="fa-solid fa-sparkles gold-text"></i> Estados</button>
           ${btnAddCombatHtml}
           ${tieneNotasVisibles ? `<button class="btn btn-sm btn-secondary btn-ver-notas" title="Ver rasgos, hechizos y notas"><i class="fa-solid fa-scroll gold-text"></i> Notas</button>` : ''}
           ${esPropietario ? `<button class="btn btn-sm ${ficha.gigante ? 'btn-gold' : 'btn-secondary'} btn-gigante" title="${ficha.gigante ? 'Volver a tamaño normal' : 'Aumentar a tamaño gigante'}"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> ${ficha.gigante ? 'Normal' : 'Gigante'}</button>` : ''}
@@ -4606,6 +5112,20 @@
       card.querySelector('.btn-center-ficha')?.addEventListener('click', (e) => {
         e.stopPropagation();
         centerOnToken(ficha.id);
+      });
+
+      card.querySelector('.btn-manage-effects')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openModalFichaEfectos(ficha.id);
+      });
+
+      card.querySelectorAll('.btn-remove-effect')?.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const efectoId = btn.dataset.efectoId;
+          const fId = btn.dataset.fichaId;
+          if (fId && efectoId) removerEfectoDeFicha(fId, efectoId);
+        });
       });
 
       function abrirModalNotas() {
@@ -4698,7 +5218,7 @@
 
       card.addEventListener('click', (e) => {
         if (e.target.closest('button') || e.target.closest('img')) return;
-        
+
         // Si no es DM y la ficha no es suya, no permitir seleccionarla para mover
         if (!state.usuario?.esDM && !esDuenioDeFicha(ficha)) {
           if (dom.diceTokenSelect) {
@@ -4724,7 +5244,7 @@
             return f && esDuenioDeFicha(f);
           });
         }
-        
+
         updateMultiSelectBadge();
         if (dom.diceTokenSelect) {
           dom.diceTokenSelect.value = selectedFichasIds[0] || '';
@@ -4733,6 +5253,7 @@
             dom.diceTokenSelect.value = selectedFichasIds[0];
           }
         }
+        updateDiceEffectsBanner();
         if (dom.selectFichaToTemplate) dom.selectFichaToTemplate.value = selectedFichasIds[0] || '';
         renderFichasList();
         markDirty();
@@ -4826,6 +5347,324 @@
     });
 
     openModal(modal);
+  }
+
+  // --- GESTIÓN DE EFECTOS Y CONDICIONES (ALPHA) ---
+  let currentEditingFichaEffectsId = null;
+
+  function renderFichaEffectsHtml(ficha) {
+    let efectos = [];
+    if (Array.isArray(ficha.efectos)) efectos = ficha.efectos;
+    else if (typeof ficha.efectos === 'string' && ficha.efectos.trim()) {
+      try { efectos = JSON.parse(ficha.efectos); } catch (_) { efectos = []; }
+    }
+    if (!efectos || efectos.length === 0) return '';
+
+    const canEdit = state.usuario?.esDM || esDuenioDeFicha(ficha);
+    const chipsHtml = efectos.map(ef => {
+      const bColor = ef.color || '#c9a84c';
+      const iconOrImg = (ef.imagen && ef.imagen.startsWith('http'))
+        ? `<img src="${ef.imagen}" style="width: 14px; height: 14px; border-radius: 2px; vertical-align: middle;">`
+        : `<span>${ef.icono || '✨'}</span>`;
+      const ruleHint = ef.ajusteDado && ef.ajusteDado !== 'ninguno' ? ` [Dados: ${ef.ajusteDado}]` : '';
+      const removeBtn = canEdit ? `<span class="btn-remove-effect" data-ficha-id="${ficha.id}" data-efecto-id="${ef.id}" title="Quitar efecto">✕</span>` : '';
+      return `<span class="ficha-effect-chip" style="border-color: ${bColor};" title="${ef.nombre}: ${ef.descripcion || 'Sin descripción'}${ruleHint}">${iconOrImg} ${ef.nombre}${removeBtn}</span>`;
+    }).join('');
+
+    return `<div class="ficha-effects-row">${chipsHtml}</div>`;
+  }
+
+  function updateDiceEffectsBanner() {
+    const banner = document.getElementById('dice-effects-banner');
+    const chipsEl = document.getElementById('dice-effects-chips');
+    const expEl = document.getElementById('dice-effects-explanation');
+    if (!banner || !chipsEl || !expEl) return;
+
+    const tokenSelectVal = dom.diceTokenSelect ? dom.diceTokenSelect.value : '';
+    const fichaId = tokenSelectVal || (selectedFichasIds && selectedFichasIds[0]) || '';
+    const ficha = fichaId ? (state.fichas || []).find(f => f.id === fichaId) : null;
+
+    if (!ficha) {
+      banner.classList.add('hidden');
+      return;
+    }
+
+    let efectos = [];
+    if (Array.isArray(ficha.efectos)) efectos = ficha.efectos;
+    else if (typeof ficha.efectos === 'string' && ficha.efectos.trim()) {
+      try { efectos = JSON.parse(ficha.efectos); } catch (_) { efectos = []; }
+    }
+
+    if (!efectos || efectos.length === 0) {
+      banner.classList.add('hidden');
+      return;
+    }
+
+    banner.classList.remove('hidden');
+
+    chipsEl.innerHTML = efectos.map(ef => {
+      const bColor = ef.color || '#c9a84c';
+      const icon = ef.icono || '✨';
+      const modText = (ef.ajusteDado && ef.ajusteDado !== 'ninguno') ? ` (${ef.ajusteDado})` : '';
+      return `<span class="ficha-effect-chip" style="border-color: ${bColor}; font-size: 0.76rem;" title="${ef.descripcion || ''}">${icon} ${ef.nombre}<strong>${modText}</strong></span>`;
+    }).join('');
+
+    const autoEnabled = state.autoDiceEffects !== false;
+    const modsDesv = efectos.filter(e => e.ajusteDado === 'desventaja');
+    const modsVent = efectos.filter(e => e.ajusteDado === 'ventaja');
+    const modsBless = efectos.filter(e => e.ajusteDado === '+1d4');
+    const modsBane = efectos.filter(e => e.ajusteDado === '-1d4');
+
+    const explanations = [];
+    if (modsDesv.length > 0) {
+      const names = modsDesv.map(e => e.nombre).join(', ');
+      explanations.push(autoEnabled
+        ? `🌑 ${names}: Desventaja auto (2d20kl1).`
+        : `⚠️ ${names}: Tienes Desventaja. Tira con desventaja manualmente si lo deseas.`);
+    }
+    if (modsVent.length > 0) {
+      const names = modsVent.map(e => e.nombre).join(', ');
+      explanations.push(autoEnabled
+        ? `⭐ ${names}: Ventaja auto (2d20kh1).`
+        : `⭐ ${names}: Tienes Ventaja. Tira con ventaja manualmente si lo deseas.`);
+    }
+    if (modsBless.length > 0) {
+      explanations.push(autoEnabled
+        ? `✨ Bendición: Sumará +1d4 automáticamente a la tirada.`
+        : `✨ Bendición: Recuerda sumar +1d4 a tu tirada de ataque o salvación.`);
+    }
+    if (modsBane.length > 0) {
+      explanations.push(autoEnabled
+        ? `💀 Perdición: Restará -1d4 automáticamente a la tirada.`
+        : `💀 Perdición: Recuerda restar -1d4 a tu tirada de ataque o salvación.`);
+    }
+
+    if (explanations.length === 0) {
+      explanations.push(`ℹ️ Efectos informativos activos en ${ficha.nombre}. No modifican dados automáticamente.`);
+    }
+
+    expEl.innerHTML = explanations.join('<br>');
+  }
+
+  function openModalFichaEfectos(fichaId) {
+    currentEditingFichaEffectsId = fichaId;
+    const ficha = (state.fichas || []).find(f => f.id === fichaId);
+    if (!ficha) return;
+
+    const modal = document.getElementById('modal-ficha-efectos');
+    const nameEl = document.getElementById('modal-effects-target-name');
+    if (nameEl) {
+      nameEl.innerHTML = `Asignando efectos a: <strong>${ficha.nombre}</strong> (${ficha.tipo || 'personaje'})`;
+    }
+
+    const chkCanvas = document.getElementById('check-canvas-alpha-effects');
+    if (chkCanvas) chkCanvas.checked = state.alphaTokenEffects !== false;
+
+    renderActiveFichaEffectsModal(ficha);
+    renderDndConditionsCatalog();
+    renderCustomEffectsSavedList();
+
+    // Activar primera pestaña por defecto
+    document.querySelectorAll('.btn-effects-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === 'tab-active-effects'));
+    document.querySelectorAll('.effects-tab-content').forEach(c => c.classList.toggle('hidden', c.id !== 'tab-active-effects'));
+
+    openModal(modal);
+  }
+
+  function renderActiveFichaEffectsModal(ficha) {
+    const listEl = document.getElementById('ficha-active-effects-list');
+    const countEl = document.getElementById('effects-active-count');
+    if (!listEl) return;
+
+    let efectos = [];
+    if (Array.isArray(ficha.efectos)) efectos = ficha.efectos;
+    else if (typeof ficha.efectos === 'string' && ficha.efectos.trim()) {
+      try { efectos = JSON.parse(ficha.efectos); } catch (_) { efectos = []; }
+    }
+
+    if (countEl) countEl.textContent = String(efectos.length);
+
+    if (efectos.length === 0) {
+      listEl.innerHTML = `
+        <div style="grid-column: 1 / -1; padding: 24px; text-align: center; color: #94a3b8; font-size: 0.9rem;">
+          <p><i class="fa-solid fa-shield-heart" style="font-size: 2rem; color: #64748b; margin-bottom: 8px;"></i></p>
+          <p>Esta criatura no tiene ningún estado o efecto activo.</p>
+          <p style="font-size: 0.8rem; margin-top: 6px; color: #c9a84c;">
+            Haz clic en la pestaña <strong>"Condiciones D&D 5e"</strong> para añadir estados oficiales o en <strong>"Crear Efecto"</strong> para crear uno nuevo.
+          </p>
+        </div>
+      `;
+      return;
+    }
+
+    const canEdit = state.usuario?.esDM || esDuenioDeFicha(ficha);
+
+    listEl.innerHTML = efectos.map(ef => {
+      const bColor = ef.color || '#c9a84c';
+      const icon = ef.icono || '✨';
+      const diceTag = ef.ajusteDado && ef.ajusteDado !== 'ninguno'
+        ? `<span class="active-effect-rule-tag" style="background: rgba(201, 168, 76, 0.2); color: #f0d060; border: 1px solid rgba(201,168,76,0.3);">🎲 ${ef.ajusteDado}</span>`
+        : `<span class="active-effect-rule-tag" style="background: rgba(148, 163, 184, 0.15); color: #cbd5e1;">ℹ️ Informativo</span>`;
+
+      return `
+        <div class="active-effect-card" style="border-left: 3px solid ${bColor};">
+          <div class="active-effect-card-header">
+            <span class="active-effect-name">${icon} ${ef.nombre}</span>
+            ${canEdit ? `<button type="button" class="btn btn-sm btn-danger btn-modal-remove-ef" data-efecto-id="${ef.id}" title="Quitar este efecto"><i class="fa-solid fa-trash"></i></button>` : ''}
+          </div>
+          <div class="active-effect-desc">${ef.descripcion || 'Sin descripción especial.'}</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+            ${diceTag}
+            <small style="color: #64748b; font-size: 0.7rem;">Duración: ${ef.duracion || 'Indefinida'}</small>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    listEl.querySelectorAll('.btn-modal-remove-ef').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const efId = btn.dataset.efectoId;
+        if (currentEditingFichaEffectsId && efId) {
+          removerEfectoDeFicha(currentEditingFichaEffectsId, efId);
+        }
+      });
+    });
+  }
+
+  function renderDndConditionsCatalog(searchQuery = '', filterTag = 'todos') {
+    const grid = document.getElementById('dnd5e-effects-grid');
+    if (!grid) return;
+
+    const query = searchQuery.toLowerCase().trim();
+    const filtrados = CONDICIONES_DND5E.filter(c => {
+      if (query && !c.nombre.toLowerCase().includes(query) && !c.descripcion.toLowerCase().includes(query)) {
+        return false;
+      }
+      if (filterTag === 'desventaja' && c.ajusteDado !== 'desventaja') return false;
+      if (filterTag === 'ventaja' && c.ajusteDado !== 'ventaja' && c.ajusteDado !== '+1d4') return false;
+      if (filterTag === 'dados' && (!c.ajusteDado || c.ajusteDado === 'ninguno')) return false;
+      return true;
+    });
+
+    if (filtrados.length === 0) {
+      grid.innerHTML = '<div style="grid-column: 1 / -1; padding: 20px; text-align: center; color: #94a3b8;">No se encontraron condiciones con ese criterio.</div>';
+      return;
+    }
+
+    grid.innerHTML = filtrados.map(c => {
+      const bColor = c.color || '#c9a84c';
+      const badgeHtml = c.ajusteDado && c.ajusteDado !== 'ninguno'
+        ? `<span class="dnd-condition-badge" style="background: rgba(201, 168, 76, 0.2); color: #f0d060; border: 1px solid rgba(201,168,76,0.3);">${c.ajusteDado}</span>`
+        : `<span class="dnd-condition-badge" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8;">Regla</span>`;
+
+      return `
+        <div class="dnd-condition-card" data-cond-id="${c.id}" style="border-left: 3px solid ${bColor};">
+          <div class="dnd-condition-header">
+            <span>${c.icono}</span>
+            <span style="flex: 1;">${c.nombre}</span>
+            ${badgeHtml}
+          </div>
+          <div class="dnd-condition-desc" title="${c.descripcion}">${c.descripcion}</div>
+          <button type="button" class="btn btn-sm btn-secondary btn-apply-cond" style="margin-top: 6px; padding: 3px 6px; font-size: 0.72rem; width: 100%;">
+            <i class="fa-solid fa-plus"></i> Aplicar a Ficha
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    grid.querySelectorAll('.btn-apply-cond').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const card = btn.closest('.dnd-condition-card');
+        const condId = card?.dataset.condId;
+        const cond = CONDICIONES_DND5E.find(c => c.id === condId);
+        if (cond && currentEditingFichaEffectsId) {
+          asignarEfectoAFicha(currentEditingFichaEffectsId, cond);
+        }
+      });
+    });
+  }
+
+  function renderCustomEffectsSavedList() {
+    const listEl = document.getElementById('custom-effects-saved-list');
+    if (!listEl) return;
+
+    const catalog = state.customEffectsCatalog || [];
+    if (catalog.length === 0) {
+      listEl.innerHTML = '<div style="color: #64748b; font-size: 0.8rem; padding: 6px;">No hay efectos personalizados creados todavía en esta partida.</div>';
+      return;
+    }
+
+    listEl.innerHTML = catalog.map(ef => {
+      const bColor = ef.color || '#c9a84c';
+      return `
+        <div class="dnd-condition-card" style="border-left: 3px solid ${bColor};">
+          <div class="dnd-condition-header">
+            <span>${ef.icono || '✨'}</span>
+            <span style="flex: 1;">${ef.nombre}</span>
+            ${state.usuario?.esDM ? `<button type="button" class="btn btn-sm btn-danger btn-del-cust-cat" data-id="${ef.id}" title="Eliminar de catálogo" style="padding: 1px 5px; font-size: 0.65rem;">✕</button>` : ''}
+          </div>
+          <div class="dnd-condition-desc">${ef.descripcion || 'Sin descripción'}</div>
+          <button type="button" class="btn btn-sm btn-gold btn-apply-saved-custom" data-id="${ef.id}" style="margin-top: 4px; padding: 2px 6px; font-size: 0.72rem;">
+            <i class="fa-solid fa-plus"></i> Aplicar
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    listEl.querySelectorAll('.btn-apply-saved-custom').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ef = catalog.find(e => e.id === btn.dataset.id);
+        if (ef && currentEditingFichaEffectsId) {
+          asignarEfectoAFicha(currentEditingFichaEffectsId, ef);
+        }
+      });
+    });
+
+    listEl.querySelectorAll('.btn-del-cust-cat').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (confirm('¿Eliminar este efecto del catálogo de la partida?')) {
+          socket?.emit('eliminar_efecto_catalogo', { partidaId: state.partida?.id, efectoId: btn.dataset.id });
+        }
+      });
+    });
+  }
+
+  function asignarEfectoAFicha(fichaId, efecto) {
+    if (!state.partida?.id || !fichaId || !efecto) return;
+    socket?.emit('asignar_efecto_ficha', {
+      partidaId: state.partida.id,
+      fichaId,
+      efecto
+    });
+    showToast(`✨ Efecto "${efecto.nombre}" asignado.`, 'gold');
+
+    setTimeout(() => {
+      const ficha = (state.fichas || []).find(f => f.id === fichaId);
+      if (ficha) renderActiveFichaEffectsModal(ficha);
+      updateDiceEffectsBanner();
+      renderFichasList();
+      markDirty();
+    }, 150);
+  }
+
+  function removerEfectoDeFicha(fichaId, efectoId) {
+    if (!state.partida?.id || !fichaId || !efectoId) return;
+    socket?.emit('remover_efecto_ficha', {
+      partidaId: state.partida.id,
+      fichaId,
+      efectoId
+    });
+    showToast('💨 Efecto retirado.', 'info');
+
+    setTimeout(() => {
+      const ficha = (state.fichas || []).find(f => f.id === fichaId);
+      if (ficha) renderActiveFichaEffectsModal(ficha);
+      updateDiceEffectsBanner();
+      renderFichasList();
+      markDirty();
+    }, 150);
   }
 
   function updateStagingBanner() {
@@ -4959,7 +5798,7 @@
       if (state.partida?.codigo) {
         localStorage.setItem('vtt_exp_props_' + state.partida.codigo, state.experimentalPropsEnabled ? 'true' : 'false');
       }
-    } catch (_) {}
+    } catch (_) { }
 
     const propsSec = document.getElementById('dm-props-section');
     if (state.usuario?.esDM && state.experimentalPropsEnabled) {
@@ -5162,7 +6001,7 @@
     for (let i = 0; i < quantity; i++) {
       const clone = JSON.parse(JSON.stringify(d));
       delete clone.id; // Asignar nuevo ID único en el servidor
-      
+
       // Dispersión espacial para que no queden superpuestas en el mismo píxel
       const offsetX = quantity > 1 ? (i % 2 === 0 ? Math.floor(i / 2) : -Math.ceil(i / 2)) : 0;
       const offsetY = quantity > 1 ? Math.floor(i / 2) : 0;
@@ -5650,6 +6489,11 @@
       const text = await file.text();
       const backupData = JSON.parse(text);
 
+      const username = (localStorage.getItem('vtt_username') || state.usuario?.nombre || '').trim();
+      const userId = (localStorage.getItem('vtt_user_id') || state.usuario?.id || '').trim();
+      if (userId) backupData.importerUserId = userId;
+      if (username) backupData.importerUsername = username;
+
       const res = await fetch('/api/partidas/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -5668,7 +6512,6 @@
       loadGamesList();
 
       // Auto unirse directo a la partida sin recargar
-      const username = localStorage.getItem('vtt_username') || state.usuario.nombre || '';
       joinGameDirect(data.codigo, username);
     } catch (err) {
       alert(`❌ Error al importar la sesión: ${err.message}`);
@@ -5753,9 +6596,9 @@
         }
       }
       keysToRemove.forEach(k => {
-        try { localStorage.removeItem(k); } catch (_) {}
+        try { localStorage.removeItem(k); } catch (_) { }
       });
-    } catch (_) {}
+    } catch (_) { }
   }
 
   let quotaWarningLogged = false;
@@ -6181,7 +7024,7 @@
       initSocket();
     }
     if (socket && !socket.connected) {
-      try { socket.connect(); } catch (_) {}
+      try { socket.connect(); } catch (_) { }
     }
 
     // Emitir unirse_partida garantizando socket activo

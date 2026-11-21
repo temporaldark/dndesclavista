@@ -3445,4 +3445,342 @@ button:hover .icon-swords {
   }
 }
 
+/* ==========================================================================
+   SISTEMA DE EFECTOS Y CONDICIONES VISUALES [ALPHA]
+   ========================================================================== */
+.badge-alpha {
+  display: inline-block;
+  padding: 1px 5px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  border-radius: 4px;
+  background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+  color: #031525;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+  line-height: 1.2;
+}
+
+/* Fila de efectos en la tarjeta de ficha */
+.ficha-effects-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 2px 0;
+  align-items: center;
+}
+
+.ficha-effect-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid #c9a84c;
+  color: #f8fafc;
+  cursor: help;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.ficha-effect-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.ficha-effect-chip .btn-remove-effect {
+  cursor: pointer;
+  opacity: 0.6;
+  font-size: 0.75rem;
+  margin-left: 2px;
+  transition: opacity 0.15s;
+}
+
+.ficha-effect-chip .btn-remove-effect:hover {
+  opacity: 1;
+  color: #ef4444;
+}
+
+/* Banner de Efectos en el Lanzador de Dados */
+.dice-effects-banner {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
+  border: 1px solid rgba(201, 168, 76, 0.4);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  animation: fadeInDown 0.2s ease-out;
+}
+
+.dice-effects-banner.hidden {
+  display: none !important;
+}
+
+.dice-effects-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.dice-effects-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.dice-auto-toggle-label {
+  font-size: 0.76rem;
+  color: #cbd5e1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dice-effects-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+
+.dice-effects-explanation {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-style: italic;
+  line-height: 1.3;
+}
+
+/* Modal de Efectos */
+.modal-effects-container {
+  max-width: 680px;
+  width: 95%;
+}
+
+.modal-effects-body {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+.effects-tabs-header {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+
+.btn-effects-tab {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.btn-effects-tab:hover {
+  background: rgba(51, 65, 85, 0.8);
+  color: #f1f5f9;
+}
+
+.btn-effects-tab.active {
+  background: #c9a84c;
+  color: #0b0f19;
+  border-color: #f0d060;
+  font-weight: 700;
+}
+
+.active-effects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.active-effect-card {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(201, 168, 76, 0.3);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  position: relative;
+}
+
+.active-effect-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.active-effect-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.active-effect-desc {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  line-height: 1.3;
+}
+
+.active-effect-rule-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+/* Catálogo de Condiciones D&D 5e */
+.effects-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.effects-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #f8fafc;
+  font-size: 0.85rem;
+}
+
+.effects-filter-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag-filter {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tag-filter.active,
+.tag-filter:hover {
+  background: rgba(201, 168, 76, 0.2);
+  border-color: #c9a84c;
+  color: #f0d060;
+}
+
+.dnd-effects-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.dnd-condition-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dnd-condition-card:hover {
+  background: rgba(30, 41, 59, 0.85);
+  border-color: #c9a84c;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.dnd-condition-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.dnd-condition-desc {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dnd-condition-badge {
+  align-self: flex-start;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+/* Paleta de iconos rápidos para creador custom */
+.quick-icons-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn-quick-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  user-select: none;
+  transition: all 0.12s;
+}
+
+.btn-quick-icon:hover {
+  background: rgba(201, 168, 76, 0.25);
+  border-color: #c9a84c;
+  transform: scale(1.15);
+}
+
+.custom-effects-saved-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
 

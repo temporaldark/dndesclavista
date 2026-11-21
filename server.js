@@ -94,17 +94,17 @@ async function verificarMapaEscena(escena) {
     if (fs.existsSync(mapsDir)) {
       existsOnDisk = fs.readdirSync(mapsDir).some(f => f.startsWith(prefix));
     }
-  } catch (_) {}
+  } catch (_) { }
   if (existsOnDisk) return;
 
   // Si no está en disco, verificar si existe mapa_data en la BD
   try {
     const row = await dbGet(`SELECT mapa_data FROM escenas WHERE id = ?`, [escena.id]);
     if (row?.mapa_data && typeof row.mapa_data === 'string' && row.mapa_data.startsWith('data:')) {
-      try { await guardarMapaEnDisco(escena.id, row.mapa_data); } catch (_) {}
+      try { await guardarMapaEnDisco(escena.id, row.mapa_data); } catch (_) { }
       return;
     }
-  } catch (_) {}
+  } catch (_) { }
 
   // Verificar si está en algún backup/snapshot
   try {
@@ -114,17 +114,17 @@ async function verificarMapaEscena(escena) {
         try {
           await dbRun(`UPDATE escenas SET mapa_data = ? WHERE id = ?`, [b64, escena.id]);
           await guardarMapaEnDisco(escena.id, b64);
-        } catch (_) {}
+        } catch (_) { }
         return;
       }
     }
-  } catch (_) {}
+  } catch (_) { }
 
   // Si no existe en ningún lado (archivo huérfano de un reinicio previo de Railway):
   // Limpiar el enlace roto de la BD para que el cliente no intente descargarlo ni genere 404
   try {
     await dbRun(`UPDATE escenas SET mapa = NULL WHERE id = ?`, [escena.id]);
-  } catch (_) {}
+  } catch (_) { }
   escena.mapa = null;
 }
 
@@ -165,7 +165,7 @@ app.get('/api/escenas/:id/mapa', async (req, res) => {
       if (rawData) {
         try {
           await dbRun(`UPDATE escenas SET mapa_data = ? WHERE id = ?`, [rawData, id]);
-        } catch (_) {}
+        } catch (_) { }
       }
     }
 
@@ -173,7 +173,7 @@ app.get('/api/escenas/:id/mapa', async (req, res) => {
       // Regenerar en caché de disco para acelerar próximas peticiones
       try {
         await guardarMapaEnDisco(id, rawData);
-      } catch (_) {}
+      } catch (_) { }
 
       const matches = rawData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
       if (matches && matches.length === 3) {
@@ -194,7 +194,7 @@ app.get('/api/escenas/:id/mapa', async (req, res) => {
     // Limpiar en BD para evitar futuras llamadas rotas
     try {
       await dbRun(`UPDATE escenas SET mapa = NULL WHERE id = ?`, [id]);
-    } catch (_) {}
+    } catch (_) { }
 
     // Responder 200 con pixel transparente para no registrar error 404 rojo en la consola del navegador
     const emptyPixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
@@ -220,7 +220,7 @@ function generarCodigoPartida() {
 
 // Colores únicos para asignar a usuarios
 const COLORES_USUARIOS = [
-  '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c', 
+  '#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c',
   '#3498db', '#9b59b6', '#fd79a8', '#00cec9', '#6c5ce7'
 ];
 
@@ -251,7 +251,7 @@ async function autoRestoreFilesThrottled() {
 app.get('/api/partidas', async (req, res) => {
   try {
     // Sincronización asíncrona en segundo plano (no bloquea el response HTTP)
-    autoRestoreFilesThrottled().catch(() => {});
+    autoRestoreFilesThrottled().catch(() => { });
 
     const partidas = await dbAll(`
       SELECT p.id, p.nombre, p.codigo, p.dm_id, p.escena_activa_id, p.fecha_creacion, p.fecha_modificacion,
@@ -522,7 +522,9 @@ app.post('/api/partidas/import', async (req, res) => {
     }
 
     const { partida, escenas = [], fichas = [], posiciones_fichas = [], figuras = [], dibujos = [], mensajes = [], historial = [], galeria = [] } = backupData;
-    
+    const importerUserId = (backupData.importerUserId || req.headers['x-user-id'] || '').trim();
+    const finalDmId = importerUserId || partida.dm_id || null;
+
     const newPartidaId = uuidv4();
     const newCodigo = generarCodigoPartida();
     const ahora = new Date().toISOString();
@@ -540,7 +542,7 @@ app.post('/api/partidas/import', async (req, res) => {
           newPartidaId,
           nombreLimpio,
           newCodigo,
-          partida.dm_id || null,
+          finalDmId,
           null,
           ahora,
           ahora,
@@ -731,13 +733,21 @@ io.on('connection', (socket) => {
 
       const effectiveUserId = usuarioId || ('usr_' + (nombreUsuario || 'jugador').toLowerCase().trim().replace(/[^a-z0-9]/g, '_'));
 
-      // Determinar si es DM
+      // Determinar si es DM (comprobación tolerante por ID determinista y nombre de usuario)
       let esDM = false;
+      const normalizedDmId = (partida.dm_id || '').toLowerCase().trim();
+      const normalizedUserId = (effectiveUserId || '').toLowerCase().trim();
+      const normalizedUserName = (nombreUsuario || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+
       if (!partida.dm_id) {
         // Fallback por si hay partidas antiguas sin dm_id
         await dbRun(`UPDATE partidas SET dm_id = ? WHERE id = ?`, [effectiveUserId, partida.id]);
         esDM = true;
-      } else if (partida.dm_id === effectiveUserId) {
+      } else if (
+        normalizedDmId === normalizedUserId ||
+        normalizedDmId === ('usr_' + normalizedUserName) ||
+        normalizedDmId.replace(/^usr_/, '') === normalizedUserName
+      ) {
         esDM = true;
       }
 
@@ -803,7 +813,7 @@ io.on('connection', (socket) => {
       if (partida.datos_combate) {
         try {
           combate = JSON.parse(partida.datos_combate);
-        } catch (_) {}
+        } catch (_) { }
       }
 
       socket.emit('estado_inicial', {
@@ -838,7 +848,7 @@ io.on('connection', (socket) => {
         const fs = require('fs');
         const expectedSave = path.join(__dirname, 'data', 'saves', `partida_${partida.codigo.toUpperCase()}.json`);
         if (!fs.existsSync(expectedSave)) {
-          savePartidaToFile(partida.id, false).catch(() => {});
+          savePartidaToFile(partida.id, false).catch(() => { });
         }
       }
 
@@ -909,6 +919,53 @@ io.on('connection', (socket) => {
       });
     } catch (err) {
       console.error('Error al cambiar nombre de usuario:', err);
+    }
+  });
+
+  // Reclamar rol de DM (si el DM original se desconectó, cambió de dispositivo o el host transfirió el mando)
+  socket.on('reclamar_dm', async ({ partidaId }) => {
+    try {
+      const pId = partidaId || socket.data?.partidaId;
+      if (!pId) return;
+
+      const partida = await dbGet(`SELECT * FROM partidas WHERE id = ?`, [pId]);
+      if (!partida) return;
+
+      const userId = socket.data?.usuarioId;
+      const userName = socket.data?.nombreUsuario || 'Dungeon Master';
+
+      // Actualizar en base de datos el nuevo DM
+      await dbRun(`UPDATE partidas SET dm_id = ? WHERE id = ?`, [userId, pId]);
+      socket.data.esDM = true;
+
+      // Actualizar en memoria el usuario en connectedUsers
+      const usersInGame = connectedUsers.get(pId);
+      if (usersInGame && usersInGame.has(socket.id)) {
+        usersInGame.get(socket.id).esDM = true;
+      }
+
+      // Notificar al propio usuario
+      socket.emit('usuario_actualizado', { id: userId, nombre: userName, esDM: true });
+
+      // Notificar a toda la sala
+      io.to(pId).emit('dm_actualizado', { dm_id: userId, dm_nombre: userName });
+      io.to(pId).emit('lista_jugadores', Array.from(usersInGame?.values() || []));
+
+      // Guardar en archivo
+      await savePartidaToFile(pId, false);
+
+      io.to(pId).emit('nuevo_mensaje', {
+        id: uuidv4(),
+        partida_id: pId,
+        usuario_id: 'sistema',
+        nombre_usuario: 'Sistema',
+        color_usuario: '#c9a84c',
+        mensaje: `👑 ${userName} ha asumido el rol de Dungeon Master de la partida.`,
+        es_gif: 0,
+        fecha: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error('Error al reclamar DM:', err);
     }
   });
 
@@ -1243,7 +1300,7 @@ io.on('connection', (socket) => {
       const {
         nombre, tipo, jugadorId, jugador_id, imagen, fuerza, destreza, constitucion,
         inteligencia, sabiduria, carisma, hpActual, hp_actual, hpMaximo, hp_maximo, ac, velocidad,
-        iniciativa, nivel, altura, tamanioBase, tamanio_base, color_aro, notas, x = 5, y = 5, revelado
+        iniciativa, nivel, altura, tamanioBase, tamanio_base, color_aro, notas, x = 5, y = 5, revelado, efectos
       } = payload;
 
       const tipoFinal = tipo || 'jugador';
@@ -1260,10 +1317,14 @@ io.on('connection', (socket) => {
         ? (typeof revelado === 'object' ? JSON.stringify(revelado) : revelado)
         : defaultRevelado;
 
+      const finalEfectos = efectos !== undefined
+        ? (typeof efectos === 'object' ? JSON.stringify(efectos) : efectos)
+        : '[]';
+
       await dbRun(
-        `INSERT INTO fichas (id, partida_id, escena_id, nombre, tipo, jugador_id, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro, notas, x, y, revelado)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, partidaId, escenaId, finalNombre, tipoFinal, ownerId, imagen, fuerza || 10, destreza || 10, constitucion || 10, inteligencia || 10, sabiduria || 10, carisma || 10, hpActual ?? hp_actual ?? 10, hpMaximo ?? hp_maximo ?? 10, ac ?? 10, velocidad ?? 30, iniciativa ?? 0, nivel ?? 1, altura ?? 2, tamanioBase || tamanio_base || 'mediano', color_aro || '#c9a84c', notas || '', x, y, finalRevelado]
+        `INSERT INTO fichas (id, partida_id, escena_id, nombre, tipo, jugador_id, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro, notas, x, y, revelado, efectos)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, partidaId, escenaId, finalNombre, tipoFinal, ownerId, imagen, fuerza || 10, destreza || 10, constitucion || 10, inteligencia || 10, sabiduria || 10, carisma || 10, hpActual ?? hp_actual ?? 10, hpMaximo ?? hp_maximo ?? 10, ac ?? 10, velocidad ?? 30, iniciativa ?? 0, nivel ?? 1, altura ?? 2, tamanioBase || tamanio_base || 'mediano', color_aro || '#c9a84c', notas || '', x, y, finalRevelado, finalEfectos]
       );
 
       if (escenaId) {
@@ -1320,7 +1381,8 @@ io.on('connection', (socket) => {
         gigante,
         notas = current.notas,
         revelado,
-        oculto
+        oculto,
+        efectos
       } = fichaData;
 
       // Sanitizar nombre para evitar que un string vacío o con espacios borre el nombre actual
@@ -1342,10 +1404,13 @@ io.on('connection', (socket) => {
         : current.revelado;
       const finalGigante = gigante !== undefined ? (gigante ? 1 : 0) : current.gigante;
       const finalOculto = oculto !== undefined ? (oculto ? 1 : 0) : current.oculto;
+      const finalEfectos = efectos !== undefined
+        ? (typeof efectos === 'object' ? JSON.stringify(efectos) : efectos)
+        : (current.efectos || '[]');
 
       await dbRun(
-        `UPDATE fichas SET nombre = ?, tipo = ?, jugador_id = ?, imagen = ?, fuerza = ?, destreza = ?, constitucion = ?, inteligencia = ?, sabiduria = ?, carisma = ?, hp_actual = ?, hp_maximo = ?, ac = ?, velocidad = ?, iniciativa = ?, nivel = ?, altura = ?, tamanio_base = ?, color_aro = ?, gigante = ?, notas = ?, revelado = ?, oculto = ? WHERE id = ?`,
-        [finalNombre, tipo, finalJugadorId, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro || '#c9a84c', finalGigante, notas, finalRevelado, finalOculto, id]
+        `UPDATE fichas SET nombre = ?, tipo = ?, jugador_id = ?, imagen = ?, fuerza = ?, destreza = ?, constitucion = ?, inteligencia = ?, sabiduria = ?, carisma = ?, hp_actual = ?, hp_maximo = ?, ac = ?, velocidad = ?, iniciativa = ?, nivel = ?, altura = ?, tamanio_base = ?, color_aro = ?, gigante = ?, notas = ?, revelado = ?, oculto = ?, efectos = ? WHERE id = ?`,
+        [finalNombre, tipo, finalJugadorId, imagen, fuerza, destreza, constitucion, inteligencia, sabiduria, carisma, hp_actual, hp_maximo, ac, velocidad, iniciativa, nivel, altura, tamanio_base, color_aro || '#c9a84c', finalGigante, notas, finalRevelado, finalOculto, finalEfectos, id]
       );
 
       const fichaActualizada = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [id]);
@@ -1354,6 +1419,187 @@ io.on('connection', (socket) => {
       scheduleAutoSave(partidaId);
     } catch (err) {
       console.error(err);
+    }
+  });
+
+  // --- GESTIÓN DE EFECTOS Y CONDICIONES VISUALES (ALPHA) ---
+  // Asignar efecto a una ficha
+  socket.on('asignar_efecto_ficha', async ({ partidaId, fichaId, efecto }) => {
+    try {
+      if (!fichaId || !efecto || !efecto.nombre) return;
+      const ficha = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [fichaId]);
+      if (!ficha) return;
+
+      // Verificación de seguridad: DM o dueño de la ficha
+      if (!socket.data?.esDM && !puedeMoverFicha(socket, ficha)) {
+        return socket.emit('error_partida', 'No tienes permiso para modificar los efectos de esta ficha.');
+      }
+
+      let efectos = [];
+      try { efectos = JSON.parse(ficha.efectos || '[]'); } catch (_) { efectos = []; }
+
+      // Generar o normalizar ID del efecto
+      const efectoId = efecto.id || ('ef_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
+      const efectoNorm = {
+        id: efectoId,
+        nombre: efecto.nombre.trim(),
+        icono: efecto.icono || '✨',
+        imagen: efecto.imagen || '',
+        color: efecto.color || '#c9a84c',
+        descripcion: efecto.descripcion || '',
+        ajusteDado: efecto.ajusteDado || 'ninguno',
+        tipoDado: efecto.tipoDado || 'todos',
+        duracion: efecto.duracion || 'Indefinida',
+        origen: efecto.origen || (socket.data?.esDM ? 'dm' : 'jugador'),
+        fechaCreacion: Date.now()
+      };
+
+      // Si ya existía por id o por nombre exacto, reemplazarlo; si no, agregarlo
+      const existingIdx = efectos.findIndex(e => e.id === efectoNorm.id || e.nombre.toLowerCase() === efectoNorm.nombre.toLowerCase());
+      if (existingIdx !== -1) {
+        efectos[existingIdx] = efectoNorm;
+      } else {
+        efectos.push(efectoNorm);
+      }
+
+      const jsonEfectos = JSON.stringify(efectos);
+      await dbRun(`UPDATE fichas SET efectos = ? WHERE id = ?`, [jsonEfectos, fichaId]);
+
+      ficha.efectos = jsonEfectos;
+      cacheFichaOwner(ficha);
+      io.to(partidaId).emit('ficha_actualizada', ficha);
+      scheduleAutoSave(partidaId);
+
+      // Notificar al chat sobre la condición aplicada y la regla para los jugadores
+      let mensajeChat = `✨ "${ficha.nombre}" ahora tiene el efecto: ${efectoNorm.icono} ${efectoNorm.nombre}.`;
+      if (efectoNorm.descripcion) {
+        mensajeChat += ` Regla: ${efectoNorm.descripcion}`;
+      }
+      if (efectoNorm.ajusteDado && efectoNorm.ajusteDado !== 'ninguno') {
+        mensajeChat += ` [Efecto en dados: ${efectoNorm.ajusteDado.toUpperCase()}]`;
+      }
+
+      io.to(partidaId).emit('nuevo_mensaje', {
+        id: uuidv4(),
+        partida_id: partidaId,
+        usuario_id: 'sistema',
+        nombre_usuario: 'Efectos [ALPHA]',
+        color_usuario: efectoNorm.color || '#c9a84c',
+        mensaje: mensajeChat,
+        es_gif: 0,
+        fecha: new Date().toISOString(),
+        nombre_ficha: ficha.nombre
+      });
+    } catch (err) {
+      console.error('Error en asignar_efecto_ficha:', err);
+    }
+  });
+
+  // Remover efecto de una ficha
+  socket.on('remover_efecto_ficha', async ({ partidaId, fichaId, efectoId }) => {
+    try {
+      if (!fichaId || !efectoId) return;
+      const ficha = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [fichaId]);
+      if (!ficha) return;
+
+      if (!socket.data?.esDM && !puedeMoverFicha(socket, ficha)) {
+        return socket.emit('error_partida', 'No tienes permiso para remover efectos de esta ficha.');
+      }
+
+      let efectos = [];
+      try { efectos = JSON.parse(ficha.efectos || '[]'); } catch (_) { efectos = []; }
+
+      const efectoAEliminar = efectos.find(e => e.id === efectoId);
+      efectos = efectos.filter(e => e.id !== efectoId);
+
+      const jsonEfectos = JSON.stringify(efectos);
+      await dbRun(`UPDATE fichas SET efectos = ? WHERE id = ?`, [jsonEfectos, fichaId]);
+
+      ficha.efectos = jsonEfectos;
+      cacheFichaOwner(ficha);
+      io.to(partidaId).emit('ficha_actualizada', ficha);
+      scheduleAutoSave(partidaId);
+
+      if (efectoAEliminar) {
+        io.to(partidaId).emit('nuevo_mensaje', {
+          id: uuidv4(),
+          partida_id: partidaId,
+          usuario_id: 'sistema',
+          nombre_usuario: 'Efectos [ALPHA]',
+          color_usuario: '#94a3b8',
+          mensaje: `💨 "${ficha.nombre}" ya no tiene el efecto: ${efectoAEliminar.icono || '✨'} ${efectoAEliminar.nombre}.`,
+          es_gif: 0,
+          fecha: new Date().toISOString(),
+          nombre_ficha: ficha.nombre
+        });
+      }
+    } catch (err) {
+      console.error('Error en remover_efecto_ficha:', err);
+    }
+  });
+
+  // Guardar efecto en catálogo personalizado de la partida (solo DM)
+  socket.on('guardar_efecto_catalogo', async ({ partidaId, efecto }) => {
+    try {
+      if (!socket.data?.esDM) {
+        return socket.emit('error_partida', 'Solo el Dungeon Master puede modificar el catálogo de efectos.');
+      }
+      if (!partidaId || !efecto || !efecto.nombre) return;
+
+      const partida = await dbGet(`SELECT efectos_catalogo FROM partidas WHERE id = ?`, [partidaId]);
+      if (!partida) return;
+
+      let catalogo = [];
+      try { catalogo = JSON.parse(partida.efectos_catalogo || '[]'); } catch (_) { catalogo = []; }
+
+      const id = efecto.id || ('cust_ef_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
+      const nuevo = {
+        id,
+        nombre: efecto.nombre.trim(),
+        icono: efecto.icono || '✨',
+        imagen: efecto.imagen || '',
+        color: efecto.color || '#c9a84c',
+        descripcion: efecto.descripcion || '',
+        ajusteDado: efecto.ajusteDado || 'ninguno',
+        tipoDado: efecto.tipoDado || 'todos',
+        duracion: efecto.duracion || 'Indefinida',
+        origen: 'custom'
+      };
+
+      const existIdx = catalogo.findIndex(e => e.id === id || e.nombre.toLowerCase() === nuevo.nombre.toLowerCase());
+      if (existIdx !== -1) catalogo[existIdx] = nuevo;
+      else catalogo.push(nuevo);
+
+      const jsonCat = JSON.stringify(catalogo);
+      await dbRun(`UPDATE partidas SET efectos_catalogo = ? WHERE id = ?`, [jsonCat, partidaId]);
+
+      io.to(partidaId).emit('catalogo_efectos_actualizado', catalogo);
+      scheduleAutoSave(partidaId);
+    } catch (err) {
+      console.error('Error en guardar_efecto_catalogo:', err);
+    }
+  });
+
+  // Eliminar efecto del catálogo personalizado de la partida (solo DM)
+  socket.on('eliminar_efecto_catalogo', async ({ partidaId, efectoId }) => {
+    try {
+      if (!socket.data?.esDM) return;
+      if (!partidaId || !efectoId) return;
+
+      const partida = await dbGet(`SELECT efectos_catalogo FROM partidas WHERE id = ?`, [partidaId]);
+      if (!partida) return;
+
+      let catalogo = [];
+      try { catalogo = JSON.parse(partida.efectos_catalogo || '[]'); } catch (_) { catalogo = []; }
+      catalogo = catalogo.filter(e => e.id !== efectoId);
+
+      const jsonCat = JSON.stringify(catalogo);
+      await dbRun(`UPDATE partidas SET efectos_catalogo = ? WHERE id = ?`, [jsonCat, partidaId]);
+
+      io.to(partidaId).emit('catalogo_efectos_actualizado', catalogo);
+      scheduleAutoSave(partidaId);
+    } catch (err) {
+      console.error('Error en eliminar_efecto_catalogo:', err);
     }
   });
 
@@ -1687,10 +1933,10 @@ io.on('connection', (socket) => {
       if (pUsers && pUsers.has(targetUsuarioId)) {
         const targetUser = pUsers.get(targetUsuarioId);
         targetUser.esDM = makeDM;
-        
+
         // Notify the specific user to update their UI
         io.to(targetUser.socketId).emit('update_dm_status', { esDM: makeDM });
-        
+
         // Update the full list for everyone
         const jugadoresConectados = Array.from(pUsers.values());
         io.to(partidaId).emit('lista_jugadores', jugadoresConectados);
@@ -2048,7 +2294,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', async () => {
     console.log(`❌ Cliente desconectado: ${socket.id}`);
-    
+
     // Remover usuario de la lista de conectados y notificar
     const { partidaId, usuarioId } = socket.data || {};
     if (partidaId) {
@@ -2063,7 +2309,7 @@ io.on('connection', (socket) => {
       connectedUsers.get(partidaId).delete(usuarioId);
       const jugadoresConectados = Array.from(connectedUsers.get(partidaId).values());
       io.to(partidaId).emit('lista_jugadores', jugadoresConectados);
-      
+
       // Limpiar el Map si no quedan usuarios
       if (connectedUsers.get(partidaId).size === 0) {
         connectedUsers.delete(partidaId);
@@ -2098,7 +2344,8 @@ async function bootstrap() {
       config_grid_y INTEGER DEFAULT 40,
       config_casilla INTEGER DEFAULT 5,
       imagen_portada TEXT,
-      datos_combate TEXT
+      datos_combate TEXT,
+      efectos_catalogo TEXT DEFAULT '[]'
     )
   `);
 
@@ -2131,7 +2378,8 @@ async function bootstrap() {
       oculto INTEGER DEFAULT 0,
       notas TEXT,
       x REAL DEFAULT 0,
-      y REAL DEFAULT 0
+      y REAL DEFAULT 0,
+      efectos TEXT DEFAULT '[]'
     )
   `);
 

@@ -375,8 +375,10 @@ async function initDb() {
     try { await dbRun(`ALTER TABLE figuras ADD COLUMN IF NOT EXISTS rotacion REAL DEFAULT 0`); } catch (_) {}
     try { await dbRun(`ALTER TABLE partidas ADD COLUMN IF NOT EXISTS imagen_portada TEXT`); } catch (_) {}
     try { await dbRun(`ALTER TABLE partidas ADD COLUMN IF NOT EXISTS datos_combate TEXT`); } catch (_) {}
+    try { await dbRun(`ALTER TABLE partidas ADD COLUMN IF NOT EXISTS efectos_catalogo TEXT DEFAULT '[]'`); } catch (_) {}
     try { await dbRun(`ALTER TABLE fichas ADD COLUMN IF NOT EXISTS color_aro TEXT DEFAULT '#c9a84c'`); } catch (_) {}
     try { await dbRun(`ALTER TABLE fichas ADD COLUMN IF NOT EXISTS oculto INTEGER DEFAULT 0`); } catch (_) {}
+    try { await dbRun(`ALTER TABLE fichas ADD COLUMN IF NOT EXISTS efectos TEXT DEFAULT '[]'`); } catch (_) {}
     try { await dbRun(`ALTER TABLE escenas ADD COLUMN IF NOT EXISTS config_grid_x INTEGER DEFAULT 40`); } catch (_) {}
     try { await dbRun(`ALTER TABLE escenas ADD COLUMN IF NOT EXISTS config_grid_y INTEGER DEFAULT 40`); } catch (_) {}
     try { await dbRun(`ALTER TABLE escenas ADD COLUMN IF NOT EXISTS config_casilla INTEGER DEFAULT 5`); } catch (_) {}
@@ -578,8 +580,10 @@ async function initDb() {
 
   try { await dbRun(`ALTER TABLE partidas ADD COLUMN imagen_portada TEXT`); } catch (_) {}
   try { await dbRun(`ALTER TABLE partidas ADD COLUMN datos_combate TEXT`); } catch (_) {}
+  try { await dbRun(`ALTER TABLE partidas ADD COLUMN efectos_catalogo TEXT DEFAULT '[]'`); } catch (_) {}
   try { await dbRun(`ALTER TABLE fichas ADD COLUMN color_aro TEXT DEFAULT '#c9a84c'`); } catch (_) {}
   try { await dbRun(`ALTER TABLE fichas ADD COLUMN oculto BOOLEAN DEFAULT 0`); } catch (_) {}
+  try { await dbRun(`ALTER TABLE fichas ADD COLUMN efectos TEXT DEFAULT '[]'`); } catch (_) {}
   try { await dbRun(`ALTER TABLE escenas ADD COLUMN config_grid_x INTEGER DEFAULT 40`); } catch (_) {}
   try { await dbRun(`ALTER TABLE escenas ADD COLUMN config_grid_y INTEGER DEFAULT 40`); } catch (_) {}
   try { await dbRun(`ALTER TABLE escenas ADD COLUMN config_casilla INTEGER DEFAULT 5`); } catch (_) {}
