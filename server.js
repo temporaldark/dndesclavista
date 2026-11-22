@@ -686,6 +686,7 @@ function cacheFichaOwner(ficha) {
   if (ficha && ficha.id) {
     tokenOwnerCache.set(ficha.id, {
       id: ficha.id,
+      tipo: ficha.tipo || 'jugador',
       jugador_id: ficha.jugador_id || null,
       nombre: ficha.nombre || ''
     });
@@ -695,19 +696,26 @@ function cacheFichaOwner(ficha) {
 function puedeMoverFicha(socket, ficha) {
   if (!ficha) return false;
   if (socket.data?.esDM) return true;
+
+  const tipoFicha = (ficha.tipo || '').toLowerCase().trim();
+  const esPJ = !tipoFicha || tipoFicha === 'jugador' || tipoFicha === 'pj' || tipoFicha === 'personaje';
+  if (!esPJ) return false; // Monstruos y NPCs son exclusivos del DM
+
   const usuarioId = (socket.data?.usuarioId || '').toLowerCase().trim();
   const nombreUsuario = (socket.data?.nombreUsuario || '').toLowerCase().trim();
   const fJugadorId = (ficha.jugador_id || '').toLowerCase().trim();
+  const dmId = (socket.data?.dmId || '').toLowerCase().trim();
+
   if (fJugadorId && (fJugadorId === usuarioId || fJugadorId === nombreUsuario || fJugadorId === 'usr_' + nombreUsuario.replace(/[^a-z0-9]/g, '_'))) {
     return true;
   }
   if (ficha.nombre && ficha.nombre.toLowerCase().trim() === nombreUsuario) {
     return true;
   }
-  // Si la ficha es de tipo jugador (PJ) y no tiene dueño asignado, cualquier jugador puede controlarla/reclamarla
-  const tipoFicha = (ficha.tipo || '').toLowerCase().trim();
-  const esPJ = !tipoFicha || tipoFicha === 'jugador' || tipoFicha === 'pj' || tipoFicha === 'personaje';
-  if (!fJugadorId && esPJ) {
+
+  // Si la ficha es de tipo jugador (PJ) y no tiene dueño asignado (o fue creada originalmente por el DM)
+  const esCreadorDM = fJugadorId && dmId && (fJugadorId === dmId || fJugadorId === 'usr_' + dmId.replace(/^usr_/, ''));
+  if (!fJugadorId || esCreadorDM) {
     return true;
   }
   return false;
@@ -755,7 +763,7 @@ io.on('connection', (socket) => {
       const colorUsuario = COLORES_USUARIOS[Math.floor(Math.random() * COLORES_USUARIOS.length)];
 
       socket.join(partida.id);
-      socket.data = { partidaId: partida.id, usuarioId: effectiveUserId, nombreUsuario, esDM, colorUsuario };
+      socket.data = { partidaId: partida.id, dmId: partida.dm_id, usuarioId: effectiveUserId, nombreUsuario, esDM, colorUsuario };
 
       // Obtener escena activa
       let escenaActiva = await dbGet(`SELECT * FROM escenas WHERE id = ?`, [partida.escena_activa_id]);
@@ -883,6 +891,7 @@ io.on('connection', (socket) => {
       socket.data.nombreUsuario = nombreLimpio;
       socket.data.usuarioId = newUserId;
       socket.data.esDM = esDM;
+      if (partida) socket.data.dmId = partida.dm_id;
 
       // Actualizar en connectedUsers
       if (connectedUsers.has(partidaId)) {
@@ -1289,6 +1298,26 @@ io.on('connection', (socket) => {
       scheduleAutoSave(partidaId);
     } catch (err) {
       console.error('Error al guardar posición de ficha:', err);
+    }
+  });
+
+  // Reclamar o asignar ficha a jugador conectado
+  socket.on('reclamar_ficha', async ({ partidaId, fichaId }) => {
+    try {
+      const ficha = await dbGet(`SELECT * FROM fichas WHERE id = ?`, [fichaId]);
+      if (!ficha) return;
+      const tipoLower = (ficha.tipo || '').toLowerCase().trim();
+      const esPJ = !tipoLower || tipoLower === 'jugador' || tipoLower === 'pj' || tipoLower === 'personaje';
+      if (!esPJ && !socket.data?.esDM) return;
+
+      const userId = socket.data?.usuarioId;
+      await dbRun(`UPDATE fichas SET jugador_id = ? WHERE id = ?`, [userId, fichaId]);
+      ficha.jugador_id = userId;
+      cacheFichaOwner(ficha);
+      io.to(partidaId).emit('ficha_actualizada', ficha);
+      scheduleAutoSave(partidaId);
+    } catch (err) {
+      console.error('Error en reclamar_ficha:', err);
     }
   });
 
@@ -1934,6 +1963,12 @@ io.on('connection', (socket) => {
         const targetUser = pUsers.get(targetUsuarioId);
         targetUser.esDM = makeDM;
 
+        // Actualizar socket.data del usuario objetivo para que sus eventos en servidor tengan permisos reales
+        const targetSocket = io.sockets.sockets.get(targetUser.socketId);
+        if (targetSocket) {
+          targetSocket.data.esDM = makeDM;
+        }
+
         // Notify the specific user to update their UI
         io.to(targetUser.socketId).emit('update_dm_status', { esDM: makeDM });
 
@@ -2013,7 +2048,7 @@ io.on('connection', (socket) => {
       if (!combate || !combate.activo || !combate.participantes || combate.participantes.length === 0) return;
 
       const turnoActual = combate.participantes[combate.turnoIndex];
-      const esDuenio = turnoActual && socket.data?.usuarioId && (turnoActual.jugador_id === socket.data.usuarioId);
+      const esDuenio = turnoActual && (puedeMoverFicha(socket, turnoActual) || (socket.data?.usuarioId && turnoActual.jugador_id === socket.data.usuarioId));
       if (!socket.data?.esDM && !esDuenio) {
         return socket.emit('error_partida', 'Solo el DM o el jugador en turno puede avanzar el combate.');
       }

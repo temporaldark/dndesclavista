@@ -564,6 +564,7 @@
 
       // Herramientas DM
       toolButtons: document.querySelectorAll('.tool-btn'),
+      toolPan: document.getElementById('tool-pan'),
       toolOptionsContainer: document.getElementById('tool-options-container'),
       optDraw: document.getElementById('opt-draw'),
       optFigures: document.getElementById('opt-figures'),
@@ -756,11 +757,6 @@
       btnCombatAddConfirm: document.getElementById('btn-combat-add-confirm'),
       combatSetupTitleText: document.getElementById('combat-setup-title-text'),
       toolCombat: document.getElementById('tool-combat'),
-
-      // Botones de Reclamar Rol DM
-      btnReclamarDm: document.getElementById('btn-reclamar-dm'),
-      btnQuickClaimDm: document.getElementById('btn-quick-claim-dm'),
-      bannerPlayerClaimDm: document.getElementById('banner-player-claim-dm'),
 
       // Mobile Bottom Dock y Sheets
       mobileBottomDock: document.getElementById('mobile-bottom-dock'),
@@ -1310,20 +1306,29 @@
     if (!ficha) return false;
     if (state.usuario?.esDM) return true;
 
+    const tipoLower = (ficha.tipo || '').toLowerCase().trim();
+    const esPJ = !tipoLower || tipoLower === 'jugador' || tipoLower === 'pj' || tipoLower === 'personaje';
+    if (!esPJ) return false; // Monstruos y NPCs son exclusivos del DM
+
     const uId = (state.usuario?.id || '').toLowerCase().trim();
     const uName = (state.usuario?.nombre || '').toLowerCase().trim();
     const fJugadorId = (ficha.jugador_id || '').toLowerCase().trim();
+    const dmId = (state.partida?.dm_id || '').toLowerCase().trim();
 
     if (fJugadorId && (fJugadorId === uId || fJugadorId === uName || fJugadorId === 'usr_' + uName.replace(/[^a-z0-9]/g, '_'))) return true;
 
     // Si el nombre de la ficha coincide con el nombre de usuario del jugador conectado
     if (ficha.nombre && ficha.nombre.toLowerCase().trim() === uName) return true;
 
-    // Si la ficha es un PJ (tipo jugador / pj / personaje) y no tiene dueño asignado, cualquier jugador puede controlarla/reclamarla
-    const tipoLower = (ficha.tipo || '').toLowerCase().trim();
-    const esPJ = !tipoLower || tipoLower === 'jugador' || tipoLower === 'pj' || tipoLower === 'personaje';
-    if (!fJugadorId && esPJ) {
-      return true;
+    // Si la ficha es un PJ y no tiene dueño asignado (o fue creada originalmente por el DM)
+    const esCreadorDM = fJugadorId && dmId && (fJugadorId === dmId || fJugadorId === 'usr_' + dmId.replace(/^usr_/, ''));
+    if (!fJugadorId || esCreadorDM) {
+      // Si otro jugador no-DM está conectado y asignado a ella, respetarlo; de lo contrario permitir control
+      const otroDuenioConectado = (state.jugadoresConectados || []).some(j => {
+        if (!j || j.id === state.usuario?.id || j.esDM) return false;
+        return j.id?.toLowerCase().trim() === fJugadorId;
+      });
+      if (!otroDuenioConectado) return true;
     }
 
     return false;
@@ -2079,6 +2084,8 @@
     dom.canvasContainer?.addEventListener('mouseup', handleMouseUp);
     dom.canvasContainer?.addEventListener('mouseleave', handleMouseUp);
     dom.canvasContainer?.addEventListener('wheel', handleWheel, { passive: false });
+    dom.canvasContainer?.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas?.addEventListener('contextmenu', (e) => e.preventDefault());
 
     // Asegurar que el canvas y el contenedor wrapper capturen el wheel también
     if (dom.canvasWrapper) {
@@ -2877,6 +2884,8 @@
   }
 
   // --- MANEJADORES DE EVENTOS MOUSE / TOUCH EN CANVAS ---
+  let isSpacePressed = false;
+
   function handleMouseDown(e) {
     tokenDidActuallyMove = false;
     propDidActuallyMove = false;
@@ -2895,6 +2904,18 @@
     // Activar manejadores en window para arrastre fluido aunque el puntero salga del canvas
     window.addEventListener('mousemove', handleWindowMouseMove);
     window.addEventListener('mouseup', handleWindowMouseUp);
+
+    // Paneo con botón central (1), botón derecho (2), barra espaciadora o herramienta 'pan'
+    if (e.button === 1 || e.button === 2 || isSpacePressed || activeTool === 'pan') {
+      if (e.preventDefault) e.preventDefault();
+      selectedFigureId = null;
+      selectedPropId = null;
+      hideMobileTokenActionBar();
+      isPanning = true;
+      panStart = { x: e.clientX - viewport.panX, y: e.clientY - viewport.panY };
+      if (canvas) canvas.style.cursor = 'grabbing';
+      return;
+    }
 
     // Modo tocar casilla para mover (móvil)
     if (mobileTapToMoveActive && selectedFichasIds && selectedFichasIds.length > 0) {
@@ -3092,8 +3113,8 @@
       return;
     }
 
-    // Si llegamos aquí y es move, hacemos pan sin ser bloqueado por figuras
-    if (activeTool === 'move' && !isDraggingToken && !isDraggingFigure && !isDraggingProp) {
+    // Si llegamos aquí y es move o pan, hacemos pan si no se seleccionó ninguna ficha/figura/prop
+    if ((activeTool === 'move' || activeTool === 'pan') && !isDraggingToken && !isDraggingFigure && !isDraggingProp) {
       selectedFigureId = null;
       selectedPropId = null;
       if (!clickedFicha && !mobileTapToMoveActive) {
@@ -3101,6 +3122,7 @@
       }
       isPanning = true;
       panStart = { x: e.clientX - viewport.panX, y: e.clientY - viewport.panY };
+      if (canvas) canvas.style.cursor = 'grabbing';
     } else if (activeTool === 'erase') {
       const figToDel = (state.figuras || []).find(fig => {
         if (fig.creador_id !== state.usuario.id && !state.usuario.esDM) return false;
@@ -3302,11 +3324,29 @@
     measureCurrent = null;
     isDrawing = false;
     currentStroke = [];
+    if (canvas) {
+      canvas.style.cursor = (isSpacePressed || activeTool === 'pan') ? 'grab' : 'default';
+    }
     markDirty();
   }
 
   function handleWheel(e) {
     e.preventDefault();
+    if (e.ctrlKey || e.metaKey) {
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      zoomAt(e.clientX, e.clientY, zoomFactor);
+      return;
+    }
+
+    if (activeTool === 'pan' || e.shiftKey || Math.abs(e.deltaX) > 0) {
+      const dx = e.shiftKey ? (e.deltaY || e.deltaX) : e.deltaX;
+      const dy = e.shiftKey ? 0 : e.deltaY;
+      viewport.panX -= dx;
+      viewport.panY -= dy;
+      markDirty();
+      return;
+    }
+
     const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
     zoomAt(e.clientX, e.clientY, zoomFactor);
   }
@@ -3600,13 +3640,71 @@
       }
     });
 
-    // Atajo de teclado Ctrl+S para guardado forzado manual
+    // Atajos de teclado: Ctrl+S (guardar), Barra espaciadora (pan), Flechas/WASD (desplazamiento)
     window.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         if (state.partida && state.partida.id) {
           forzarGuardadoManual();
         }
+        return;
+      }
+
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      const isInput = tag === 'input' || tag === 'textarea' || tag === 'select' || document.activeElement?.isContentEditable;
+      if (isInput) return;
+
+      if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault();
+        isSpacePressed = true;
+        if (canvas) canvas.style.cursor = 'grab';
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        selectedFichasIds = [];
+        selectedFigureId = null;
+        selectedPropId = null;
+        hideMobileTokenActionBar();
+        markDirty();
+        return;
+      }
+
+      // Desplazar ficha seleccionada con las flechas del teclado
+      if (selectedFichasIds && selectedFichasIds.length > 0 && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        if (e.key === 'ArrowUp') moveSelectedTokenByDelta(0, -1);
+        else if (e.key === 'ArrowDown') moveSelectedTokenByDelta(0, 1);
+        else if (e.key === 'ArrowLeft') moveSelectedTokenByDelta(-1, 0);
+        else if (e.key === 'ArrowRight') moveSelectedTokenByDelta(1, 0);
+        return;
+      }
+
+      // Desplazamiento del mapa con flechas o teclas W/A/S/D
+      const panStep = Math.round((viewport.tileSize * viewport.zoom) || 50);
+      if (e.key === 'ArrowUp' || e.code === 'KeyW') {
+        e.preventDefault();
+        viewport.panY += panStep;
+        markDirty();
+      } else if (e.key === 'ArrowDown' || e.code === 'KeyS') {
+        e.preventDefault();
+        viewport.panY -= panStep;
+        markDirty();
+      } else if (e.key === 'ArrowLeft' || e.code === 'KeyA') {
+        e.preventDefault();
+        viewport.panX += panStep;
+        markDirty();
+      } else if (e.key === 'ArrowRight' || e.code === 'KeyD') {
+        e.preventDefault();
+        viewport.panX -= panStep;
+        markDirty();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Space') {
+        isSpacePressed = false;
+        if (canvas) canvas.style.cursor = activeTool === 'pan' ? 'grab' : 'default';
       }
     });
 
@@ -3788,20 +3886,7 @@
       showToast(`👤 Nombre guardado: ${newName}`, 'gold');
     });
 
-    function ejecutarReclamarDM() {
-      if (!state.partida?.id) {
-        showToast('Debes estar en una partida para asumir el rol de DM', 'error');
-        return;
-      }
-      socket?.emit('reclamar_dm', { partidaId: state.partida.id });
-      state.usuario.esDM = true;
-      updateUIForCurrentGame();
-      closeModal(dom.modalChangeUser);
-      showToast('👑 ¡Has asumido el rol de Dungeon Master!', 'gold');
-    }
 
-    dom.btnReclamarDm?.addEventListener('click', ejecutarReclamarDM);
-    dom.btnQuickClaimDm?.addEventListener('click', ejecutarReclamarDM);
 
     // Barra inline de nombre de usuario en el Lobby
     if (dom.lobbyUsernameInput) {
@@ -3982,6 +4067,10 @@
         btn.classList.add('active');
         activeTool = btn.dataset.tool;
 
+        if (canvas) {
+          canvas.style.cursor = (activeTool === 'pan') ? 'grab' : 'default';
+        }
+
         // Auto-cerrar panel DM en móvil al elegir herramientas directas de mapa
         if (window.innerWidth <= 900 && ['move', 'pan', 'measure', 'erase'].includes(activeTool)) {
           closeAllPanels();
@@ -4152,7 +4241,10 @@
       if (state.usuario?.esDM) {
         finalJugadorId = assignedOwner || null;
       } else {
-        finalJugadorId = (existingFicha && existingFicha.jugador_id) ? existingFicha.jugador_id : state.usuario?.id;
+        const dmId = (state.partida?.dm_id || '').toLowerCase().trim();
+        const curOwner = (existingFicha?.jugador_id || '').toLowerCase().trim();
+        const isDmOwner = curOwner && dmId && (curOwner === dmId || curOwner === 'usr_' + dmId.replace(/^usr_/, ''));
+        finalJugadorId = (existingFicha && existingFicha.jugador_id && !isDmOwner) ? existingFicha.jugador_id : state.usuario?.id;
       }
 
       const fichaData = {
@@ -5171,7 +5263,7 @@
 
     // Botón "Terminar Mi Turno" para el jugador dueño
     if (dom.btnPlayerEndTurn) {
-      const isMyTurn = activeParticipant && state.usuario?.id && (activeParticipant.jugador_id === state.usuario.id);
+      const isMyTurn = activeParticipant && (esDuenioDeFicha(activeParticipant) || (state.usuario?.id && activeParticipant.jugador_id === state.usuario.id));
       if (isMyTurn) {
         dom.btnPlayerEndTurn.classList.remove('hidden');
       } else {
@@ -5185,7 +5277,7 @@
         dom.mbCombatBadge.classList.remove('hidden');
         dom.mbCombatBadge.textContent = `R${combate.ronda || 1}`;
       }
-      const isMyTurn = activeParticipant && state.usuario?.id && (activeParticipant.jugador_id === state.usuario.id);
+      const isMyTurn = activeParticipant && (esDuenioDeFicha(activeParticipant) || (state.usuario?.id && activeParticipant.jugador_id === state.usuario.id));
       if (isMyTurn) {
         dom.mbBtnCombat.classList.add('highlight');
         if (dom.mbCombatText) dom.mbCombatText.textContent = '¡Tu Turno!';
@@ -5468,14 +5560,10 @@
       if (dom.userRoleBadge) dom.userRoleBadge.className = 'role-badge dm clickable';
       if (dom.userRoleText) dom.userRoleText.textContent = `DM: ${state.usuario.nombre || 'Dungeon Master'}`;
       document.querySelectorAll('.dm-only').forEach(el => el.classList.remove('hidden'));
-      if (dom.bannerPlayerClaimDm) dom.bannerPlayerClaimDm.classList.add('hidden');
-      if (dom.btnReclamarDm) dom.btnReclamarDm.parentElement.classList.add('hidden');
     } else {
       if (dom.userRoleBadge) dom.userRoleBadge.className = 'role-badge clickable';
       if (dom.userRoleText) dom.userRoleText.textContent = state.usuario?.nombre || 'Jugador';
       document.querySelectorAll('.dm-only').forEach(el => el.classList.add('hidden'));
-      if (dom.bannerPlayerClaimDm) dom.bannerPlayerClaimDm.classList.remove('hidden');
-      if (dom.btnReclamarDm) dom.btnReclamarDm.parentElement.classList.remove('hidden');
     }
 
     if (dom.gridColsInput) dom.gridColsInput.value = state.escenaActiva?.config_grid_x || state.partida.config_grid_x || 40;
@@ -5621,6 +5709,7 @@
           <button class="btn btn-sm btn-secondary btn-center-ficha" title="Centrar cámara en esta ficha"><i class="fa-solid fa-crosshairs"></i></button>
           <button class="btn btn-sm btn-secondary btn-manage-effects" title="Gestionar Estados y Efectos [ALPHA]"><i class="fa-solid fa-sparkles gold-text"></i> Estados</button>
           ${btnAddCombatHtml}
+          ${(!state.usuario?.esDM && esPJ && ficha.jugador_id !== state.usuario?.id) ? '<button class="btn btn-sm btn-gold btn-claim-character" title="Vincular este personaje a mi usuario"><i class="fa-solid fa-user-check"></i> Mi Personaje</button>' : ''}
           ${tieneNotasVisibles ? `<button class="btn btn-sm btn-secondary btn-ver-notas" title="Ver rasgos, hechizos y notas"><i class="fa-solid fa-scroll gold-text"></i> Notas</button>` : ''}
           ${esPropietario ? `<button class="btn btn-sm ${ficha.gigante ? 'btn-gold' : 'btn-secondary'} btn-gigante" title="${ficha.gigante ? 'Volver a tamaño normal' : 'Aumentar a tamaño gigante'}"><i class="fa-solid fa-up-right-and-down-left-from-center"></i> ${ficha.gigante ? 'Normal' : 'Gigante'}</button>` : ''}
           ${state.usuario.esDM ? `<button class="btn btn-sm ${ficha.oculto ? 'btn-warning' : 'btn-secondary'} btn-toggle-oculto" title="${ficha.oculto ? 'Mostrar en mapa a jugadores' : 'Ocultar en mapa a jugadores'}"><i class="fa-solid ${ficha.oculto ? 'fa-eye' : 'fa-eye-slash'}"></i> ${ficha.oculto ? 'Mostrar' : 'Ocultar'}</button>` : ''}
@@ -5702,6 +5791,14 @@
       }
 
       card.querySelector('.btn-ver-notas')?.addEventListener('click', abrirModalNotas);
+
+      card.querySelector('.btn-claim-character')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        socket?.emit('reclamar_ficha', { partidaId: state.partida.id, fichaId: ficha.id });
+        ficha.jugador_id = state.usuario.id;
+        showToast(`🛡️ ¡${ficha.nombre} vinculado a ${state.usuario.nombre || 'ti'}!`, 'gold');
+        renderFichasList();
+      });
 
       card.querySelector('.btn-toggle-oculto')?.addEventListener('click', () => {
         socket?.emit('toggle_oculto', { partidaId: state.partida.id, fichaId: ficha.id });
