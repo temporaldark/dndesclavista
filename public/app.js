@@ -755,17 +755,481 @@
       btnCombatAddParticipant: document.getElementById('btn-combat-add-participant'),
       btnCombatAddConfirm: document.getElementById('btn-combat-add-confirm'),
       combatSetupTitleText: document.getElementById('combat-setup-title-text'),
-      toolCombat: document.getElementById('tool-combat')
+      toolCombat: document.getElementById('tool-combat'),
+
+      // Botones de Reclamar Rol DM
+      btnReclamarDm: document.getElementById('btn-reclamar-dm'),
+      btnQuickClaimDm: document.getElementById('btn-quick-claim-dm'),
+      bannerPlayerClaimDm: document.getElementById('banner-player-claim-dm'),
+
+      // Mobile Bottom Dock y Sheets
+      mobileBottomDock: document.getElementById('mobile-bottom-dock'),
+      mbBtnDice: document.getElementById('mb-btn-dice'),
+      mbBtnMySheet: document.getElementById('mb-btn-my-sheet'),
+      mbBtnCombat: document.getElementById('mb-btn-combat'),
+      mbCombatText: document.getElementById('mb-combat-text'),
+      mbCombatBadge: document.getElementById('mb-combat-badge'),
+      mbBtnChat: document.getElementById('mb-btn-chat'),
+      mbChatUnreadBadge: document.getElementById('mb-chat-unread-badge'),
+      mbBtnZen: document.getElementById('mb-btn-zen'),
+      mbBtnMenu: document.getElementById('mb-btn-menu'),
+      btnRestoreZen: document.getElementById('btn-restore-zen'),
+      mobileQuickDiceSheet: document.getElementById('mobile-quick-dice-sheet'),
+      mbDiceBackdrop: document.getElementById('mb-dice-backdrop'),
+      mbBtnCloseDice: document.getElementById('mb-btn-close-dice'),
+      mbBtnRollD20: document.getElementById('mb-btn-roll-d20'),
+      mbD20Subtext: document.getElementById('mb-d20-subtext'),
+      mbModMinus: document.getElementById('mb-mod-minus'),
+      mbModPlus: document.getElementById('mb-mod-plus'),
+      mbModVal: document.getElementById('mb-mod-val'),
+      mobileMySheetModal: document.getElementById('mobile-my-sheet-modal'),
+      mbSheetBackdrop: document.getElementById('mb-sheet-backdrop'),
+      mbBtnCloseMySheet: document.getElementById('mb-btn-close-my-sheet'),
+      mbBtnOpenFullSheet: document.getElementById('mb-btn-open-full-sheet'),
+      mbCharTitle: document.getElementById('mb-char-title'),
+      mbCharBody: document.getElementById('mb-char-body'),
+
+      // Mobile Token Action Bar
+      mobileTokenActionBar: document.getElementById('mobile-token-action-bar'),
+      mtTokenImg: document.getElementById('mt-token-img'),
+      mtTokenName: document.getElementById('mt-token-name'),
+      mtTokenHp: document.getElementById('mt-token-hp'),
+      mtBtnClose: document.getElementById('mt-btn-close'),
+      mtBtnTapMove: document.getElementById('mt-btn-tap-move'),
+      mtTapMoveText: document.getElementById('mt-tap-move-text'),
+      mtBtnQuickRoll: document.getElementById('mt-btn-quick-roll'),
+      mtBtnEffects: document.getElementById('mt-btn-effects'),
+      mtBtnEdit: document.getElementById('mt-btn-edit')
     };
 
     setupEventListeners();
     setupMobileMenuListeners();
+    setupMobileDockAndSheetsListeners();
+    setupMobileTokenActionBarListeners();
   }
 
   function closeAllPanels() {
     if (dom.rightPanel) dom.rightPanel.classList.remove('open');
     if (dom.dmToolsPanel) dom.dmToolsPanel.classList.remove('open');
     if (dom.mobileOverlay) dom.mobileOverlay.classList.remove('active');
+    closeMobileBottomSheets();
+  }
+
+  let unreadChatCount = 0;
+  let mobileDiceModifier = 0;
+  let mobileDiceMode = 'normal'; // 'normal', 'ventaja', 'desventaja'
+  let mobileTapToMoveActive = false;
+
+  function closeMobileBottomSheets() {
+    if (dom.mobileQuickDiceSheet) dom.mobileQuickDiceSheet.classList.add('hidden');
+    if (dom.mobileMySheetModal) dom.mobileMySheetModal.classList.add('hidden');
+    document.querySelectorAll('.mb-dock-btn').forEach(b => b.classList.remove('active'));
+  }
+
+  function openTabInRightPanel(tabId) {
+    closeMobileBottomSheets();
+    if (dom.rightPanel) dom.rightPanel.classList.add('open');
+    if (dom.mobileOverlay) dom.mobileOverlay.classList.add('active');
+    const targetBtn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+    if (targetBtn) {
+      targetBtn.click();
+    }
+  }
+
+  function getMyActiveFicha() {
+    if (selectedFichasIds && selectedFichasIds.length > 0) {
+      const sel = (state.fichas || []).find(f => f.id === selectedFichasIds[0]);
+      if (sel && esDuenioDeFicha(sel)) return sel;
+    }
+    const uId = (state.usuario?.id || '').toLowerCase().trim();
+    const uName = (state.usuario?.nombre || '').toLowerCase().trim();
+    let mine = (state.fichas || []).find(f => {
+      const fId = (f.jugador_id || '').toLowerCase().trim();
+      return fId && (fId === uId || fId === uName || fId === 'usr_' + uName.replace(/[^a-z0-9]/g, '_'));
+    });
+    if (mine) return mine;
+    mine = (state.fichas || []).find(f => f.nombre && f.nombre.toLowerCase().trim() === uName);
+    if (mine) return mine;
+    mine = (state.fichas || []).find(f => {
+      const tipo = (f.tipo || '').toLowerCase().trim();
+      return (!tipo || tipo === 'jugador' || tipo === 'pj' || tipo === 'personaje');
+    });
+    return mine || (state.fichas || [])[0] || null;
+  }
+
+  function renderMobileMySheet() {
+    if (!dom.mbCharBody) return;
+    const ficha = getMyActiveFicha();
+    if (!ficha) {
+      dom.mbCharBody.innerHTML = `
+        <div style="text-align: center; padding: 20px 10px; color: #94a3b8;">
+          <p style="margin-bottom: 12px; font-size: 0.9rem;">No tienes una ficha de personaje asignada todavía.</p>
+          <button type="button" class="btn btn-gold btn-sm" id="mb-btn-create-ficha-prompt">
+            <i class="fa-solid fa-plus"></i> Abrir Panel de Fichas
+          </button>
+        </div>
+      `;
+      document.getElementById('mb-btn-create-ficha-prompt')?.addEventListener('click', () => {
+        closeMobileBottomSheets();
+        openTabInRightPanel('tab-fichas');
+      });
+      return;
+    }
+
+    if (dom.mbCharTitle) {
+      dom.mbCharTitle.innerHTML = `<i class="fa-solid fa-user-shield gold-text"></i> ${ficha.nombre || 'Mi Ficha'}`;
+    }
+
+    const hpActual = ficha.hp_actual ?? 10;
+    const hpMax = Math.max(1, ficha.hp_maximo ?? 10);
+    const hpPct = Math.max(0, Math.min(100, Math.round((hpActual / hpMax) * 100)));
+    const avatarSrc = ficha.imagen || 'https://via.placeholder.com/60?text=PJ';
+    const acVal = ficha.ac ?? 10;
+    const speedVal = ficha.velocidad || 30;
+    const destreza = ficha.destreza || 10;
+    const dexMod = Math.floor((destreza - 10) / 2);
+    const dexModStr = dexMod >= 0 ? `+${dexMod}` : `${dexMod}`;
+
+    dom.mbCharBody.innerHTML = `
+      <div class="mb-ficha-card">
+        <div class="mb-ficha-top">
+          <img src="${avatarSrc}" class="mb-ficha-avatar" alt="${ficha.nombre}">
+          <div class="mb-ficha-meta">
+            <div class="mb-ficha-name">${ficha.nombre}</div>
+            <div class="mb-ficha-sub">${ficha.raza || 'Aventurero'} ${ficha.clase || ''} ${ficha.nivel ? 'Nv. ' + ficha.nivel : ''}</div>
+          </div>
+        </div>
+
+        <div class="mb-hp-container">
+          <div class="mb-hp-labels">
+            <span>Puntos de Golpe (HP)</span>
+            <span style="color: ${hpActual <= 0 ? '#ef4444' : '#22c55e'}">${hpActual} / ${hpMax}</span>
+          </div>
+          <div class="mb-hp-bar-bg">
+            <div class="mb-hp-bar-fill" style="width: ${hpPct}%; background: ${hpPct < 25 ? '#ef4444' : (hpPct < 50 ? '#f59e0b' : '#22c55e')}"></div>
+          </div>
+          <div class="mb-hp-buttons">
+            <button type="button" class="mb-hp-btn damage" data-delta="-5">-5 HP</button>
+            <button type="button" class="mb-hp-btn damage" data-delta="-1">-1 HP</button>
+            <button type="button" class="mb-hp-btn heal" data-delta="1">+1 HP</button>
+            <button type="button" class="mb-hp-btn heal" data-delta="5">+5 HP</button>
+          </div>
+        </div>
+
+        <div class="mb-stats-row">
+          <div class="mb-stat-pill">
+            <span>Armadura</span>
+            <strong>🛡️ ${acVal}</strong>
+          </div>
+          <div class="mb-stat-pill">
+            <span>Velocidad</span>
+            <strong>👣 ${speedVal} ft</strong>
+          </div>
+          <div class="mb-stat-pill">
+            <span>Iniciativa</span>
+            <strong>⚡ ${dexModStr}</strong>
+          </div>
+        </div>
+      </div>
+    `;
+
+    dom.mbCharBody.querySelectorAll('.mb-hp-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const delta = parseInt(btn.dataset.delta, 10);
+        const nuevoHp = Math.max(0, Math.min(hpMax, hpActual + delta));
+        ficha.hp_actual = nuevoHp;
+        socket?.emit('modificar_hp', { fichaId: ficha.id, delta, nuevoHp });
+        renderMobileMySheet();
+        renderFichasList();
+        markDirty();
+        showToast(`${ficha.nombre}: ${delta > 0 ? '+' + delta : delta} HP (${nuevoHp}/${hpMax})`, delta > 0 ? 'gold' : 'error');
+      });
+    });
+  }
+
+  function setupMobileDockAndSheetsListeners() {
+    [dom.mobileBottomDock, dom.mobileQuickDiceSheet, dom.mobileMySheetModal].forEach(el => {
+      if (el) {
+        el.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+        el.addEventListener('mousedown', (e) => e.stopPropagation());
+      }
+    });
+
+    dom.mbBtnDice?.addEventListener('click', () => {
+      const isHidden = dom.mobileQuickDiceSheet?.classList.contains('hidden');
+      closeMobileBottomSheets();
+      closeAllPanels();
+      if (isHidden) {
+        dom.mobileQuickDiceSheet?.classList.remove('hidden');
+        dom.mbBtnDice?.classList.add('active');
+      }
+    });
+
+    dom.mbDiceBackdrop?.addEventListener('click', closeMobileBottomSheets);
+    dom.mbBtnCloseDice?.addEventListener('click', closeMobileBottomSheets);
+
+    document.querySelectorAll('.mb-mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.mb-mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        mobileDiceMode = btn.dataset.mode || 'normal';
+        const label = mobileDiceMode.charAt(0).toUpperCase() + mobileDiceMode.slice(1);
+        if (dom.mbD20Subtext) dom.mbD20Subtext.textContent = `(${label})`;
+      });
+    });
+
+    dom.mbModMinus?.addEventListener('click', () => {
+      mobileDiceModifier = Math.max(-10, mobileDiceModifier - 1);
+      if (dom.mbModVal) dom.mbModVal.textContent = (mobileDiceModifier >= 0 ? '+' : '') + mobileDiceModifier;
+    });
+
+    dom.mbModPlus?.addEventListener('click', () => {
+      mobileDiceModifier = Math.min(20, mobileDiceModifier + 1);
+      if (dom.mbModVal) dom.mbModVal.textContent = (mobileDiceModifier >= 0 ? '+' : '') + mobileDiceModifier;
+    });
+
+    dom.mbBtnRollD20?.addEventListener('click', () => {
+      let formula = '1d20';
+      if (mobileDiceModifier !== 0) {
+        formula += (mobileDiceModifier > 0 ? '+' : '') + mobileDiceModifier;
+      }
+      if (dom.diceFormulaInput) dom.diceFormulaInput.value = formula;
+      const targetModeBtn = document.querySelector(`.btn-mode[data-mode="${mobileDiceMode}"]`);
+      if (targetModeBtn) targetModeBtn.click();
+      rollDice();
+      closeMobileBottomSheets();
+    });
+
+    document.querySelectorAll('.mb-poly-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const sides = btn.dataset.sides || '6';
+        let formula = `1d${sides}`;
+        if (mobileDiceModifier !== 0) {
+          formula += (mobileDiceModifier > 0 ? '+' : '') + mobileDiceModifier;
+        }
+        if (dom.diceFormulaInput) dom.diceFormulaInput.value = formula;
+        const normMode = document.querySelector('.btn-mode[data-mode="normal"]');
+        if (normMode) normMode.click();
+        rollDice();
+        closeMobileBottomSheets();
+      });
+    });
+
+    dom.mbBtnMySheet?.addEventListener('click', () => {
+      const isHidden = dom.mobileMySheetModal?.classList.contains('hidden');
+      closeMobileBottomSheets();
+      closeAllPanels();
+      if (isHidden) {
+        renderMobileMySheet();
+        dom.mobileMySheetModal?.classList.remove('hidden');
+        dom.mbBtnMySheet?.classList.add('active');
+      }
+    });
+
+    dom.mbSheetBackdrop?.addEventListener('click', closeMobileBottomSheets);
+    dom.mbBtnCloseMySheet?.addEventListener('click', closeMobileBottomSheets);
+
+    dom.mbBtnOpenFullSheet?.addEventListener('click', () => {
+      const ficha = getMyActiveFicha();
+      closeMobileBottomSheets();
+      if (ficha) {
+        abrirModalNotas();
+      } else {
+        openTabInRightPanel('tab-fichas');
+      }
+    });
+
+    dom.mbBtnCombat?.addEventListener('click', () => {
+      const combate = state.combate;
+      closeMobileBottomSheets();
+      if (combate && combate.activo) {
+        const currentTurnIndex = combate.turnoIndex || 0;
+        const activeParticipant = combate.participantes && combate.participantes[currentTurnIndex];
+        const isMyTurn = activeParticipant && state.usuario?.id && (activeParticipant.jugador_id === state.usuario.id);
+
+        if (isMyTurn) {
+          if (confirm(`Es tu turno con ${activeParticipant.nombre}. ¿Deseas terminar tu turno?`)) {
+            socket?.emit('siguiente_turno', { partidaId: state.partida.id });
+            return;
+          }
+        } else if (state.usuario?.esDM) {
+          socket?.emit('siguiente_turno', { partidaId: state.partida.id });
+          showToast('Siguiente turno de combate (DM)', 'gold');
+          return;
+        }
+
+        if (dom.combatTrackerBar) {
+          dom.combatTrackerBar.classList.remove('hidden');
+          dom.combatTrackerBar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          showToast(`Combate activo: Ronda ${combate.ronda || 1} • Turno: ${activeParticipant ? activeParticipant.nombre : ''}`, 'gold');
+        }
+      } else {
+        if (state.usuario?.esDM) {
+          openModal(dom.modalCombatSetup);
+          cargarFichasParaCombate();
+        } else {
+          showToast('No hay ningún combate activo en este momento.', 'info');
+        }
+      }
+    });
+
+    dom.mbBtnChat?.addEventListener('click', () => {
+      closeMobileBottomSheets();
+      openTabInRightPanel('tab-chat');
+    });
+
+    dom.mbBtnZen?.addEventListener('click', () => {
+      closeMobileBottomSheets();
+      closeAllPanels();
+      document.body.classList.add('zen-mode');
+      if (dom.btnRestoreZen) dom.btnRestoreZen.classList.remove('hidden');
+      showToast('👁️ Modo Zen activado. Pulsa el botón superior para restaurar.', 'info');
+    });
+
+    dom.btnRestoreZen?.addEventListener('click', () => {
+      document.body.classList.remove('zen-mode');
+      if (dom.btnRestoreZen) dom.btnRestoreZen.classList.add('hidden');
+    });
+
+    dom.mbBtnMenu?.addEventListener('click', () => {
+      const isOpen = dom.rightPanel?.classList.contains('open');
+      closeMobileBottomSheets();
+      closeAllPanels();
+      if (!isOpen && dom.rightPanel) {
+        dom.rightPanel.classList.add('open');
+        if (dom.mobileOverlay) dom.mobileOverlay.classList.add('active');
+      }
+    });
+  }
+
+  // --- ISLA FLOTANTE DE CONTROL DE TOKEN (MÓVIL) ---
+  function showMobileTokenActionBar(ficha) {
+    if (!ficha || !dom.mobileTokenActionBar) return;
+    if (window.innerWidth > 900) return; // Solo en pantallas táctiles / móviles
+
+    if (dom.mtTokenImg) dom.mtTokenImg.src = ficha.imagen || 'https://via.placeholder.com/40';
+    if (dom.mtTokenName) dom.mtTokenName.textContent = ficha.nombre || 'Personaje';
+    if (dom.mtTokenHp) dom.mtTokenHp.textContent = `${ficha.hp_actual ?? 10}/${ficha.hp_maximo ?? 10} HP`;
+
+    mobileTapToMoveActive = false;
+    if (dom.mtBtnTapMove) {
+      dom.mtBtnTapMove.classList.remove('active-tap-move');
+      if (dom.mtTapMoveText) dom.mtTapMoveText.textContent = 'Tocar para Mover';
+    }
+
+    dom.mobileTokenActionBar.classList.remove('hidden');
+  }
+
+  function hideMobileTokenActionBar() {
+    if (dom.mobileTokenActionBar) dom.mobileTokenActionBar.classList.add('hidden');
+    mobileTapToMoveActive = false;
+    if (dom.mtBtnTapMove) {
+      dom.mtBtnTapMove.classList.remove('active-tap-move');
+      if (dom.mtTapMoveText) dom.mtTapMoveText.textContent = 'Tocar para Mover';
+    }
+  }
+
+  function moveSelectedTokenByDelta(dx, dy) {
+    if (!selectedFichasIds || selectedFichasIds.length === 0) return;
+    const ficha = state.fichas.find(f => f.id === selectedFichasIds[0]);
+    if (!ficha || (!state.usuario?.esDM && !esDuenioDeFicha(ficha))) return;
+    ficha.x = Math.max(0, Math.round(ficha.x) + dx);
+    ficha.y = Math.max(0, Math.round(ficha.y) + dy);
+    const escCur = getEscenaActual();
+    socket?.emit('guardar_posicion_ficha', {
+      partidaId: state.partida.id,
+      escenaId: escCur?.id,
+      fichaId: ficha.id,
+      x: ficha.x,
+      y: ficha.y
+    });
+    markDirty();
+    showToast(`📍 ${ficha.nombre} movido a (${ficha.x}, ${ficha.y})`, 'gold');
+  }
+
+  function setupMobileTokenActionBarListeners() {
+    if (!dom.mobileTokenActionBar) return;
+
+    dom.mobileTokenActionBar.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+    dom.mobileTokenActionBar.addEventListener('mousedown', (e) => e.stopPropagation());
+
+    dom.mtBtnClose?.addEventListener('click', () => {
+      selectedFichasIds = [];
+      hideMobileTokenActionBar();
+      markDirty();
+    });
+
+    // Modo tocar casilla para mover
+    dom.mtBtnTapMove?.addEventListener('click', () => {
+      mobileTapToMoveActive = !mobileTapToMoveActive;
+      if (mobileTapToMoveActive) {
+        dom.mtBtnTapMove.classList.add('active-tap-move');
+        if (dom.mtTapMoveText) dom.mtTapMoveText.textContent = 'Toca una casilla';
+        showToast('📍 Toca la casilla del mapa donde quieres colocar la ficha', 'gold');
+      } else {
+        dom.mtBtnTapMove.classList.remove('active-tap-move');
+        if (dom.mtTapMoveText) dom.mtTapMoveText.textContent = 'Tocar para Mover';
+      }
+    });
+
+    // D-Pad flechas de movimiento
+    document.querySelectorAll('.mt-dpad-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const dir = btn.dataset.dir;
+        if (dir === 'up') moveSelectedTokenByDelta(0, -1);
+        else if (dir === 'down') moveSelectedTokenByDelta(0, 1);
+        else if (dir === 'left') moveSelectedTokenByDelta(-1, 0);
+        else if (dir === 'right') moveSelectedTokenByDelta(1, 0);
+      });
+    });
+
+    // Modificadores rápidos de HP (-5, -1, +1, +5)
+    document.querySelectorAll('.mt-hp-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!selectedFichasIds || selectedFichasIds.length === 0) return;
+        const ficha = state.fichas.find(f => f.id === selectedFichasIds[0]);
+        if (!ficha || (!state.usuario?.esDM && !esDuenioDeFicha(ficha))) return;
+        const delta = parseInt(btn.dataset.delta, 10);
+        const hpMax = Math.max(1, ficha.hp_maximo ?? 10);
+        const nuevoHp = Math.max(0, Math.min(hpMax, (ficha.hp_actual ?? 10) + delta));
+        ficha.hp_actual = nuevoHp;
+        socket?.emit('modificar_hp', { fichaId: ficha.id, delta, nuevoHp });
+        if (dom.mtTokenHp) dom.mtTokenHp.textContent = `${nuevoHp}/${hpMax} HP`;
+        renderFichasList();
+        markDirty();
+        showToast(`${ficha.nombre}: ${delta > 0 ? '+' + delta : delta} HP (${nuevoHp}/${hpMax})`, delta > 0 ? 'gold' : 'error');
+      });
+    });
+
+    // Tirar d20 con esta ficha
+    dom.mtBtnQuickRoll?.addEventListener('click', () => {
+      if (selectedFichasIds && selectedFichasIds[0] && dom.diceTokenSelect) {
+        dom.diceTokenSelect.value = selectedFichasIds[0];
+      }
+      if (dom.mobileQuickDiceSheet) {
+        dom.mobileQuickDiceSheet.classList.remove('hidden');
+        if (dom.mbBtnDice) dom.mbBtnDice.classList.add('active');
+      }
+    });
+
+    // Abrir modal de estados y efectos [ALPHA]
+    dom.mtBtnEffects?.addEventListener('click', () => {
+      if (selectedFichasIds && selectedFichasIds[0]) {
+        openModalFichaEfectos(selectedFichasIds[0]);
+      }
+    });
+
+    // Ver / Editar ficha
+    dom.mtBtnEdit?.addEventListener('click', () => {
+      if (selectedFichasIds && selectedFichasIds[0]) {
+        const ficha = state.fichas.find(f => f.id === selectedFichasIds[0]);
+        if (ficha) {
+          abrirModalNotas();
+        }
+      }
+    });
   }
 
   function setupMobileMenuListeners() {
@@ -1491,6 +1955,15 @@
       state.mensajes.push(msg);
       renderChatMessage(msg);
       scrollChatToBottom();
+      const chatPane = document.getElementById('tab-chat');
+      const isChatVisible = chatPane && chatPane.classList.contains('active') && dom.rightPanel?.classList.contains('open');
+      if (!isChatVisible) {
+        unreadChatCount++;
+        if (dom.mbChatUnreadBadge) {
+          dom.mbChatUnreadBadge.textContent = unreadChatCount > 9 ? '9+' : unreadChatCount;
+          dom.mbChatUnreadBadge.classList.remove('hidden');
+        }
+      }
     });
 
     socket.on('nueva_tirada', (reg) => {
@@ -1702,10 +2175,15 @@
       markDirty();
     };
     img.onerror = () => {
+      console.warn('[VTT] No se pudo cargar imagen de mapa desde:', src);
       if (!mapImage) {
         mapImage = null;
         mapImageLoaded = false;
         markDirty();
+      }
+      if (state.usuario?.esDM && !img._warned) {
+        img._warned = true;
+        showToast('🗺️ Imagen de mapa no encontrada en el servidor. Puedes subir una nueva desde el panel de Escenas.', 'warning');
       }
     };
     img.src = src;
@@ -2418,6 +2896,32 @@
     window.addEventListener('mousemove', handleWindowMouseMove);
     window.addEventListener('mouseup', handleWindowMouseUp);
 
+    // Modo tocar casilla para mover (móvil)
+    if (mobileTapToMoveActive && selectedFichasIds && selectedFichasIds.length > 0) {
+      const ficha = state.fichas.find(f => f.id === selectedFichasIds[0]);
+      if (ficha && (state.usuario?.esDM || esDuenioDeFicha(ficha))) {
+        const targetX = Math.round(gridPos.x);
+        const targetY = Math.round(gridPos.y);
+        ficha.x = targetX;
+        ficha.y = targetY;
+        socket?.emit('guardar_posicion_ficha', {
+          partidaId: state.partida.id,
+          escenaId: escenaCur?.id,
+          fichaId: ficha.id,
+          x: ficha.x,
+          y: ficha.y
+        });
+        showToast(`📍 ${ficha.nombre} movido a (${targetX}, ${targetY})`, 'gold');
+        mobileTapToMoveActive = false;
+        if (dom.mtBtnTapMove) {
+          dom.mtBtnTapMove.classList.remove('active-tap-move');
+          if (dom.mtTapMoveText) dom.mtTapMoveText.textContent = 'Tocar para Mover';
+        }
+        markDirty();
+        return;
+      }
+    }
+
     if (activeTool === 'move' || activeTool === 'props') {
       // 1. Buscar si hizo clic sobre alguna ficha visible en la escena actual
       const fichasEnEscena = (state.fichas || []).filter(f => {
@@ -2489,6 +2993,7 @@
             }
           });
 
+          showMobileTokenActionBar(clickedFicha);
           renderFichasList();
           markDirty();
           return;
@@ -2591,6 +3096,9 @@
     if (activeTool === 'move' && !isDraggingToken && !isDraggingFigure && !isDraggingProp) {
       selectedFigureId = null;
       selectedPropId = null;
+      if (!clickedFicha && !mobileTapToMoveActive) {
+        hideMobileTokenActionBar();
+      }
       isPanning = true;
       panStart = { x: e.clientX - viewport.panX, y: e.clientY - viewport.panY };
     } else if (activeTool === 'erase') {
@@ -3280,6 +3788,21 @@
       showToast(`👤 Nombre guardado: ${newName}`, 'gold');
     });
 
+    function ejecutarReclamarDM() {
+      if (!state.partida?.id) {
+        showToast('Debes estar en una partida para asumir el rol de DM', 'error');
+        return;
+      }
+      socket?.emit('reclamar_dm', { partidaId: state.partida.id });
+      state.usuario.esDM = true;
+      updateUIForCurrentGame();
+      closeModal(dom.modalChangeUser);
+      showToast('👑 ¡Has asumido el rol de Dungeon Master!', 'gold');
+    }
+
+    dom.btnReclamarDm?.addEventListener('click', ejecutarReclamarDM);
+    dom.btnQuickClaimDm?.addEventListener('click', ejecutarReclamarDM);
+
     // Barra inline de nombre de usuario en el Lobby
     if (dom.lobbyUsernameInput) {
       dom.lobbyUsernameInput.addEventListener('input', () => {
@@ -3557,7 +4080,11 @@
         if (targetPane) {
           targetPane.classList.add('active');
           if (btn.dataset.tab === 'tab-historial') renderHistoryTable();
-          if (btn.dataset.tab === 'tab-chat') scrollChatToBottom();
+          if (btn.dataset.tab === 'tab-chat') {
+            scrollChatToBottom();
+            unreadChatCount = 0;
+            if (dom.mbChatUnreadBadge) dom.mbChatUnreadBadge.classList.add('hidden');
+          }
         }
       });
     });
@@ -4618,6 +5145,9 @@
     const combate = state.combate;
     if (!combate || !combate.activo || !combate.participantes || combate.participantes.length === 0) {
       dom.combatTrackerBar.classList.add('hidden');
+      if (dom.mbCombatBadge) dom.mbCombatBadge.classList.add('hidden');
+      if (dom.mbCombatText) dom.mbCombatText.textContent = 'Combate';
+      if (dom.mbBtnCombat) dom.mbBtnCombat.classList.remove('highlight');
       return;
     }
 
@@ -4646,6 +5176,22 @@
         dom.btnPlayerEndTurn.classList.remove('hidden');
       } else {
         dom.btnPlayerEndTurn.classList.add('hidden');
+      }
+    }
+
+    // Actualizar botón de combate en el mobile dock
+    if (dom.mbBtnCombat) {
+      if (dom.mbCombatBadge) {
+        dom.mbCombatBadge.classList.remove('hidden');
+        dom.mbCombatBadge.textContent = `R${combate.ronda || 1}`;
+      }
+      const isMyTurn = activeParticipant && state.usuario?.id && (activeParticipant.jugador_id === state.usuario.id);
+      if (isMyTurn) {
+        dom.mbBtnCombat.classList.add('highlight');
+        if (dom.mbCombatText) dom.mbCombatText.textContent = '¡Tu Turno!';
+      } else {
+        dom.mbBtnCombat.classList.remove('highlight');
+        if (dom.mbCombatText) dom.mbCombatText.textContent = `Ronda ${combate.ronda || 1}`;
       }
     }
 
@@ -4922,10 +5468,14 @@
       if (dom.userRoleBadge) dom.userRoleBadge.className = 'role-badge dm clickable';
       if (dom.userRoleText) dom.userRoleText.textContent = `DM: ${state.usuario.nombre || 'Dungeon Master'}`;
       document.querySelectorAll('.dm-only').forEach(el => el.classList.remove('hidden'));
+      if (dom.bannerPlayerClaimDm) dom.bannerPlayerClaimDm.classList.add('hidden');
+      if (dom.btnReclamarDm) dom.btnReclamarDm.parentElement.classList.add('hidden');
     } else {
       if (dom.userRoleBadge) dom.userRoleBadge.className = 'role-badge clickable';
       if (dom.userRoleText) dom.userRoleText.textContent = state.usuario?.nombre || 'Jugador';
       document.querySelectorAll('.dm-only').forEach(el => el.classList.add('hidden'));
+      if (dom.bannerPlayerClaimDm) dom.bannerPlayerClaimDm.classList.remove('hidden');
+      if (dom.btnReclamarDm) dom.btnReclamarDm.parentElement.classList.remove('hidden');
     }
 
     if (dom.gridColsInput) dom.gridColsInput.value = state.escenaActiva?.config_grid_x || state.partida.config_grid_x || 40;

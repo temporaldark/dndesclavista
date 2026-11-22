@@ -52,8 +52,10 @@
     </div>
 
     <div class="nav-right">
-      <button id="btn-toggle-alpha-effects" class="btn-nav" title="Activar/Desactivar recuadros de efectos en tokens [ALPHA]">
-        <i class="fa-solid fa-sparkles gold-text"></i> <span class="desktop-only" style="font-size: 0.78rem;">Efectos <small class="badge-alpha">ALPHA</small></span>
+      <button id="btn-toggle-alpha-effects" class="btn-nav"
+        title="Activar/Desactivar recuadros de efectos en tokens [ALPHA]">
+        <i class="fa-solid fa-sparkles gold-text"></i> <span class="desktop-only" style="font-size: 0.78rem;">Efectos
+          <small class="badge-alpha">ALPHA</small></span>
       </button>
       <span id="save-status-indicator" class="save-status" title="Estado de Guardado">
         <i class="fa-solid fa-cloud-arrow-up"></i> <span>Listo</span>
@@ -359,6 +361,11 @@
 
         <!-- PESTAÑA 1: FICHAS DE PERSONAJE -->
         <div id="tab-fichas" class="tab-pane active">
+          <!-- Aviso rápido para asumir DM si el usuario no tiene rol DM -->
+          <div id="banner-player-claim-dm" class="banner-claim-dm hidden" style="margin: 8px 10px; background: rgba(245, 158, 11, 0.12); border: 1px dashed #f59e0b; border-radius: 6px; padding: 7px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <span style="font-size: 0.76rem; color: #fbbf24;"><i class="fa-solid fa-crown"></i> ¿Eres el DM?</span>
+            <button type="button" id="btn-quick-claim-dm" class="btn btn-xs btn-gold" style="white-space: nowrap; font-size: 0.72rem; padding: 3px 8px;">Asumir DM</button>
+          </div>
           <div class="pane-header">
             <h3><i class="fa-solid fa-address-card gold-text"></i> Fichas</h3>
             <div class="pane-actions" style="display: flex; gap: 5px;">
@@ -406,8 +413,10 @@
             <!-- BANNER DE EFECTOS ACTIVOS Y AJUSTE DE DADOS [ALPHA] -->
             <div id="dice-effects-banner" class="dice-effects-banner hidden">
               <div class="dice-effects-header">
-                <span class="dice-effects-title"><i class="fa-solid fa-sparkles gold-text"></i> Efectos en Token <span class="badge-alpha">ALPHA</span>:</span>
-                <label class="dice-auto-toggle-label" title="Ajusta ventaja, desventaja o bonos en dados automáticamente">
+                <span class="dice-effects-title"><i class="fa-solid fa-sparkles gold-text"></i> Efectos en Token <span
+                    class="badge-alpha">ALPHA</span>:</span>
+                <label class="dice-auto-toggle-label"
+                  title="Ajusta ventaja, desventaja o bonos en dados automáticamente">
                   <input type="checkbox" id="check-dice-auto-effects" checked> Auto-ajustar
                 </label>
               </div>
@@ -729,7 +738,170 @@
 
       </div>
     </aside>
+
+    <!-- BARRA FLOTANTE DE ACCIONES PARA TOKEN SELECCIONADO EN MÓVIL (ISLA DE CONTROL) -->
+    <div id="mobile-token-action-bar" class="mobile-token-action-bar hidden mobile-only" aria-label="Acciones de ficha seleccionada">
+      <div class="mt-bar-top">
+        <div class="mt-token-info">
+          <img id="mt-token-img" src="https://via.placeholder.com/40" class="mt-token-avatar" alt="Avatar">
+          <div class="mt-token-text">
+            <strong id="mt-token-name">Personaje</strong>
+            <span id="mt-token-hp">20/20 HP</span>
+          </div>
+        </div>
+        <div class="mt-quick-hp">
+          <button type="button" class="mt-hp-btn dmg" data-delta="-5" title="Quitar 5 HP">-5</button>
+          <button type="button" class="mt-hp-btn dmg" data-delta="-1" title="Quitar 1 HP">-1</button>
+          <button type="button" class="mt-hp-btn heal" data-delta="1" title="Curar 1 HP">+1</button>
+          <button type="button" class="mt-hp-btn heal" data-delta="5" title="Curar 5 HP">+5</button>
+        </div>
+        <button type="button" id="mt-btn-close" class="mt-btn-close" title="Deseleccionar"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="mt-bar-bottom">
+        <button type="button" id="mt-btn-tap-move" class="mt-action-btn" title="Activar modo tocar casilla para mover">
+          <i class="fa-solid fa-shoe-prints gold-text"></i>
+          <span id="mt-tap-move-text">Tocar para Mover</span>
+        </button>
+        <!-- D-Pad Flechas Rápidas (1 Casilla / 5ft) -->
+        <div class="mt-dpad" title="Mover 1 casilla (5 pies)">
+          <button type="button" class="mt-dpad-btn" data-dir="left" title="Oeste (Izquierda)"><i class="fa-solid fa-arrow-left"></i></button>
+          <button type="button" class="mt-dpad-btn" data-dir="up" title="Norte (Arriba)"><i class="fa-solid fa-arrow-up"></i></button>
+          <button type="button" class="mt-dpad-btn" data-dir="down" title="Sur (Abajo)"><i class="fa-solid fa-arrow-down"></i></button>
+          <button type="button" class="mt-dpad-btn" data-dir="right" title="Este (Derecha)"><i class="fa-solid fa-arrow-right"></i></button>
+        </div>
+        <button type="button" id="mt-btn-quick-roll" class="mt-action-btn" title="Tirada rápida con esta ficha">
+          <i class="fa-solid fa-dice-d20 gold-text"></i>
+          <span>Tirar</span>
+        </button>
+        <button type="button" id="mt-btn-effects" class="mt-action-btn" title="Gestionar Estados [ALPHA]">
+          <i class="fa-solid fa-sparkles gold-text"></i>
+          <span>Estados</span>
+        </button>
+        <button type="button" id="mt-btn-edit" class="mt-action-btn" title="Ver / Editar ficha">
+          <i class="fa-solid fa-address-card"></i>
+          <span>Ficha</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- DOCK DE ACCIONES RÁPIDAS EN MÓVIL (PULGAR FRIENDLY) -->
+    <nav id="mobile-bottom-dock" class="mobile-bottom-dock mobile-only" aria-label="Acciones rápidas para móvil">
+      <button type="button" id="mb-btn-dice" class="mb-dock-btn" title="Lanzador rápido de dados">
+        <i class="fa-solid fa-dice-d20 gold-text"></i>
+        <span>Dados</span>
+      </button>
+      <button type="button" id="mb-btn-my-sheet" class="mb-dock-btn" title="Mi Ficha rápida">
+        <i class="fa-solid fa-user-shield"></i>
+        <span>Mi Ficha</span>
+      </button>
+      <button type="button" id="mb-btn-combat" class="mb-dock-btn" title="Seguimiento de Combate">
+        <svg class="icon-swords gold-text" viewBox="0 0 24 24" width="16" height="16" fill="none"
+          stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+          style="display:inline-block; vertical-align:middle;">
+          <polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"></polyline>
+          <line x1="13" y1="19" x2="19" y2="13"></line>
+          <line x1="16" y1="16" x2="20" y2="20"></line>
+          <line x1="19" y1="21" x2="21" y2="19"></line>
+          <polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"></polyline>
+          <line x1="5" y1="14" x2="9" y2="18"></line>
+          <line x1="7" y1="17" x2="4" y2="20"></line>
+          <line x1="3" y1="19" x2="5" y2="21"></line>
+        </svg>
+        <span id="mb-combat-text">Combate</span>
+        <span id="mb-combat-badge" class="mb-badge hidden">!</span>
+      </button>
+      <button type="button" id="mb-btn-chat" class="mb-dock-btn" title="Abrir Chat">
+        <i class="fa-solid fa-comments"></i>
+        <span>Chat</span>
+        <span id="mb-chat-unread-badge" class="mb-badge hidden">0</span>
+      </button>
+      <button type="button" id="mb-btn-zen" class="mb-dock-btn" title="Modo Zen (Pantalla Limpia)">
+        <i class="fa-solid fa-eye"></i>
+        <span>Zen</span>
+      </button>
+      <button type="button" id="mb-btn-menu" class="mb-dock-btn" title="Abrir Menú de Pestañas">
+        <i class="fa-solid fa-bars"></i>
+        <span>Menú</span>
+      </button>
+    </nav>
+
+    <!-- Botón flotante para restaurar interfaz al salir de Modo Zen -->
+    <button type="button" id="btn-restore-zen" class="btn-restore-zen hidden" title="Restaurar Interfaz">
+      <i class="fa-solid fa-eye-slash"></i> Salir de Modo Zen
+    </button>
   </main>
+
+  <!-- BOTTOM SHEET: LANZADOR RÁPIDO DE DADOS PARA MÓVIL -->
+  <div id="mobile-quick-dice-sheet" class="mobile-bottom-sheet hidden">
+    <div class="mb-sheet-backdrop" id="mb-dice-backdrop"></div>
+    <div class="mb-sheet-card">
+      <div class="mb-sheet-header">
+        <div class="mb-sheet-title">
+          <i class="fa-solid fa-dice-d20 gold-text"></i> Tirador Rápido de Dados
+        </div>
+        <div class="mb-sheet-actions">
+          <button type="button" id="mb-btn-close-dice" class="btn-circle-xs" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="mb-sheet-body">
+        <!-- Selector de Modo de Tirada d20 -->
+        <div class="mb-d20-section">
+          <div class="mb-d20-modes">
+            <button type="button" class="mb-mode-btn active" data-mode="normal">Normal</button>
+            <button type="button" class="mb-mode-btn" data-mode="ventaja">Ventaja</button>
+            <button type="button" class="mb-mode-btn" data-mode="desventaja">Desventaja</button>
+          </div>
+          <button type="button" id="mb-btn-roll-d20" class="btn btn-gold mb-roll-d20-btn">
+            <i class="fa-solid fa-dice-d20"></i> Tirar d20 <span id="mb-d20-subtext">(Normal)</span>
+          </button>
+        </div>
+
+        <!-- Dados Poliédricos Directos -->
+        <div class="mb-poly-section">
+          <span class="mb-section-label">Dados Básicos:</span>
+          <div class="mb-poly-grid">
+            <button type="button" class="mb-poly-btn" data-sides="4"><i class="fa-solid fa-dice-d6"></i> d4</button>
+            <button type="button" class="mb-poly-btn" data-sides="6"><i class="fa-solid fa-dice-d6"></i> d6</button>
+            <button type="button" class="mb-poly-btn" data-sides="8"><i class="fa-solid fa-dice-d6"></i> d8</button>
+            <button type="button" class="mb-poly-btn" data-sides="10"><i class="fa-solid fa-dice-d10"></i> d10</button>
+            <button type="button" class="mb-poly-btn" data-sides="12"><i class="fa-solid fa-dice-d12"></i> d12</button>
+            <button type="button" class="mb-poly-btn" data-sides="100"><i class="fa-solid fa-percent"></i> d100</button>
+          </div>
+        </div>
+
+        <!-- Modificador Rápido -->
+        <div class="mb-mod-row">
+          <span class="mb-section-label">Modificador adicional:</span>
+          <div class="mb-mod-stepper">
+            <button type="button" class="btn-circle-xs" id="mb-mod-minus"><i class="fa-solid fa-minus"></i></button>
+            <span id="mb-mod-val" class="mb-mod-display">+0</span>
+            <button type="button" class="btn-circle-xs" id="mb-mod-plus"><i class="fa-solid fa-plus"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM SHEET: MI FICHA RÁPIDA (HP, AC, VELOCIDAD, ACCIONES) -->
+  <div id="mobile-my-sheet-modal" class="mobile-bottom-sheet hidden">
+    <div class="mb-sheet-backdrop" id="mb-sheet-backdrop"></div>
+    <div class="mb-sheet-card">
+      <div class="mb-sheet-header">
+        <div class="mb-sheet-title" id="mb-char-title">
+          <i class="fa-solid fa-user-shield gold-text"></i> Mi Ficha
+        </div>
+        <div class="mb-sheet-actions">
+          <button type="button" id="mb-btn-open-full-sheet" class="btn btn-xs btn-outline-gold" title="Abrir ficha completa">
+            <i class="fa-solid fa-up-right-from-square"></i> Ver Ficha
+          </button>
+          <button type="button" id="mb-btn-close-my-sheet" class="btn-circle-xs" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="mb-sheet-body" id="mb-char-body">
+        <!-- Renderizado dinámico desde app.js -->
+      </div>
+    </div>
+  </div>
 
   <!-- MODALES DE LA APLICACIÓN -->
 
@@ -1080,7 +1252,8 @@
             <button type="submit" class="btn btn-gold"><i class="fa-solid fa-check"></i> Guardar Nombre</button>
           </div>
           <div style="width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-            <button type="button" id="btn-reclamar-dm" class="btn btn-secondary" style="width: 100%; border: 1px dashed #c9a84c; color: #f59e0b; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <button type="button" id="btn-reclamar-dm" class="btn btn-secondary"
+              style="width: 100%; border: 1px dashed #c9a84c; color: #f59e0b; display: flex; align-items: center; justify-content: center; gap: 8px;">
               <i class="fa-solid fa-crown"></i> Reclamar Rol de Dungeon Master
             </button>
             <small style="color: #64748b; font-size: 0.72rem; margin-top: 4px; display: block; text-align: center;">
@@ -1288,7 +1461,8 @@
     <div class="modal-content modal-lg modal-effects-container">
       <div class="modal-header">
         <div>
-          <h3><i class="fa-solid fa-sparkles gold-text"></i> Estados y Efectos <span class="badge-alpha">ALPHA</span></h3>
+          <h3><i class="fa-solid fa-sparkles gold-text"></i> Estados y Efectos <span class="badge-alpha">ALPHA</span>
+          </h3>
           <p id="modal-effects-target-name" class="modal-subtitle">Asignando efectos a: <strong>Personaje</strong></p>
         </div>
         <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
@@ -1317,7 +1491,8 @@
         <!-- 2. Pestaña: Catálogo de Condiciones Oficiales D&D 5e -->
         <div id="tab-dnd-conditions" class="effects-tab-content hidden">
           <div class="effects-filter-bar">
-            <input type="text" id="input-search-effects" placeholder="🔍 Buscar condición (ej: Envenenado, Bendición, Derribado)..." class="effects-search-input">
+            <input type="text" id="input-search-effects"
+              placeholder="🔍 Buscar condición (ej: Envenenado, Bendición, Derribado)..." class="effects-search-input">
             <div class="effects-filter-tags">
               <button type="button" class="tag-filter active" data-tag="todos">Todos</button>
               <button type="button" class="tag-filter" data-tag="desventaja">Con Desventaja</button>
@@ -1336,15 +1511,18 @@
             <div class="form-row" style="display: flex; gap: 10px; flex-wrap: wrap;">
               <div class="form-group" style="flex: 2; min-width: 180px;">
                 <label>Nombre del Efecto *</label>
-                <input type="text" id="custom-effect-name" required placeholder="Ej: Sangrado, Maldición Carmesí, Escudo Arcano">
+                <input type="text" id="custom-effect-name" required
+                  placeholder="Ej: Sangrado, Maldición Carmesí, Escudo Arcano">
               </div>
               <div class="form-group" style="flex: 1; min-width: 100px;">
                 <label>Icono / Emoji *</label>
-                <input type="text" id="custom-effect-icon" maxlength="4" value="🔥" style="text-align: center; font-size: 1.2rem;">
+                <input type="text" id="custom-effect-icon" maxlength="4" value="🔥"
+                  style="text-align: center; font-size: 1.2rem;">
               </div>
               <div class="form-group" style="flex: 1; min-width: 80px;">
                 <label>Color Borde</label>
-                <input type="color" id="custom-effect-color" value="#ef4444" style="height: 38px; width: 100%; cursor: pointer;">
+                <input type="color" id="custom-effect-color" value="#ef4444"
+                  style="height: 38px; width: 100%; cursor: pointer;">
               </div>
             </div>
 
@@ -1384,7 +1562,8 @@
               </div>
               <div class="form-group" style="flex: 1; min-width: 140px;">
                 <label>Duración estimada:</label>
-                <input type="text" id="custom-effect-duration" placeholder="Ej: 3 rondas, 1 min, Indefinida" value="Indefinida">
+                <input type="text" id="custom-effect-duration" placeholder="Ej: 3 rondas, 1 min, Indefinida"
+                  value="Indefinida">
               </div>
             </div>
 
@@ -1395,11 +1574,13 @@
 
             <div class="form-group">
               <label>Descripción / Regla para Jugadores:</label>
-              <textarea id="custom-effect-desc" rows="2" placeholder="Explica la regla o lo que debe hacer el jugador (ej: Recibe 1d4 de fuego al inicio de su turno)..."></textarea>
+              <textarea id="custom-effect-desc" rows="2"
+                placeholder="Explica la regla o lo que debe hacer el jugador (ej: Recibe 1d4 de fuego al inicio de su turno)..."></textarea>
             </div>
 
             <div style="display: flex; justify-content: flex-end; gap: 8px;">
-              <button type="submit" class="btn btn-gold"><i class="fa-solid fa-plus"></i> Guardar y Aplicar a Ficha</button>
+              <button type="submit" class="btn btn-gold"><i class="fa-solid fa-plus"></i> Guardar y Aplicar a
+                Ficha</button>
             </div>
           </form>
 
@@ -1412,10 +1593,13 @@
           </div>
         </div>
       </div>
-      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #94a3b8; cursor: pointer;">
+      <div class="modal-footer"
+        style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <label
+          style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #94a3b8; cursor: pointer;">
           <input type="checkbox" id="check-canvas-alpha-effects" checked>
-          <span>Mostrar recuadros de efectos sobre tokens en el mapa <strong class="badge-alpha" style="font-size: 0.65rem;">ALPHA</strong></span>
+          <span>Mostrar recuadros de efectos sobre tokens en el mapa <strong class="badge-alpha"
+              style="font-size: 0.65rem;">ALPHA</strong></span>
         </label>
         <button type="button" class="btn btn-secondary btn-close-modal">Cerrar</button>
       </div>
@@ -1429,7 +1613,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script>if (typeof io === 'undefined') document.write('<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"><\/script>');</script>
   <!-- Lógica de la Aplicación -->
-  <script src="app.js?v=3.8.0"></script>
+  <script src="app.js?v=3.8.2"></script>
 </body>
 
 </html>
